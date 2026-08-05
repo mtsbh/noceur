@@ -1,6 +1,7 @@
 //! The Noceur index: what we remember about the filesystem.
 
 pub mod db;
+pub mod quickkey;
 pub mod schema;
 pub mod volume;
 
