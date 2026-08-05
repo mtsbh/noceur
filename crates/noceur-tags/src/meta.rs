@@ -73,6 +73,17 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
         return Ok(meta);
     };
 
+    apply_tag(&mut meta, tag);
+
+    Ok(meta)
+}
+
+/// Populates the tag-derived fields of `meta` from any lofty tag.
+///
+/// Separate from `read` so the mapping can be tested against every tag system
+/// (ID3v2, Vorbis comments, MP4 ilst) without needing a real file of each
+/// container format.
+pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag) {
     meta.artist = tag.artist().map(|s| s.to_string());
     meta.title = tag.title().map(|s| s.to_string());
     meta.album = tag.album().map(|s| s.to_string());
@@ -84,8 +95,12 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
     meta.isrc = tag.get_string(&ItemKey::Isrc).map(|s| s.to_string());
     meta.has_artwork = tag.picture_count() > 0;
 
+    // ID3v2 (MP3, WAV, AIFF) and the MP4 `tmpo` atom store BPM under
+    // `IntegerBpm`. Vorbis comments (FLAC, OGG) and MP4's freeform BPM atom
+    // store it under `Bpm`. Try both so every container is covered.
     meta.bpm = tag
         .get_string(&ItemKey::IntegerBpm)
+        .or_else(|| tag.get_string(&ItemKey::Bpm))
         .and_then(|s| s.trim().parse::<f32>().ok())
         .filter(|v| v.is_finite() && *v > 0.0);
 
@@ -97,8 +112,6 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
             meta.key_norm = meta.key.map(|k| k.canonical());
         }
     }
-
-    Ok(meta)
 }
 
 #[cfg(test)]
@@ -134,7 +147,14 @@ mod tests {
     }
 
     /// Writes a tagged WAV and returns its path.
-    fn tagged(dir: &TempDir, name: &str, artist: &str, title: &str, bpm: &str, key: &str) -> PathBuf {
+    fn tagged(
+        dir: &TempDir,
+        name: &str,
+        artist: &str,
+        title: &str,
+        bpm: &str,
+        key: &str,
+    ) -> PathBuf {
         let path = dir.path().join(name);
         write_wav(&path);
 
@@ -229,5 +249,55 @@ mod tests {
         let p = d.path().join("a.wav");
         write_wav(&p);
         assert!(Probe::open(&p).unwrap().read().is_ok());
+    }
+
+    /// ID3v2 (MP3, WAV, AIFF) only maps `IntegerBpm` to a frame (`TBPM`).
+    /// Writing `ItemKey::Bpm` here is silently dropped by lofty, which was
+    /// the previous bug's blind spot in reverse.
+    #[test]
+    fn apply_tag_reads_id3v2_bpm_and_key() {
+        let mut tag = Tag::new(TagType::Id3v2);
+        tag.insert_text(ItemKey::IntegerBpm, "128".to_string());
+        tag.insert_text(ItemKey::InitialKey, "8A".to_string());
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, &tag);
+
+        assert_eq!(meta.bpm, Some(128.0));
+        assert_eq!(meta.key_tag.as_deref(), Some("8A"));
+        assert_eq!(meta.key_norm, Some(14));
+    }
+
+    /// Vorbis comments (FLAC, OGG) only map `Bpm` to the `BPM` field, never
+    /// `IntegerBpm`. This is the case the old code missed entirely.
+    #[test]
+    fn apply_tag_reads_vorbis_bpm_and_key() {
+        let mut tag = Tag::new(TagType::VorbisComments);
+        tag.insert_text(ItemKey::Bpm, "128".to_string());
+        tag.insert_text(ItemKey::InitialKey, "8A".to_string());
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, &tag);
+
+        assert_eq!(meta.bpm, Some(128.0));
+        assert_eq!(meta.key_tag.as_deref(), Some("8A"));
+        assert_eq!(meta.key_norm, Some(14));
+    }
+
+    /// MP4 ilst maps BPM two ways: the standard `tmpo` atom takes
+    /// `IntegerBpm`, and a freeform iTunes atom takes `Bpm`. Exercise the
+    /// freeform path, since that's the one the fallback exists for.
+    #[test]
+    fn apply_tag_reads_mp4_bpm_and_key() {
+        let mut tag = Tag::new(TagType::Mp4Ilst);
+        tag.insert_text(ItemKey::Bpm, "128".to_string());
+        tag.insert_text(ItemKey::InitialKey, "8A".to_string());
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, &tag);
+
+        assert_eq!(meta.bpm, Some(128.0));
+        assert_eq!(meta.key_tag.as_deref(), Some("8A"));
+        assert_eq!(meta.key_norm, Some(14));
     }
 }
