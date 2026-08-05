@@ -31,6 +31,11 @@ pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntr
 
 and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
 
+**Amendment 5 — `parse_classical` sorts at declaration, not per call (after Task 7 review).**
+Task 6's `parse_classical` allocated and sorted a 21-element `Vec` of roots on every call, in a path that runs once per audio file. A review proved by exhaustive check of all 36 root/accidental/mode combinations that the sort was never load-bearing: no accepted mode suffix (`""`, `maj`, `major`, `dur`, `m`, `min`, `minor`, `moll`) begins with `#` or `b`, so a short root wrongly matching the head of `c#m` leaves a remainder starting with `#`, matches no suffix, and the loop continues to the correct root. `ROOTS` is now declared two-character-first and iterated directly, with a comment recording both the ordering and the real invariant — adding a suffix that begins with an accidental would break it.
+
+The same review found eight `TrackMeta` fields with no test coverage. All six tag-derived ones now have three-way `Id3v2`/`VorbisComments`/`Mp4Ilst` coverage, plus tests for `has_artwork` and `bit_depth`. One finding worth recording: `ItemKey::Year` has no ID3v2 or MP4 mapping, but `Accessor::year()` already falls back to `ItemKey::RecordingDate` (`TDRC`/`DATE`/`©day`) internally, so no code change was needed — the same fallback shape as Amendment 4, supplied by lofty rather than by us.
+
 **Amendment 4 — BPM must be read from two `ItemKey`s, not one (during Task 7).**
 Task 7's code used `ItemKey::Bpm`. Verified against lofty 0.22.4's own mapping tables in `src/tag/item.rs`, that is wrong for ID3v2 — `ID3V2_MAP` has only `"TBPM" => IntegerBpm` and no entry for `Bpm` at all, so writing `Bpm` to an ID3v2 tag silently drops it and reading it always yields `None`. But `IntegerBpm` alone is equally wrong: `VORBIS_MAP` has only `"BPM" => Bpm`, so FLAC and OGG would silently lose BPM. `ILST_MAP` (MP4) has both — `"tmpo" => IntegerBpm` and `"----:com.apple.iTunes:BPM" => Bpm`.
 
