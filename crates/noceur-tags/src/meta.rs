@@ -118,6 +118,7 @@ pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag) {
 mod tests {
     use super::*;
     use lofty::config::WriteOptions;
+    use lofty::picture::{MimeType, Picture, PictureType};
     use lofty::prelude::{Accessor, ItemKey, TagExt};
     use lofty::probe::Probe;
     use lofty::tag::{Tag, TagType};
@@ -202,6 +203,7 @@ mod tests {
         let m = read(&p).unwrap();
         assert_eq!(m.sample_rate, Some(44_100));
         assert_eq!(m.channels, Some(1));
+        assert_eq!(m.bit_depth, Some(16), "fixture WAV is 16-bit PCM");
         assert!(m.duration_ms.unwrap_or(0) > 0);
     }
 
@@ -299,5 +301,68 @@ mod tests {
         assert_eq!(meta.bpm, Some(128.0));
         assert_eq!(meta.key_tag.as_deref(), Some("8A"));
         assert_eq!(meta.key_norm, Some(14));
+    }
+
+    /// Populates `album_artist`, `genre`, `year`, `track_no`, `comment` and
+    /// `isrc` on a tag and asserts they all come through `apply_tag`.
+    ///
+    /// `year` is written via `ItemKey::RecordingDate` rather than
+    /// `ItemKey::Year`: real ID3v2 (`TDRC`) and MP4 (`\u{a9}day`) tags only
+    /// populate `RecordingDate`, and `Accessor::year()` (which `apply_tag`
+    /// calls) already falls back to it when `Year` is absent. Vorbis
+    /// comments map `RecordingDate` too (`DATE`), so this is the one
+    /// ItemKey that round-trips identically across all three tag systems.
+    fn assert_metadata_fields_round_trip(mut tag: Tag) {
+        tag.insert_text(ItemKey::AlbumArtist, "Various Artists".to_string());
+        tag.insert_text(ItemKey::Genre, "Techno".to_string());
+        tag.insert_text(ItemKey::RecordingDate, "2024".to_string());
+        tag.insert_text(ItemKey::TrackNumber, "7".to_string());
+        tag.insert_text(ItemKey::Comment, "banger".to_string());
+        tag.insert_text(ItemKey::Isrc, "USRC17607839".to_string());
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, &tag);
+
+        assert_eq!(meta.album_artist.as_deref(), Some("Various Artists"));
+        assert_eq!(meta.genre.as_deref(), Some("Techno"));
+        assert_eq!(meta.year, Some(2024));
+        assert_eq!(meta.track_no, Some(7));
+        assert_eq!(meta.comment.as_deref(), Some("banger"));
+        assert_eq!(meta.isrc.as_deref(), Some("USRC17607839"));
+    }
+
+    #[test]
+    fn apply_tag_reads_id3v2_metadata_fields() {
+        assert_metadata_fields_round_trip(Tag::new(TagType::Id3v2));
+    }
+
+    #[test]
+    fn apply_tag_reads_vorbis_metadata_fields() {
+        assert_metadata_fields_round_trip(Tag::new(TagType::VorbisComments));
+    }
+
+    #[test]
+    fn apply_tag_reads_mp4_metadata_fields() {
+        assert_metadata_fields_round_trip(Tag::new(TagType::Mp4Ilst));
+    }
+
+    #[test]
+    fn has_artwork_reflects_picture_presence() {
+        let mut tag = Tag::new(TagType::Id3v2);
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, &tag);
+        assert!(!meta.has_artwork, "no picture inserted yet");
+
+        tag.push_picture(Picture::new_unchecked(
+            PictureType::CoverFront,
+            Some(MimeType::Jpeg),
+            None,
+            vec![0xFFu8; 4],
+        ));
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, &tag);
+        assert!(meta.has_artwork, "picture was inserted");
     }
 }

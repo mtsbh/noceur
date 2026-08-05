@@ -35,28 +35,31 @@ const CLASSICAL: [(&str, &str); 12] = [
 ];
 
 /// Pitch-class index (0 = C) for every accepted root spelling.
+///
+/// Declared with all two-character roots (with an accidental) before the
+/// single-character roots that are their prefix.
 const ROOTS: &[(&str, u8)] = &[
-    ("c", 0),
     ("b#", 0),
     ("c#", 1),
     ("db", 1),
-    ("d", 2),
     ("d#", 3),
     ("eb", 3),
-    ("e", 4),
     ("fb", 4),
-    ("f", 5),
     ("e#", 5),
     ("f#", 6),
     ("gb", 6),
-    ("g", 7),
     ("g#", 8),
     ("ab", 8),
-    ("a", 9),
     ("a#", 10),
     ("bb", 10),
-    ("b", 11),
     ("cb", 11),
+    ("c", 0),
+    ("d", 2),
+    ("e", 4),
+    ("f", 5),
+    ("g", 7),
+    ("a", 9),
+    ("b", 11),
 ];
 
 /// Camelot number for each pitch class, minor side. `Am` (pitch class 9) is 8A.
@@ -162,11 +165,15 @@ fn parse_classical(s: &str) -> Option<MusicalKey> {
         .filter(|c| !matches!(c, ' ' | '-' | '_' | '.'))
         .collect();
 
-    // Longest root first so `c#` wins over `c`.
-    let mut roots: Vec<&(&str, u8)> = ROOTS.iter().collect();
-    roots.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
-
-    for (root, pc) in roots {
+    // ROOTS is declared with two-character roots (with an accidental) before
+    // their one-character prefix, so e.g. `c#` is tried before `c`. This
+    // ordering isn't actually load-bearing for correctness: no accepted mode
+    // suffix (`""`, `maj`, `major`, `dur`, `m`, `min`, `minor`, `moll`)
+    // begins with `#` or `b`, so if a short root like `c` wrongly matches the
+    // start of `c#m`, the remainder (`#m`) matches no suffix and the loop
+    // just continues on to the correct longer root. Adding a suffix that
+    // starts with an accidental would break that safety net.
+    for (root, pc) in ROOTS {
         let Some(rest) = cleaned.strip_prefix(root) else {
             continue;
         };
