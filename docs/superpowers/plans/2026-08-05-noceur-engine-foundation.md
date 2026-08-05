@@ -6,7 +6,7 @@
 
 **Architecture:** Three library crates with no dependencies on each other except downward (`noceur-index` → `noceur-fsmodel`, `noceur-tags`), plus a thin CLI binary for manual verification. No Tauri, no UI, no async runtime. Every crate is unit-testable in isolation; the CLI exists so a human can point the engine at a real music folder and see the result.
 
-**Tech Stack:** Rust 2021 (toolchain 1.88), `rusqlite` (bundled SQLite), `lofty` (tag reading), `xxhash-rust` (quick keys), `clap` (CLI), `tempfile` (test fixtures).
+**Tech Stack:** Rust 2021 (toolchain 1.97 — see Amendment 3), `rusqlite` (bundled SQLite), `lofty` (tag reading), `xxhash-rust` (quick keys), `clap` (CLI), `tempfile` (test fixtures).
 
 ---
 
@@ -30,6 +30,9 @@ pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntr
 ```
 
 and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
+
+**Amendment 3 — toolchain pinned to 1.97, not 1.88 (during Task 6).**
+The original pin came from whatever `rustc --version` reported on the machine and was simply wrong: `lofty 0.22` pulls in `ogg_pager 0.7.2`, which requires rustc 1.89+. The first attempt worked around this by pinning `ogg_pager` back to 0.7.0, which is a treadmill — the next dependency to move would break it again. Rust 1.97.1 was already installed locally, so `rust-toolchain.toml` now pins `1.97`, the lockfile was regenerated clean, and no dependency is held back. Task 1's manifest block above shows the original `1.88`.
 
 **Amendment 2 — supporting changes from the same review.**
 `kind.rs` gained `extension_of(name: &str) -> String`, used by `enumerate.rs` so extension parsing exists once rather than twice. `natural_cmp` now falls back to a raw-string comparison when the natural comparison ties, so `"7"` and `"007"` get a deterministic order and rows cannot shuffle between refreshes. `FsEntry::path` and `extended()` gained doc comments recording two contracts that were previously implicit: the stored path is *not* the `\\?\`-extended form and must be passed through `extended()` before any I/O, and `extended()` requires an already-normalised fully-qualified path because verbatim paths bypass OS normalisation.
