@@ -17,6 +17,25 @@
 
 **Dependency versions.** The manifests below pin the versions this plan's code was written against (`lofty 0.22`, `rusqlite 0.37`). If either fails to resolve, run `cargo add lofty` / `cargo add rusqlite --features bundled` to take the current release, then check the compile errors against that crate's changelog — the APIs used here are `Probe`/`Tag`/`Accessor` for lofty and `Connection`/`params!` for rusqlite, all of which are long-stable. Do not silently work around an API change; correct the call and note it in the commit message.
 
+## Amendments
+
+Changes made after a task shipped, recorded so the plan stays truthful. Tasks below this point still show their original code; where an amendment supersedes it, this section wins.
+
+**Amendment 1 — `read_dir` returns `DirListing`, not `Vec<FsEntry>` (after Task 5 review).**
+A code review found that `read_dir` silently discarded per-entry failures, so a caller could not tell a listing came back short. Skipping remains correct — one locked file must never fail a folder — but on an SMB share or a removable drive it needs to be observable, because §12 of the spec calls for surfacing exactly this in the activity panel. `enumerate.rs` now defines:
+
+```rust
+pub struct SkippedEntry { pub name: String, pub reason: String }
+pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntry> }
+```
+
+and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
+
+**Amendment 2 — supporting changes from the same review.**
+`kind.rs` gained `extension_of(name: &str) -> String`, used by `enumerate.rs` so extension parsing exists once rather than twice. `natural_cmp` now falls back to a raw-string comparison when the natural comparison ties, so `"7"` and `"007"` get a deterministic order and rows cannot shuffle between refreshes. `FsEntry::path` and `extended()` gained doc comments recording two contracts that were previously implicit: the stored path is *not* the `\\?\`-extended form and must be passed through `extended()` before any I/O, and `extended()` requires an already-normalised fully-qualified path because verbatim paths bypass OS normalisation.
+
+---
+
 ## File Structure
 
 ```
@@ -2471,7 +2490,10 @@ use rusqlite::params;
 /// removed; entries that are new are inserted; the rest are updated in place so
 /// `content_id` links survive a rescan.
 pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError> {
-    let entries = read_dir(path).map_err(|e| IndexError::Scan(e.to_string()))?;
+    // `read_dir` returns a `DirListing` carrying both entries and any that were
+    // skipped (see Amendment 1). Stage 1 ignores skips; the UI surfaces them later.
+    let listing = read_dir(path).map_err(|e| IndexError::Scan(e.to_string()))?;
+    let entries = listing.entries;
 
     let path_lower = path.to_string_lossy().to_ascii_lowercase();
     let name = path
