@@ -8,8 +8,7 @@ use std::path::Path;
 /// containers. Video in `.mp4` is rare enough in a music tree that mis-classifying
 /// it costs a wasted probe, not a wrong answer.
 pub const AUDIO_EXTENSIONS: &[&str] = &[
-    "wav", "aiff", "aif", "aifc", "flac", "mp3", "m4a", "mp4", "ogg", "oga",
-    "opus", "wv", "ape",
+    "wav", "aiff", "aif", "aifc", "flac", "mp3", "m4a", "mp4", "ogg", "oga", "opus", "wv", "ape",
 ];
 
 /// How an entry is grouped in the list.
@@ -54,22 +53,37 @@ pub fn is_audio_extension(ext: &str) -> bool {
         .any(|known| known.eq_ignore_ascii_case(ext))
 }
 
+/// Extracts the lowercase extension of a file name, or `""` if it has none.
+pub fn extension_of(name: &str) -> String {
+    Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn directories_classify_as_directory() {
-        assert_eq!(EntryKind::classify(Path::new("Unsorted"), true), EntryKind::Directory);
+        assert_eq!(
+            EntryKind::classify(Path::new("Unsorted"), true),
+            EntryKind::Directory
+        );
         // Extension is irrelevant for directories.
-        assert_eq!(EntryKind::classify(Path::new("weird.wav"), true), EntryKind::Directory);
+        assert_eq!(
+            EntryKind::classify(Path::new("weird.wav"), true),
+            EntryKind::Directory
+        );
     }
 
     #[test]
     fn known_audio_extensions_classify_as_audio() {
         for name in [
-            "a.wav", "a.aiff", "a.aif", "a.aifc", "a.flac", "a.mp3",
-            "a.m4a", "a.mp4", "a.ogg", "a.oga", "a.opus", "a.wv", "a.ape",
+            "a.wav", "a.aiff", "a.aif", "a.aifc", "a.flac", "a.mp3", "a.m4a", "a.mp4", "a.ogg",
+            "a.oga", "a.opus", "a.wv", "a.ape",
         ] {
             assert_eq!(
                 EntryKind::classify(Path::new(name), false),
@@ -81,8 +95,14 @@ mod tests {
 
     #[test]
     fn extension_matching_is_case_insensitive() {
-        assert_eq!(EntryKind::classify(Path::new("A.WAV"), false), EntryKind::Audio);
-        assert_eq!(EntryKind::classify(Path::new("A.FlAc"), false), EntryKind::Audio);
+        assert_eq!(
+            EntryKind::classify(Path::new("A.WAV"), false),
+            EntryKind::Audio
+        );
+        assert_eq!(
+            EntryKind::classify(Path::new("A.FlAc"), false),
+            EntryKind::Audio
+        );
     }
 
     #[test]
@@ -100,5 +120,13 @@ mod tests {
     fn group_order_is_directories_then_audio_then_other() {
         assert!(EntryKind::Directory.group() < EntryKind::Audio.group());
         assert!(EntryKind::Audio.group() < EntryKind::Other.group());
+    }
+
+    #[test]
+    fn extension_of_extracts_and_lowercases() {
+        assert_eq!(extension_of("track.WAV"), "wav");
+        assert_eq!(extension_of("track.wav"), "wav");
+        assert_eq!(extension_of("notes"), "");
+        assert_eq!(extension_of(".gitignore"), "");
     }
 }

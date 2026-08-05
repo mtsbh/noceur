@@ -41,7 +41,10 @@ fn apply_dir(ord: Ordering, dir: SortDir) -> Ordering {
 fn compare_by(a: &FsEntry, b: &FsEntry, key: SortKey) -> Ordering {
     match key {
         SortKey::Name => natural_cmp(&a.name, &b.name),
-        SortKey::Size => a.size.cmp(&b.size).then_with(|| natural_cmp(&a.name, &b.name)),
+        SortKey::Size => a
+            .size
+            .cmp(&b.size)
+            .then_with(|| natural_cmp(&a.name, &b.name)),
         SortKey::Modified => a
             .mtime
             .cmp(&b.mtime)
@@ -51,7 +54,17 @@ fn compare_by(a: &FsEntry, b: &FsEntry, key: SortKey) -> Ordering {
 
 /// Case-insensitive comparison that orders embedded digit runs numerically,
 /// so `track2` precedes `track10`.
+///
+/// Digit runs compare by numeric value, so `"7"` and `"007"` are equal at
+/// this stage; when that happens we fall back to a raw string comparison so
+/// that two such names still get a stable, deterministic order instead of
+/// shuffling between refreshes (`read_dir`'s enumeration order is not
+/// guaranteed stable).
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
+    natural_cmp_inner(a, b).then_with(|| a.cmp(b))
+}
+
+fn natural_cmp_inner(a: &str, b: &str) -> Ordering {
     let mut x = a.chars().peekable();
     let mut y = b.chars().peekable();
 
@@ -91,7 +104,9 @@ fn take_number(it: &mut std::iter::Peekable<std::str::Chars<'_>>) -> u128 {
             break;
         }
         it.next();
-        n = n.saturating_mul(10).saturating_add((c as u8 - b'0') as u128);
+        n = n
+            .saturating_mul(10)
+            .saturating_add((c as u8 - b'0') as u128);
     }
     n
 }
@@ -135,7 +150,11 @@ mod tests {
             e("c.txt", EntryKind::Other, 1, 1),
         ];
         sort(&mut v, SortKey::Name, SortDir::Desc);
-        assert_eq!(v[0].kind, EntryKind::Directory, "dirs stay first when reversed");
+        assert_eq!(
+            v[0].kind,
+            EntryKind::Directory,
+            "dirs stay first when reversed"
+        );
         assert_eq!(v[2].kind, EntryKind::Other);
     }
 
@@ -185,5 +204,20 @@ mod tests {
         ];
         sort(&mut v, SortKey::Size, SortDir::Asc);
         assert_eq!(v[0].name, "a.wav");
+    }
+
+    #[test]
+    fn natural_cmp_breaks_ties_between_equal_numeric_values() {
+        // "007" and "7" compare numerically equal, but must still get a
+        // deterministic, non-equal relative order via the raw-string tiebreak.
+        assert_ne!(natural_cmp("007", "7"), Ordering::Equal);
+        assert_eq!(natural_cmp("007", "7"), Ordering::Less);
+        assert_eq!(natural_cmp("7", "007"), Ordering::Greater);
+    }
+
+    #[test]
+    fn natural_cmp_still_orders_naturally_and_case_insensitively() {
+        assert_eq!(natural_cmp("track2", "track10"), Ordering::Less);
+        assert_eq!(natural_cmp("apple.wav", "Banana.wav"), Ordering::Less);
     }
 }

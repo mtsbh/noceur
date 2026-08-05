@@ -11,6 +11,15 @@ const EXT_PREFIX: &str = r"\\?\";
 /// shares), which lifts the 260-character `MAX_PATH` limit. Relative paths and
 /// already-prefixed paths are returned unchanged. On other platforms this is
 /// the identity function.
+///
+/// # Precondition: the input must already be normalised
+///
+/// Verbatim `\\?\` paths bypass the OS's usual path normalisation. `.` and
+/// `..` segments, forward slashes, and trailing dots or spaces are NOT
+/// resolved once the prefix is present, and will fail to open even where the
+/// unprefixed path would have worked. Callers must pass an already-normalised,
+/// fully-qualified path — do not feed this function a path fragment that still
+/// contains `.`/`..` components, `/` separators, or a trailing dot/space.
 #[cfg(windows)]
 pub fn extended(path: &Path) -> PathBuf {
     let s = path.as_os_str().to_string_lossy();
@@ -19,6 +28,12 @@ pub fn extended(path: &Path) -> PathBuf {
         return path.to_path_buf();
     }
     if let Some(rest) = s.strip_prefix(r"\\") {
+        // Assumes a drive- or UNC-share input (`\\server\share\...`). Windows
+        // local-device paths such as `\\.\pipe\...` or `\\.\COM1` also start
+        // with `\\` but are not UNC shares; rewriting them to `\\?\UNC\...`
+        // would be wrong. We don't expect device paths here since this crate
+        // only ever deals in filesystem directory/file paths, but a caller
+        // that passes one would get a mis-rewritten result.
         return PathBuf::from(format!(r"{EXT_PREFIX}UNC\{rest}"));
     }
     if path.is_absolute() {

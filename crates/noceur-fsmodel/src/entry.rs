@@ -9,7 +9,15 @@ use std::path::PathBuf;
 /// `noceur-index`. This struct is what stage 1 of the scan produces.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FsEntry {
-    /// Full path to the entry.
+    /// Full path to the entry: the caller's original directory path joined
+    /// with this entry's file name.
+    ///
+    /// This is NOT the `\\?\`-extended form. Any filesystem I/O against this
+    /// path (opening it to read tags, for example) must first pass it through
+    /// [`crate::path::extended`] — the long-path fix is applied at the point
+    /// of use, not stored here, so a downstream crate that opens this path
+    /// directly loses long-path protection and can fail on deeply nested
+    /// library trees.
     pub path: PathBuf,
     /// File name including extension.
     pub name: String,
