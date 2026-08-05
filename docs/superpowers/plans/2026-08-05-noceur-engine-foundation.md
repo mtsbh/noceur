@@ -31,6 +31,13 @@ pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntr
 
 and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
 
+**Amendment 4 — BPM must be read from two `ItemKey`s, not one (during Task 7).**
+Task 7's code used `ItemKey::Bpm`. Verified against lofty 0.22.4's own mapping tables in `src/tag/item.rs`, that is wrong for ID3v2 — `ID3V2_MAP` has only `"TBPM" => IntegerBpm` and no entry for `Bpm` at all, so writing `Bpm` to an ID3v2 tag silently drops it and reading it always yields `None`. But `IntegerBpm` alone is equally wrong: `VORBIS_MAP` has only `"BPM" => Bpm`, so FLAC and OGG would silently lose BPM. `ILST_MAP` (MP4) has both — `"tmpo" => IntegerBpm` and `"----:com.apple.iTunes:BPM" => Bpm`.
+
+`read()` therefore tries `IntegerBpm` and falls back to `Bpm`, which covers all six supported containers. `InitialKey` needed no equivalent change: it maps cleanly to `TKEY` (ID3v2), `INITIALKEY`/`KEY` (Vorbis) and the `initialkey` freeform atom (MP4).
+
+The bug was invisible to the suite because every fixture was a WAV carrying ID3v2. So `meta.rs` also gained `pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag)`, splitting tag mapping from file opening, and three tests now exercise `TagType::Id3v2`, `TagType::VorbisComments` and `TagType::Mp4Ilst` directly — no hand-authored FLAC or M4A fixtures required. Any future tag field added to `TrackMeta` should get the same three-way test.
+
 **Amendment 3 — toolchain pinned to 1.97, not 1.88 (during Task 6).**
 The original pin came from whatever `rustc --version` reported on the machine and was simply wrong: `lofty 0.22` pulls in `ogg_pager 0.7.2`, which requires rustc 1.89+. The first attempt worked around this by pinning `ogg_pager` back to 0.7.0, which is a treadmill — the next dependency to move would break it again. Rust 1.97.1 was already installed locally, so `rust-toolchain.toml` now pins `1.97`, the lockfile was regenerated clean, and no dependency is held back. Task 1's manifest block above shows the original `1.88`.
 

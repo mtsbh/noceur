@@ -36,18 +36,27 @@ const CLASSICAL: [(&str, &str); 12] = [
 
 /// Pitch-class index (0 = C) for every accepted root spelling.
 const ROOTS: &[(&str, u8)] = &[
-    ("c", 0), ("b#", 0),
-    ("c#", 1), ("db", 1),
+    ("c", 0),
+    ("b#", 0),
+    ("c#", 1),
+    ("db", 1),
     ("d", 2),
-    ("d#", 3), ("eb", 3),
-    ("e", 4), ("fb", 4),
-    ("f", 5), ("e#", 5),
-    ("f#", 6), ("gb", 6),
+    ("d#", 3),
+    ("eb", 3),
+    ("e", 4),
+    ("fb", 4),
+    ("f", 5),
+    ("e#", 5),
+    ("f#", 6),
+    ("gb", 6),
     ("g", 7),
-    ("g#", 8), ("ab", 8),
+    ("g#", 8),
+    ("ab", 8),
     ("a", 9),
-    ("a#", 10), ("bb", 10),
-    ("b", 11), ("cb", 11),
+    ("a#", 10),
+    ("bb", 10),
+    ("b", 11),
+    ("cb", 11),
 ];
 
 /// Camelot number for each pitch class, minor side. `Am` (pitch class 9) is 8A.
@@ -92,10 +101,18 @@ impl MusicalKey {
         let idx = (self.camelot_number - 1) as usize;
         match notation {
             KeyNotation::Camelot => {
-                format!("{}{}", self.camelot_number, if self.is_minor { 'A' } else { 'B' })
+                format!(
+                    "{}{}",
+                    self.camelot_number,
+                    if self.is_minor { 'A' } else { 'B' }
+                )
             }
             KeyNotation::OpenKey => {
-                format!("{}{}", self.open_key_number(), if self.is_minor { 'm' } else { 'd' })
+                format!(
+                    "{}{}",
+                    self.open_key_number(),
+                    if self.is_minor { 'm' } else { 'd' }
+                )
             }
             KeyNotation::Classical => {
                 let (minor, major) = CLASSICAL[idx];
@@ -116,11 +133,23 @@ fn parse_wheel(s: &str) -> Option<MusicalKey> {
     }
 
     match suffix.to_ascii_lowercase().as_str() {
-        "a" => Some(MusicalKey { camelot_number: n, is_minor: true }),
-        "b" => Some(MusicalKey { camelot_number: n, is_minor: false }),
+        "a" => Some(MusicalKey {
+            camelot_number: n,
+            is_minor: true,
+        }),
+        "b" => Some(MusicalKey {
+            camelot_number: n,
+            is_minor: false,
+        }),
         // Open Key: number is offset by 7 positions from Camelot.
-        "m" => Some(MusicalKey { camelot_number: ((n + 6) % 12) + 1, is_minor: true }),
-        "d" => Some(MusicalKey { camelot_number: ((n + 6) % 12) + 1, is_minor: false }),
+        "m" => Some(MusicalKey {
+            camelot_number: ((n + 6) % 12) + 1,
+            is_minor: true,
+        }),
+        "d" => Some(MusicalKey {
+            camelot_number: ((n + 6) % 12) + 1,
+            is_minor: false,
+        }),
         _ => None,
     }
 }
@@ -138,13 +167,19 @@ fn parse_classical(s: &str) -> Option<MusicalKey> {
     roots.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
 
     for (root, pc) in roots {
-        let Some(rest) = cleaned.strip_prefix(root) else { continue };
+        let Some(rest) = cleaned.strip_prefix(root) else {
+            continue;
+        };
         let is_minor = match rest {
             "" | "maj" | "major" | "dur" => false,
             "m" | "min" | "minor" | "moll" => true,
             _ => continue,
         };
-        let table = if is_minor { MINOR_PC_TO_CAMELOT } else { MAJOR_PC_TO_CAMELOT };
+        let table = if is_minor {
+            MINOR_PC_TO_CAMELOT
+        } else {
+            MAJOR_PC_TO_CAMELOT
+        };
         return Some(MusicalKey {
             camelot_number: table[*pc as usize],
             is_minor,
@@ -171,7 +206,10 @@ mod tests {
 
     #[test]
     fn camelot_parsing_is_case_and_space_insensitive() {
-        assert_eq!(MusicalKey::parse(" 8a ").unwrap(), MusicalKey::parse("8A").unwrap());
+        assert_eq!(
+            MusicalKey::parse(" 8a ").unwrap(),
+            MusicalKey::parse("8A").unwrap()
+        );
     }
 
     #[test]
@@ -252,8 +290,15 @@ mod tests {
     fn canonical_round_trips_through_every_notation() {
         for n in 1..=12u8 {
             for minor in [true, false] {
-                let src = MusicalKey { camelot_number: n, is_minor: minor };
-                for notation in [KeyNotation::Camelot, KeyNotation::OpenKey, KeyNotation::Classical] {
+                let src = MusicalKey {
+                    camelot_number: n,
+                    is_minor: minor,
+                };
+                for notation in [
+                    KeyNotation::Camelot,
+                    KeyNotation::OpenKey,
+                    KeyNotation::Classical,
+                ] {
                     let text = src.format(notation);
                     let back = MusicalKey::parse(&text)
                         .unwrap_or_else(|| panic!("failed to reparse {text} ({notation:?})"));
@@ -268,7 +313,11 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for n in 1..=12u8 {
             for minor in [true, false] {
-                let c = MusicalKey { camelot_number: n, is_minor: minor }.canonical();
+                let c = MusicalKey {
+                    camelot_number: n,
+                    is_minor: minor,
+                }
+                .canonical();
                 assert!((0..24).contains(&c));
                 assert!(seen.insert(c), "duplicate canonical value {c}");
             }
