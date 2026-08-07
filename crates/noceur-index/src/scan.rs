@@ -1,12 +1,35 @@
 //! Scan stages: enumerate into rows, then probe tags.
 
 use crate::db::{Db, IndexError};
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::quickkey;
 use crate::volume::now;
 use noceur_fsmodel::{read_dir, EntryKind};
 use rusqlite::params;
+
+/// Canonical key for a directory within a volume.
+///
+/// Trailing separators are stripped so `C:\Music` and `C:\Music\` resolve to one
+/// row. Case is folded only on Windows, whose filesystems are case-insensitive;
+/// on Unix `/Music` and `/music` are genuinely different directories and must not
+/// collapse into one.
+fn path_key(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    let trimmed = s.trim_end_matches(['/', '\\']);
+    // A bare root such as `C:\` or `/` must not trim away to nothing.
+    let trimmed = if trimmed.is_empty() {
+        s.as_ref()
+    } else {
+        trimmed
+    };
+    if cfg!(windows) {
+        trimmed.to_lowercase()
+    } else {
+        trimmed.to_string()
+    }
+}
 
 /// Stage 1: enumerate `path` and write `dir` and `file` rows.
 ///
@@ -16,16 +39,18 @@ use rusqlite::params;
 pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError> {
     // `read_dir` returns a `DirListing` carrying both entries and any that were
     // skipped (see Amendment 1). Stage 1 ignores skips; the UI surfaces them later.
-    let listing = read_dir(path).map_err(|e| IndexError::Scan(e.to_string()))?;
+    let listing = read_dir(path)?;
     let entries = listing.entries;
 
-    let path_lower = path.to_string_lossy().to_ascii_lowercase();
+    let path_lower = path_key(path);
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path_lower.clone());
 
-    db.conn().execute(
+    let tx = db.conn().unchecked_transaction()?;
+
+    tx.execute(
         "INSERT INTO dir (volume_id, parent_id, name, path_lower, mtime, scan_state)
          VALUES (?1, NULL, ?2, ?3, ?4, 'scanned')
          ON CONFLICT(volume_id, path_lower) DO UPDATE SET
@@ -33,13 +58,11 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
         params![volume_id, name, path_lower, now()],
     )?;
 
-    let dir_id: i64 = db.conn().query_row(
+    let dir_id: i64 = tx.query_row(
         "SELECT id FROM dir WHERE volume_id = ?1 AND path_lower = ?2",
         params![volume_id, path_lower],
         |r| r.get(0),
     )?;
-
-    let tx = db.conn().unchecked_transaction()?;
 
     for e in &entries {
         tx.execute(
@@ -60,14 +83,14 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
     }
 
     // Remove rows for entries that no longer exist.
-    let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
+    let names: HashSet<&str> = entries.iter().map(|e| e.name.as_str()).collect();
     let mut stmt = tx.prepare("SELECT id, name FROM file WHERE dir_id = ?1")?;
     let stale: Vec<i64> = stmt
         .query_map([dir_id], |r| {
             Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
         })?
         .filter_map(Result::ok)
-        .filter(|(_, n)| !names.contains(n))
+        .filter(|(_, n)| !names.contains(n.as_str()))
         .map(|(id, _)| id)
         .collect();
     drop(stmt);
@@ -80,15 +103,25 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
     Ok(dir_id)
 }
 
-/// Stage 2: probe tags for every audio file in `dir_id` that has no content link.
+/// Stage 2: probe tags for audio files in `dir_id` that have never been probed,
+/// or whose mtime is newer than the last probe.
+///
+/// Files whose `content_id` is already linked and whose tags were last read at
+/// or after their current mtime are skipped — they are unchanged since the last
+/// probe. This keeps rescans of an SMB share incremental instead of re-hashing
+/// and re-reading tags for every audio file every time.
 ///
 /// Failures mark the individual row and continue — one corrupt file must never
 /// cost the folder.
 pub fn probe_dir(db: &Db, dir_id: i64) -> Result<(), IndexError> {
     let mut stmt = db.conn().prepare(
         "SELECT f.id, f.name, d.path_lower
-         FROM file f JOIN dir d ON d.id = f.dir_id
-         WHERE f.dir_id = ?1 AND f.kind = ?2",
+         FROM file f
+         JOIN dir d ON d.id = f.dir_id
+         LEFT JOIN content_tag ct ON ct.content_id = f.content_id
+         WHERE f.dir_id = ?1
+           AND f.kind = ?2
+           AND (f.content_id IS NULL OR ct.read_at IS NULL OR f.mtime > ct.read_at)",
     )?;
     let targets: Vec<(i64, String, String)> = stmt
         .query_map(params![dir_id, EntryKind::Audio.group() as i64], |r| {
@@ -422,5 +455,137 @@ mod tests {
             ),
             1
         );
+    }
+
+    #[test]
+    fn probing_twice_does_not_reprobe_unchanged_files() {
+        let (db, d, vol) = setup();
+        let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+        probe_dir(&db, dir_id).unwrap();
+
+        let read_at: i64 = db
+            .conn()
+            .query_row(
+                "SELECT ct.read_at FROM file f JOIN content_tag ct ON ct.content_id = f.content_id
+                 WHERE f.name = 'a.wav'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        probe_dir(&db, dir_id).unwrap();
+
+        let read_at_again: i64 = db
+            .conn()
+            .query_row(
+                "SELECT ct.read_at FROM file f JOIN content_tag ct ON ct.content_id = f.content_id
+                 WHERE f.name = 'a.wav'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(
+            read_at, read_at_again,
+            "unchanged file must not be reprobed"
+        );
+    }
+
+    #[test]
+    fn a_file_modified_since_probing_is_reprobed() {
+        let (db, d, vol) = setup();
+        let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+        probe_dir(&db, dir_id).unwrap();
+
+        let read_at: i64 = db
+            .conn()
+            .query_row(
+                "SELECT ct.read_at FROM file f JOIN content_tag ct ON ct.content_id = f.content_id
+                 WHERE f.name = 'a.wav'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Rekordbox-style re-tag: change the artist on disk (Rekordbox rewrites
+        // ID3 at the head of the file, so the quick key changes too), then
+        // simulate the later mtime the OS would report — without touching the
+        // filesystem clock.
+        tag_it(
+            &d.path().join("a.wav"),
+            "New Artist",
+            "it takes time",
+            "123",
+            "8A",
+        );
+        let future_mtime = read_at + 1_000_000;
+        db.conn()
+            .execute(
+                "UPDATE file SET mtime = ?1 WHERE name = 'a.wav'",
+                params![future_mtime],
+            )
+            .unwrap();
+
+        probe_dir(&db, dir_id).unwrap();
+
+        let artist: String = db
+            .conn()
+            .query_row(
+                "SELECT ct.artist FROM file f JOIN content_tag ct ON ct.content_id = f.content_id
+                 WHERE f.name = 'a.wav'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(
+            artist, "New Artist",
+            "a file with a newer mtime must be reprobed and pick up its new tags"
+        );
+    }
+
+    #[test]
+    fn trailing_separator_resolves_to_the_same_dir_row() {
+        let db = Db::open_in_memory().unwrap();
+        let d = TempDir::new().unwrap();
+        fs::write(d.path().join("x.txt"), b"x").unwrap();
+        let vol = volume::upsert(&db, "u", VolumeKind::Fixed, "t", "/").unwrap();
+
+        let with_sep = {
+            let mut s = d.path().to_string_lossy().into_owned();
+            s.push(std::path::MAIN_SEPARATOR);
+            std::path::PathBuf::from(s)
+        };
+
+        let id1 = scan_dir(&db, vol, d.path()).unwrap();
+        let id2 = scan_dir(&db, vol, &with_sep).unwrap();
+
+        assert_eq!(id1, id2, "same physical folder must map to one dir row");
+        assert_eq!(count(&db, "SELECT COUNT(*) FROM dir"), 1);
+    }
+
+    #[test]
+    fn path_key_strips_trailing_separators_but_keeps_a_bare_root() {
+        assert_eq!(path_key(Path::new("/a/b/")), path_key(Path::new("/a/b")));
+        assert_eq!(
+            path_key(Path::new("C:\\Music\\")),
+            path_key(Path::new("C:\\Music"))
+        );
+        assert_eq!(path_key(Path::new("/")), "/");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn path_key_folds_case_on_windows() {
+        assert_eq!(
+            path_key(Path::new("C:\\Music")),
+            path_key(Path::new("C:\\MUSIC"))
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn path_key_does_not_fold_case_on_unix() {
+        assert_ne!(path_key(Path::new("/Music")), path_key(Path::new("/music")));
     }
 }
