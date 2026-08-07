@@ -207,6 +207,7 @@ dependencies = [
 name = "noceur-index"
 version = "0.1.0"
 dependencies = [
+ "lofty",
  "noceur-fsmodel",
  "noceur-tags",
  "rusqlite",

@@ -31,6 +31,12 @@ pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntr
 
 and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
 
+**Amendment 6 — two process corrections found during execution (Tasks 9 and 11).**
+
+*Module registration must precede the failing-test run.* Several tasks list "create the file, run the test, watch it fail" before "add `pub mod x;` to `lib.rs`". That ordering does not produce a red state — without the module declaration cargo never compiles the new file, so the run reports "0 tests, N filtered out" and nothing fails. Declare the module first, then run. Every task from 3 onward is affected.
+
+*Test fixtures carried the pre-Amendment-4 `ItemKey::Bpm`.* Tasks 7, 11, 12 and 14 all build fixtures with `tag.insert_text(ItemKey::Bpm, ...)` into an ID3v2 tag, which lofty silently discards — the fixture ends up with no BPM at all and the assertion fails with `InvalidColumnType(.., Null)` rather than anything that points at the cause. All four have been corrected in place to `ItemKey::IntegerBpm`, and Task 7's implementation snippet now shows the `IntegerBpm`-then-`Bpm` fallback that Amendment 4 introduced.
+
 **Amendment 5 — `parse_classical` sorts at declaration, not per call (after Task 7 review).**
 Task 6's `parse_classical` allocated and sorted a 21-element `Vec` of roots on every call, in a path that runs once per audio file. A review proved by exhaustive check of all 36 root/accidental/mode combinations that the sort was never load-bearing: no accepted mode suffix (`""`, `maj`, `major`, `dur`, `m`, `min`, `minor`, `moll`) begins with `#` or `b`, so a short root wrongly matching the head of `c#m` leaves a remainder starting with `#`, matches no suffix, and the loop continues to the correct root. `ROOTS` is now declared two-character-first and iterated directly, with a comment recording both the ordering and the real invariant — adding a suffix that begins with an accidental would break it.
 
@@ -1331,7 +1337,8 @@ mod tests {
         tag.set_artist(artist.to_string());
         tag.set_title(title.to_string());
         tag.set_album("So Unreleased Vol.1".to_string());
-        tag.insert_text(ItemKey::Bpm, bpm.to_string());
+        // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+        tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
         tag.insert_text(ItemKey::InitialKey, key.to_string());
         tag.save_to_path(&path, WriteOptions::default()).unwrap();
         path
@@ -1504,7 +1511,9 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
     meta.has_artwork = tag.picture_count() > 0;
 
     meta.bpm = tag
-        .get_string(&ItemKey::Bpm)
+        // Superseded by Amendment 4: this must try IntegerBpm first, then fall back to Bpm.
+        .get_string(&ItemKey::IntegerBpm)
+        .or_else(|| tag.get_string(&ItemKey::Bpm))
         .and_then(|s| s.trim().parse::<f32>().ok())
         .filter(|v| v.is_finite() && *v > 0.0);
 
@@ -2287,7 +2296,8 @@ mod tests {
         let mut tag = Tag::new(TagType::Id3v2);
         tag.set_artist(artist.to_string());
         tag.set_title(title.to_string());
-        tag.insert_text(ItemKey::Bpm, bpm.to_string());
+        // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+        tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
         tag.insert_text(ItemKey::InitialKey, key.to_string());
         tag.save_to_path(path, WriteOptions::default()).unwrap();
     }
@@ -2739,7 +2749,8 @@ mod tests {
         let mut tag = Tag::new(TagType::Id3v2);
         tag.set_artist(artist.to_string());
         tag.set_title(name.to_string());
-        tag.insert_text(ItemKey::Bpm, bpm.to_string());
+        // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+        tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
         tag.insert_text(ItemKey::InitialKey, key.to_string());
         tag.save_to_path(&p, WriteOptions::default()).unwrap();
     }
@@ -3311,7 +3322,8 @@ fn make(dir: &Path, name: &str, artist: &str, bpm: &str, key: &str) {
     let mut tag = Tag::new(TagType::Id3v2);
     tag.set_artist(artist.to_string());
     tag.set_title(name.to_string());
-    tag.insert_text(ItemKey::Bpm, bpm.to_string());
+    // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+    tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
     tag.insert_text(ItemKey::InitialKey, key.to_string());
     tag.save_to_path(&p, WriteOptions::default()).unwrap();
 }
