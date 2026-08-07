@@ -31,6 +31,24 @@ pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntr
 
 and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
 
+**Amendment 7 — five corrections to `scan.rs` and `IndexError` (after the Tasks 8-12 review).**
+
+*`probe_dir` now probes incrementally.* Task 11's target query filtered only on `f.kind`, so every call re-hashed 128 KiB and re-read tags for every audio file in the folder — contradicting its own docstring and turning every rescan into a full re-read over SMB. A bare `content_id IS NULL` filter would have been wrong in the other direction, because Rekordbox rewrites tags after a copy and those files genuinely need re-probing. The query now selects files that have never been probed *or* whose mtime is newer than the last probe:
+
+```sql
+LEFT JOIN content_tag ct ON ct.content_id = f.content_id
+WHERE f.dir_id = ?1 AND f.kind = ?2
+  AND (f.content_id IS NULL OR ct.read_at IS NULL OR f.mtime > ct.read_at)
+```
+
+*Stale-row detection is O(n), not O(n²).* `names.contains()` on a `Vec<String>` ran a linear scan per existing row — up to 1.6 billion string comparisons on a 40k-file folder. Now a `HashSet<&str>`.
+
+*The `dir` upsert moved inside the transaction.* It previously ran in autocommit before the file writes opened theirs, so a crash between them left a directory marked `scan_state = 'scanned'` with no children — indistinguishable from a genuinely empty folder, and nothing would ever re-scan it.
+
+*Directory keys are canonicalised.* `path.to_string_lossy().to_ascii_lowercase()` gave `C:\Music` and `C:\Music\` different keys and therefore two `dir` rows for one folder, missed non-ASCII case folding, and on Unix collapsed the genuinely distinct `/Music` and `/music` into one row. A private `path_key()` now strips trailing separators (preserving bare roots) and folds case only on Windows.
+
+*`IndexError::Scan` carries its source.* Was `Scan(String)`, flattening a structured `EnumerateError` with an `io::Error` inside it. Now `Scan(#[from] noceur_fsmodel::EnumerateError)`, so the CLI in Task 13 can distinguish "directory vanished" from "permission denied". Task 11's Step 4 snippet shows the old form.
+
 **Amendment 6 — two process corrections found during execution (Tasks 9 and 11).**
 
 *Module registration must precede the failing-test run.* Several tasks list "create the file, run the test, watch it fail" before "add `pub mod x;` to `lib.rs`". That ordering does not produce a red state — without the module declaration cargo never compiles the new file, so the run reports "0 tests, N filtered out" and nothing fails. Declare the module first, then run. Every task from 3 onward is affected.
