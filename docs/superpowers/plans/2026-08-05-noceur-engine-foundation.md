@@ -6,7 +6,7 @@
 
 **Architecture:** Three library crates with no dependencies on each other except downward (`noceur-index` → `noceur-fsmodel`, `noceur-tags`), plus a thin CLI binary for manual verification. No Tauri, no UI, no async runtime. Every crate is unit-testable in isolation; the CLI exists so a human can point the engine at a real music folder and see the result.
 
-**Tech Stack:** Rust 2021 (toolchain 1.88), `rusqlite` (bundled SQLite), `lofty` (tag reading), `xxhash-rust` (quick keys), `clap` (CLI), `tempfile` (test fixtures).
+**Tech Stack:** Rust 2021 (toolchain 1.97 — see Amendment 3), `rusqlite` (bundled SQLite), `lofty` (tag reading), `xxhash-rust` (quick keys), `clap` (CLI), `tempfile` (test fixtures).
 
 ---
 
@@ -16,6 +16,64 @@
 - On Windows, the MSVC build tools must be installed — `rusqlite`'s `bundled` feature compiles SQLite from C source. If `cargo build` fails with `error: linker link.exe not found`, install "Desktop development with C++" from the Visual Studio Build Tools installer.
 
 **Dependency versions.** The manifests below pin the versions this plan's code was written against (`lofty 0.22`, `rusqlite 0.37`). If either fails to resolve, run `cargo add lofty` / `cargo add rusqlite --features bundled` to take the current release, then check the compile errors against that crate's changelog — the APIs used here are `Probe`/`Tag`/`Accessor` for lofty and `Connection`/`params!` for rusqlite, all of which are long-stable. Do not silently work around an API change; correct the call and note it in the commit message.
+
+## Amendments
+
+Changes made after a task shipped, recorded so the plan stays truthful. Tasks below this point still show their original code; where an amendment supersedes it, this section wins.
+
+**Amendment 1 — `read_dir` returns `DirListing`, not `Vec<FsEntry>` (after Task 5 review).**
+A code review found that `read_dir` silently discarded per-entry failures, so a caller could not tell a listing came back short. Skipping remains correct — one locked file must never fail a folder — but on an SMB share or a removable drive it needs to be observable, because §12 of the spec calls for surfacing exactly this in the activity panel. `enumerate.rs` now defines:
+
+```rust
+pub struct SkippedEntry { pub name: String, pub reason: String }
+pub struct DirListing  { pub entries: Vec<FsEntry>, pub skipped: Vec<SkippedEntry> }
+```
+
+and `read_dir(dir: &Path) -> Result<DirListing, EnumerateError>`. Task 4's code block above predates this. Task 11's snippet has been updated in place.
+
+**Amendment 7 — five corrections to `scan.rs` and `IndexError` (after the Tasks 8-12 review).**
+
+*`probe_dir` now probes incrementally.* Task 11's target query filtered only on `f.kind`, so every call re-hashed 128 KiB and re-read tags for every audio file in the folder — contradicting its own docstring and turning every rescan into a full re-read over SMB. A bare `content_id IS NULL` filter would have been wrong in the other direction, because Rekordbox rewrites tags after a copy and those files genuinely need re-probing. The query now selects files that have never been probed *or* whose mtime is newer than the last probe:
+
+```sql
+LEFT JOIN content_tag ct ON ct.content_id = f.content_id
+WHERE f.dir_id = ?1 AND f.kind = ?2
+  AND (f.content_id IS NULL OR ct.read_at IS NULL OR f.mtime > ct.read_at)
+```
+
+*Stale-row detection is O(n), not O(n²).* `names.contains()` on a `Vec<String>` ran a linear scan per existing row — up to 1.6 billion string comparisons on a 40k-file folder. Now a `HashSet<&str>`.
+
+*The `dir` upsert moved inside the transaction.* It previously ran in autocommit before the file writes opened theirs, so a crash between them left a directory marked `scan_state = 'scanned'` with no children — indistinguishable from a genuinely empty folder, and nothing would ever re-scan it.
+
+*Directory keys are canonicalised.* `path.to_string_lossy().to_ascii_lowercase()` gave `C:\Music` and `C:\Music\` different keys and therefore two `dir` rows for one folder, missed non-ASCII case folding, and on Unix collapsed the genuinely distinct `/Music` and `/music` into one row. A private `path_key()` now strips trailing separators (preserving bare roots) and folds case only on Windows.
+
+*`IndexError::Scan` carries its source.* Was `Scan(String)`, flattening a structured `EnumerateError` with an `io::Error` inside it. Now `Scan(#[from] noceur_fsmodel::EnumerateError)`, so the CLI in Task 13 can distinguish "directory vanished" from "permission denied". Task 11's Step 4 snippet shows the old form.
+
+**Amendment 6 — two process corrections found during execution (Tasks 9 and 11).**
+
+*Module registration must precede the failing-test run.* Several tasks list "create the file, run the test, watch it fail" before "add `pub mod x;` to `lib.rs`". That ordering does not produce a red state — without the module declaration cargo never compiles the new file, so the run reports "0 tests, N filtered out" and nothing fails. Declare the module first, then run. Every task from 3 onward is affected.
+
+*Test fixtures carried the pre-Amendment-4 `ItemKey::Bpm`.* Tasks 7, 11, 12 and 14 all build fixtures with `tag.insert_text(ItemKey::Bpm, ...)` into an ID3v2 tag, which lofty silently discards — the fixture ends up with no BPM at all and the assertion fails with `InvalidColumnType(.., Null)` rather than anything that points at the cause. All four have been corrected in place to `ItemKey::IntegerBpm`, and Task 7's implementation snippet now shows the `IntegerBpm`-then-`Bpm` fallback that Amendment 4 introduced.
+
+**Amendment 5 — `parse_classical` sorts at declaration, not per call (after Task 7 review).**
+Task 6's `parse_classical` allocated and sorted a 21-element `Vec` of roots on every call, in a path that runs once per audio file. A review proved by exhaustive check of all 36 root/accidental/mode combinations that the sort was never load-bearing: no accepted mode suffix (`""`, `maj`, `major`, `dur`, `m`, `min`, `minor`, `moll`) begins with `#` or `b`, so a short root wrongly matching the head of `c#m` leaves a remainder starting with `#`, matches no suffix, and the loop continues to the correct root. `ROOTS` is now declared two-character-first and iterated directly, with a comment recording both the ordering and the real invariant — adding a suffix that begins with an accidental would break it.
+
+The same review found eight `TrackMeta` fields with no test coverage. All six tag-derived ones now have three-way `Id3v2`/`VorbisComments`/`Mp4Ilst` coverage, plus tests for `has_artwork` and `bit_depth`. One finding worth recording: `ItemKey::Year` has no ID3v2 or MP4 mapping, but `Accessor::year()` already falls back to `ItemKey::RecordingDate` (`TDRC`/`DATE`/`©day`) internally, so no code change was needed — the same fallback shape as Amendment 4, supplied by lofty rather than by us.
+
+**Amendment 4 — BPM must be read from two `ItemKey`s, not one (during Task 7).**
+Task 7's code used `ItemKey::Bpm`. Verified against lofty 0.22.4's own mapping tables in `src/tag/item.rs`, that is wrong for ID3v2 — `ID3V2_MAP` has only `"TBPM" => IntegerBpm` and no entry for `Bpm` at all, so writing `Bpm` to an ID3v2 tag silently drops it and reading it always yields `None`. But `IntegerBpm` alone is equally wrong: `VORBIS_MAP` has only `"BPM" => Bpm`, so FLAC and OGG would silently lose BPM. `ILST_MAP` (MP4) has both — `"tmpo" => IntegerBpm` and `"----:com.apple.iTunes:BPM" => Bpm`.
+
+`read()` therefore tries `IntegerBpm` and falls back to `Bpm`, which covers all six supported containers. `InitialKey` needed no equivalent change: it maps cleanly to `TKEY` (ID3v2), `INITIALKEY`/`KEY` (Vorbis) and the `initialkey` freeform atom (MP4).
+
+The bug was invisible to the suite because every fixture was a WAV carrying ID3v2. So `meta.rs` also gained `pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag)`, splitting tag mapping from file opening, and three tests now exercise `TagType::Id3v2`, `TagType::VorbisComments` and `TagType::Mp4Ilst` directly — no hand-authored FLAC or M4A fixtures required. Any future tag field added to `TrackMeta` should get the same three-way test.
+
+**Amendment 3 — toolchain pinned to 1.97, not 1.88 (during Task 6).**
+The original pin came from whatever `rustc --version` reported on the machine and was simply wrong: `lofty 0.22` pulls in `ogg_pager 0.7.2`, which requires rustc 1.89+. The first attempt worked around this by pinning `ogg_pager` back to 0.7.0, which is a treadmill — the next dependency to move would break it again. Rust 1.97.1 was already installed locally, so `rust-toolchain.toml` now pins `1.97`, the lockfile was regenerated clean, and no dependency is held back. Task 1's manifest block above shows the original `1.88`.
+
+**Amendment 2 — supporting changes from the same review.**
+`kind.rs` gained `extension_of(name: &str) -> String`, used by `enumerate.rs` so extension parsing exists once rather than twice. `natural_cmp` now falls back to a raw-string comparison when the natural comparison ties, so `"7"` and `"007"` get a deterministic order and rows cannot shuffle between refreshes. `FsEntry::path` and `extended()` gained doc comments recording two contracts that were previously implicit: the stored path is *not* the `\\?\`-extended form and must be passed through `extended()` before any I/O, and `extended()` requires an already-normalised fully-qualified path because verbatim paths bypass OS normalisation.
+
+---
 
 ## File Structure
 
@@ -1297,7 +1355,8 @@ mod tests {
         tag.set_artist(artist.to_string());
         tag.set_title(title.to_string());
         tag.set_album("So Unreleased Vol.1".to_string());
-        tag.insert_text(ItemKey::Bpm, bpm.to_string());
+        // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+        tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
         tag.insert_text(ItemKey::InitialKey, key.to_string());
         tag.save_to_path(&path, WriteOptions::default()).unwrap();
         path
@@ -1470,7 +1529,9 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
     meta.has_artwork = tag.picture_count() > 0;
 
     meta.bpm = tag
-        .get_string(&ItemKey::Bpm)
+        // Superseded by Amendment 4: this must try IntegerBpm first, then fall back to Bpm.
+        .get_string(&ItemKey::IntegerBpm)
+        .or_else(|| tag.get_string(&ItemKey::Bpm))
         .and_then(|s| s.trim().parse::<f32>().ok())
         .filter(|v| v.is_finite() && *v > 0.0);
 
@@ -2253,7 +2314,8 @@ mod tests {
         let mut tag = Tag::new(TagType::Id3v2);
         tag.set_artist(artist.to_string());
         tag.set_title(title.to_string());
-        tag.insert_text(ItemKey::Bpm, bpm.to_string());
+        // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+        tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
         tag.insert_text(ItemKey::InitialKey, key.to_string());
         tag.save_to_path(path, WriteOptions::default()).unwrap();
     }
@@ -2471,7 +2533,10 @@ use rusqlite::params;
 /// removed; entries that are new are inserted; the rest are updated in place so
 /// `content_id` links survive a rescan.
 pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError> {
-    let entries = read_dir(path).map_err(|e| IndexError::Scan(e.to_string()))?;
+    // `read_dir` returns a `DirListing` carrying both entries and any that were
+    // skipped (see Amendment 1). Stage 1 ignores skips; the UI surfaces them later.
+    let listing = read_dir(path).map_err(|e| IndexError::Scan(e.to_string()))?;
+    let entries = listing.entries;
 
     let path_lower = path.to_string_lossy().to_ascii_lowercase();
     let name = path
@@ -2702,7 +2767,8 @@ mod tests {
         let mut tag = Tag::new(TagType::Id3v2);
         tag.set_artist(artist.to_string());
         tag.set_title(name.to_string());
-        tag.insert_text(ItemKey::Bpm, bpm.to_string());
+        // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+        tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
         tag.insert_text(ItemKey::InitialKey, key.to_string());
         tag.save_to_path(&p, WriteOptions::default()).unwrap();
     }
@@ -3274,7 +3340,8 @@ fn make(dir: &Path, name: &str, artist: &str, bpm: &str, key: &str) {
     let mut tag = Tag::new(TagType::Id3v2);
     tag.set_artist(artist.to_string());
     tag.set_title(name.to_string());
-    tag.insert_text(ItemKey::Bpm, bpm.to_string());
+    // IntegerBpm, not Bpm — ID3v2 maps only TBPM and silently drops Bpm. See Amendment 4.
+    tag.insert_text(ItemKey::IntegerBpm, bpm.to_string());
     tag.insert_text(ItemKey::InitialKey, key.to_string());
     tag.save_to_path(&p, WriteOptions::default()).unwrap();
 }

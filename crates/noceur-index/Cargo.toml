@@ -1,0 +1,16 @@
+[package]
+name = "noceur-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+noceur-fsmodel = { path = "../noceur-fsmodel" }
+noceur-tags = { path = "../noceur-tags" }
+rusqlite = { version = "0.37", features = ["bundled"] }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+tempfile = "3"
+lofty = "0.22"
