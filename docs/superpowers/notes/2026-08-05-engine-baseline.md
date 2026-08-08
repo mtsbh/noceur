@@ -80,6 +80,28 @@ verbatim form, so an error from the CLI reads
 unacceptable in a breadcrumb. The shell milestone needs a `path::simplify()` — the
 inverse of `extended()` — applied at every display boundary.
 
+**`dir.parent_id` is never populated.** `scan_dir` writes a single flat `dir` row
+per navigated folder and always sets `parent_id = NULL`, so `idx_dir_parent` exists
+with nothing behind it. Correct for this milestone — stage 1 enumerates on navigate
+rather than crawling a tree — but milestone 2's watchers and reconciliation need a
+real parent chain, and how it gets built should be decided explicitly rather than
+grown accidentally.
+
+**The CLI loses path context on a nonexistent path.** `main.rs` calls
+`path.canonicalize()?` before `scan_dir`, so a bad path fails with a bare
+`The system cannot find the file specified. (os error 2)` and bypasses
+`IndexError::Scan`'s much better message entirely. One-line fix with `.map_err`.
+
+## What milestone 2 should address first
+
+1. **`path::simplify()`**, the inverse of `extended()`, applied at every display
+   boundary — the `\\?\` leak and the CLI error above are the same gap.
+2. **Move stage-1 enumeration off the calling thread** before there is any UI to
+   block. The 20-second cold-SMB stall is the most concrete risk carried out of
+   this milestone.
+3. **Decide how `dir.parent_id` gets populated**, since watchers and reconciliation
+   need a tree rather than isolated per-folder rows.
+
 ## Budgets from the spec, checked
 
 | Spec §14 budget | Status |
