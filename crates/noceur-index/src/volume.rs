@@ -123,6 +123,72 @@ pub(crate) fn now() -> i64 {
         .unwrap_or(0)
 }
 
+use std::path::Path;
+
+/// Registers (or finds) the volume containing `path` and returns its id.
+///
+/// # Provisional
+///
+/// Identity is derived from the path's root — the drive letter on Windows, the
+/// share root for UNC paths, `/` on Unix — **not** from a real filesystem
+/// identifier. That means a removable drive reassigned from `S:` to `E:` currently
+/// reads as a different volume, which is exactly what `fs_uuid` was introduced to
+/// prevent.
+///
+/// This is deliberate and bounded: real identity (volume serial numbers on Windows,
+/// UUIDs elsewhere) lands in the identity-and-freshness milestone, and only this
+/// function changes when it does. Everything downstream already keys on the
+/// returned id.
+pub fn for_path(db: &Db, path: &Path) -> Result<i64, IndexError> {
+    let (uuid, kind, label, mount) = root_of(path);
+    upsert(db, &uuid, kind, &label, &mount)
+}
+
+/// Splits a path into its volume root and a provisional identity for it.
+fn root_of(path: &Path) -> (String, VolumeKind, String, String) {
+    let s = path.to_string_lossy();
+
+    #[cfg(windows)]
+    {
+        // UNC share: \\server\share\... -> the \\server\share pair is the volume.
+        if let Some(rest) = s.strip_prefix(r"\\") {
+            let mut parts = rest.split(['\\', '/']).filter(|p| !p.is_empty());
+            let server = parts.next().unwrap_or("");
+            let share = parts.next().unwrap_or("");
+            let mount = format!(r"\\{server}\{share}");
+            return (
+                format!("provisional:unc:{}", mount.to_lowercase()),
+                VolumeKind::Network,
+                share.to_string(),
+                mount,
+            );
+        }
+        // Drive letter.
+        if let Some(letter) = s.chars().next().filter(|c| c.is_ascii_alphabetic()) {
+            let letter = letter.to_ascii_uppercase();
+            let mount = format!(r"{letter}:\");
+            return (
+                format!("provisional:drive:{letter}"),
+                VolumeKind::Fixed,
+                format!("{letter}:"),
+                mount,
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = &s;
+    }
+
+    (
+        "provisional:root".to_string(),
+        VolumeKind::Fixed,
+        "/".to_string(),
+        "/".to_string(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +268,68 @@ mod tests {
     fn get_returns_none_for_an_unknown_id() {
         let db = db();
         assert!(get(&db, 9999).unwrap().is_none());
+    }
+
+    #[test]
+    fn resolves_a_volume_for_a_path() {
+        let db = db();
+        let p = if cfg!(windows) {
+            std::path::PathBuf::from(r"C:\Music\House")
+        } else {
+            std::path::PathBuf::from("/music/house")
+        };
+        let id = for_path(&db, &p).unwrap();
+        assert!(id > 0);
+    }
+
+    #[test]
+    fn two_paths_on_one_volume_resolve_to_the_same_row() {
+        let db = db();
+        let (a, b) = if cfg!(windows) {
+            (r"C:\Music\House", r"C:\Other\Place")
+        } else {
+            ("/music/house", "/other/place")
+        };
+        let ia = for_path(&db, std::path::Path::new(a)).unwrap();
+        let ib = for_path(&db, std::path::Path::new(b)).unwrap();
+        assert_eq!(ia, ib);
+        assert_eq!(all(&db).unwrap().len(), 1);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn different_drive_letters_are_different_volumes() {
+        let db = db();
+        let c = for_path(&db, std::path::Path::new(r"C:\Music")).unwrap();
+        let e = for_path(&db, std::path::Path::new(r"E:\music")).unwrap();
+        assert_ne!(c, e);
+        assert_eq!(all(&db).unwrap().len(), 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_unc_share_is_its_own_volume() {
+        let db = db();
+        let local = for_path(&db, std::path::Path::new(r"C:\Music")).unwrap();
+        let share = for_path(&db, std::path::Path::new(r"\\nas\sets\friday")).unwrap();
+        assert_ne!(local, share);
+
+        let v = get(&db, share).unwrap().unwrap();
+        assert_eq!(v.kind, VolumeKind::Network);
+    }
+
+    #[test]
+    fn resolution_is_case_insensitive_on_windows_only() {
+        let db = db();
+        if cfg!(windows) {
+            let lower = for_path(&db, std::path::Path::new(r"c:\music")).unwrap();
+            let upper = for_path(&db, std::path::Path::new(r"C:\MUSIC")).unwrap();
+            assert_eq!(lower, upper);
+        } else {
+            // On Unix the root is always "/" regardless of case further down.
+            let a = for_path(&db, std::path::Path::new("/Music")).unwrap();
+            let b = for_path(&db, std::path::Path::new("/music")).unwrap();
+            assert_eq!(a, b);
+        }
     }
 }

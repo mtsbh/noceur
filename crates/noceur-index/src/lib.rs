@@ -10,4 +10,4 @@ pub mod volume;
 pub use db::{Db, IndexError};
 pub use query::{count, list, ListOptions, ListRow, SortColumn};
 pub use scan::{probe_dir, scan_dir};
-pub use volume::{Volume, VolumeKind};
+pub use volume::{for_path, Volume, VolumeKind};
