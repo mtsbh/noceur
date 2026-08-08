@@ -5,9 +5,7 @@
   "identifier": "app.noceur.desktop",
   "build": {
     "frontendDist": "../../ui/dist",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "pnpm --dir ../../ui dev",
-    "beforeBuildCommand": "pnpm --dir ../../ui build"
+    "devUrl": "http://localhost:1420"
   },
   "app": {
     "windows": [
