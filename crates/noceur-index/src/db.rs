@@ -10,7 +10,7 @@ pub enum IndexError {
     Sqlite(#[from] rusqlite::Error),
     #[error("index is newer than this build: found v{found}, support v{supported}")]
     TooNew { found: i32, supported: i32 },
-    #[error("scan failed")]
+    #[error("scan failed: {0}")]
     Scan(#[from] noceur_fsmodel::EnumerateError),
 }
 
