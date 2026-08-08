@@ -1,0 +1,11 @@
+[package]
+name = "noceur-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+noceur-fsmodel = { path = "../noceur-fsmodel" }
+noceur-tags = { path = "../noceur-tags" }
+noceur-index = { path = "../noceur-index" }
+serde = { version = "1", features = ["derive"] }
