@@ -59,7 +59,8 @@ impl Default for ListOptions {
 }
 
 /// One row as the UI sees it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListRow {
     pub file_id: i64,
     pub name: String,
@@ -338,5 +339,14 @@ mod tests {
             .unwrap(),
             3
         );
+    }
+
+    #[test]
+    fn list_rows_serialize_to_json() {
+        let (db, _d, dir_id) = setup();
+        let rows = list(&db, dir_id, ListOptions::default()).unwrap();
+        let json = serde_json::to_string(&rows).expect("ListRow must serialize");
+        assert!(json.contains("\"name\""));
+        assert!(json.contains("\"keyNorm\""), "fields must be camelCase for the UI");
     }
 }

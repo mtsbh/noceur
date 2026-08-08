@@ -10,7 +10,9 @@ noceur-fsmodel = { path = "../noceur-fsmodel" }
 noceur-tags = { path = "../noceur-tags" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"
 lofty = "0.22"
+serde_json = "1"
