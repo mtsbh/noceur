@@ -149,10 +149,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn simplify_leaves_ordinary_paths_alone() {
-        assert_eq!(
-            simplify(Path::new(r"C:\Music")),
-            PathBuf::from(r"C:\Music")
-        );
+        assert_eq!(simplify(Path::new(r"C:\Music")), PathBuf::from(r"C:\Music"));
     }
 
     #[test]

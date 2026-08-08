@@ -347,6 +347,9 @@ mod tests {
         let rows = list(&db, dir_id, ListOptions::default()).unwrap();
         let json = serde_json::to_string(&rows).expect("ListRow must serialize");
         assert!(json.contains("\"name\""));
-        assert!(json.contains("\"keyNorm\""), "fields must be camelCase for the UI");
+        assert!(
+            json.contains("\"keyNorm\""),
+            "fields must be camelCase for the UI"
+        );
     }
 }
