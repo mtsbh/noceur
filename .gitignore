@@ -13,6 +13,7 @@ dist/
 # Tauri
 src-tauri/target/
 src-tauri/gen/
+crates/noceur-app/gen/
 
 # OS
 Thumbs.db

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Noceur",
+  "version": "0.1.0",
+  "identifier": "app.noceur.desktop",
+  "build": {
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm --dir ../../ui dev",
+    "beforeBuildCommand": "pnpm --dir ../../ui build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Noceur",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 500,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

@@ -4,8 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
 noceur-fsmodel = { path = "../noceur-fsmodel" }
 noceur-tags = { path = "../noceur-tags" }
 noceur-index = { path = "../noceur-index" }
+tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }

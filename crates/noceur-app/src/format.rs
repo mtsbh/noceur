@@ -13,6 +13,10 @@ pub const ABSENT: &str = "—";
 /// tag-derived values are marked so they are never mistaken for our own analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BpmSource {
+    /// Not produced anywhere yet — no milestone before this one runs analysis.
+    /// Kept here (and covered by tests) so `display()` and the wire format are
+    /// already correct the day analysis lands.
+    #[allow(dead_code)]
     Analysed,
     Tag,
 }
