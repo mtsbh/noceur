@@ -1,0 +1,14 @@
+[package]
+name = "noceur-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "noceur"
+path = "src/main.rs"
+
+[dependencies]
+noceur-index = { path = "../noceur-index" }
+noceur-tags  = { path = "../noceur-tags" }
+clap = { version = "4", features = ["derive"] }
