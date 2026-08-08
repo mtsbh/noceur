@@ -10,3 +10,4 @@ pub use entry::FsEntry;
 pub use enumerate::{read_dir, DirListing, EnumerateError, SkippedEntry};
 pub use kind::{extension_of, is_audio_extension, EntryKind, AUDIO_EXTENSIONS};
 pub use order::{natural_cmp, sort, SortDir, SortKey};
+pub use path::{extended, simplify};

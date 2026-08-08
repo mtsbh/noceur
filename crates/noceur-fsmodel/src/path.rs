@@ -48,6 +48,34 @@ pub fn extended(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
+/// Windows UNC extended prefix.
+const EXT_UNC_PREFIX: &str = r"\\?\UNC\";
+
+/// Removes the `\\?\` extended-length prefix for display.
+///
+/// The inverse of [`extended`]. `std::fs::canonicalize` returns verbatim paths on
+/// Windows, so this must be applied at every boundary where a path becomes text a
+/// person reads — breadcrumbs, error messages, tooltips. Never apply it before a
+/// filesystem call; that is what [`extended`] is for.
+#[cfg(windows)]
+pub fn simplify(path: &Path) -> PathBuf {
+    let s = path.as_os_str().to_string_lossy();
+
+    if let Some(rest) = s.strip_prefix(EXT_UNC_PREFIX) {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = s.strip_prefix(EXT_PREFIX) {
+        return PathBuf::from(rest);
+    }
+    path.to_path_buf()
+}
+
+/// Identity on non-Windows platforms. See the Windows implementation for details.
+#[cfg(not(windows))]
+pub fn simplify(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,5 +126,52 @@ mod tests {
         };
         // Must not panic and must preserve the tail.
         assert!(extended(&input).to_string_lossy().ends_with(&long));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn simplify_strips_the_drive_prefix() {
+        assert_eq!(
+            simplify(Path::new(r"\\?\C:\Music\track.wav")),
+            PathBuf::from(r"C:\Music\track.wav")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn simplify_strips_the_unc_prefix() {
+        assert_eq!(
+            simplify(Path::new(r"\\?\UNC\nas\sets\friday")),
+            PathBuf::from(r"\\nas\sets\friday")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn simplify_leaves_ordinary_paths_alone() {
+        assert_eq!(
+            simplify(Path::new(r"C:\Music")),
+            PathBuf::from(r"C:\Music")
+        );
+    }
+
+    #[test]
+    fn simplify_round_trips_with_extended() {
+        let original = if cfg!(windows) {
+            PathBuf::from(r"C:\Music\House")
+        } else {
+            PathBuf::from("/music/house")
+        };
+        assert_eq!(simplify(&extended(&original)), original);
+    }
+
+    #[test]
+    fn simplify_is_idempotent() {
+        let p = if cfg!(windows) {
+            PathBuf::from(r"C:\Music")
+        } else {
+            PathBuf::from("/music")
+        };
+        assert_eq!(simplify(&simplify(&p)), simplify(&p));
     }
 }
