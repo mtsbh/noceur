@@ -13,3 +13,6 @@ noceur-tags = { path = "../noceur-tags" }
 noceur-index = { path = "../noceur-index" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
