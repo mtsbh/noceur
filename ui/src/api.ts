@@ -151,3 +151,27 @@ export function probeBatch(dirId: number): Promise<ProbeProgress> {
 export function roots(): Promise<Segment[]> {
   return invoke<Segment[]>("roots");
 }
+
+/** One search result, already formatted for display. */
+export type SearchHit = {
+  fileId: number;
+  kind: number;
+  name: string;
+  dirPath: string;
+  bpm: string;
+  key: string;
+  duration: string;
+  artist: string;
+};
+
+/**
+ * Searches the indexed library.
+ *
+ * `scopes` are the folders to look in — the pinned ones plus the tree the user
+ * is currently in. Searching the current directory alone would miss the case the
+ * feature exists for: finding a track when you cannot remember which folder it
+ * is in.
+ */
+export function search(query: string, scopes: string[]): Promise<SearchHit[]> {
+  return invoke<SearchHit[]>("search", { req: { query, scopes } });
+}

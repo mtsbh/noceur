@@ -509,3 +509,95 @@ body.resizing * {
   padding-top: 0;
   padding-bottom: 0;
 }
+
+/* Search popover. Centred over the window, dismissed by Escape or by clicking
+   away — it is a lens on the library, not a mode you have to leave deliberately. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+.finder {
+  position: fixed;
+  z-index: 11;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, 90vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.finput {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hair);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  padding: 14px 16px;
+  outline: none;
+}
+.finput::placeholder {
+  color: var(--fg4);
+}
+
+.fresults {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.hit {
+  display: grid;
+  /* The name is the answer; the folder only says which copy. `minmax(0, …)` so a
+     long track name shrinks its own column instead of pushing the grid wider than
+     the popover. */
+  grid-template-columns: minmax(0, 2.6fr) 56px 42px 54px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 0 16px;
+  height: 28px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 2px 0 0 transparent;
+}
+.hit.on {
+  background: rgba(238, 234, 228, 0.05);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+.hname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hit.dir .hname {
+  color: var(--acc);
+}
+/* The folder is the second half of the answer: which of the copies is this? */
+.hpath {
+  color: var(--fg3);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.fempty {
+  padding: 28px;
+  text-align: center;
+  color: var(--fg3);
+}
+.fhint {
+  display: flex;
+  gap: 14px;
+  padding: 7px 16px;
+  border-top: 1px solid var(--hair);
+  color: var(--fg4);
+  font-size: 10px;
+  flex: none;
+}

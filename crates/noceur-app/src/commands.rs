@@ -1,6 +1,9 @@
 //! Tauri commands. Every one that touches the filesystem runs off-thread.
 
-use crate::dto::{DirListing, ListRequest, Order, ProbeProgress, RowWindow, RowsRequest, Segment};
+use crate::dto::{
+    DirListing, ListRequest, Order, ProbeProgress, RowWindow, RowsRequest, SearchHit,
+    SearchRequest, Segment,
+};
 use crate::format;
 use crate::state::AppState;
 use noceur_fsmodel::path::simplify;
@@ -168,6 +171,63 @@ fn window(
             .map(|r| format::display(r, KeyNotation::Camelot))
             .collect(),
     })
+}
+
+/// Results the popover shows before the user has to scroll. Enough to find what
+/// they meant; not so many that ranking stops mattering.
+const SEARCH_LIMIT: i64 = 200;
+
+/// Searches the indexed library.
+///
+/// Runs off-thread like every other index read, and takes the lock only for the
+/// query itself — a search issued while a folder is still being probed waits for
+/// one batch, not for the folder.
+#[tauri::command]
+pub async fn search(
+    state: State<'_, AppState>,
+    req: SearchRequest,
+) -> Result<Vec<SearchHit>, String> {
+    let db = state.db.clone();
+    let limit = req.limit.unwrap_or(SEARCH_LIMIT).clamp(1, MAX_LIMIT);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        let hits =
+            noceur_index::search(&db, &req.query, &req.scopes, limit).map_err(|e| e.to_string())?;
+
+        Ok(hits
+            .into_iter()
+            .map(|h| {
+                let is_audio = h.kind == 1;
+                SearchHit {
+                    file_id: h.file_id,
+                    kind: h.kind,
+                    name: h.name,
+                    dir_path: simplify(Path::new(&h.dir_path))
+                        .to_string_lossy()
+                        .into_owned(),
+                    bpm: if is_audio {
+                        format::bpm(h.bpm, format::BpmSource::Tag)
+                    } else {
+                        String::new()
+                    },
+                    key: if is_audio {
+                        format::key(h.key_norm, h.key_tag.as_deref(), KeyNotation::Camelot)
+                    } else {
+                        String::new()
+                    },
+                    duration: if is_audio {
+                        format::duration(h.duration_ms)
+                    } else {
+                        String::new()
+                    },
+                    artist: h.artist.unwrap_or_default(),
+                }
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("search task failed: {e}"))?
 }
 
 /// Lists the subdirectories of a path, for one level of the folder tree.

@@ -106,10 +106,20 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
     drop(stmt);
 
     for id in stale {
+        // The search index is keyed by file id, so a row that leaves the listing
+        // has to leave the index with it or searches keep offering a file that is
+        // no longer there.
+        tx.execute("DELETE FROM file_fts WHERE rowid = ?1", [id])?;
         tx.execute("DELETE FROM file WHERE id = ?1", [id])?;
     }
 
     tx.commit()?;
+
+    // Everything in this folder is searchable by name as soon as it is listed.
+    // Tags follow when the probe reaches them; waiting for that would leave a
+    // freshly opened folder unsearchable for as long as the probe takes.
+    crate::search::index_new_in_dir(db, dir_id)?;
+
     Ok(dir_id)
 }
 
@@ -252,6 +262,9 @@ pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexErr
             "UPDATE file SET content_id = ?1, state = 'ok' WHERE id = ?2",
             params![content_id, file_id],
         )?;
+
+        // Re-index now that the row has an artist, title and album to match on.
+        crate::search::index_file(db, file_id)?;
     }
     Ok(attempted)
 }
@@ -334,6 +347,96 @@ mod tests {
 
     fn count(db: &Db, sql: &str) -> i64 {
         db.conn().query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    /// Queries here use tokens that appear nowhere in a temp directory's own
+    /// path. `path` is one of the indexed columns, and a temp tree lives under
+    /// `…\AppData\Local\Temp\…`, so a term like `a*` matches every row through
+    /// its path and proves nothing about names.
+    fn names(hits: &[crate::search::Hit]) -> Vec<&str> {
+        hits.iter().map(|h| h.name.as_str()).collect()
+    }
+
+    /// A folder must be searchable by name the moment it is listed, without
+    /// waiting for the probe to read tags out of every file in it.
+    #[test]
+    fn scanning_makes_files_findable_by_name_before_any_probe() {
+        let (db, d, vol) = setup();
+        let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+
+        let hits = crate::search::search(&db, "bare", &[], 20).unwrap();
+        assert_eq!(names(&hits), ["bare.wav"]);
+
+        assert_eq!(
+            crate::search::index_new_in_dir(&db, dir_id).unwrap(),
+            0,
+            "a second pass should find nothing left to index"
+        );
+    }
+
+    /// Tags only become searchable once read, which is the whole reason the
+    /// search index is written twice: once at scan, again at probe.
+    #[test]
+    fn probing_makes_files_findable_by_artist() {
+        let (db, d, vol) = setup();
+        let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+
+        assert!(
+            crate::search::search(&db, "Lizz", &[], 20)
+                .unwrap()
+                .is_empty(),
+            "an artist should not be searchable before the probe reads it"
+        );
+
+        probe_dir(&db, dir_id).unwrap();
+
+        let hits = crate::search::search(&db, "Lizz", &[], 20).unwrap();
+        assert_eq!(names(&hits), ["b.wav"]);
+        assert_eq!(hits[0].artist.as_deref(), Some("Lizz"));
+    }
+
+    /// A file that disappears must stop turning up in search, not linger as a
+    /// result that opens nothing.
+    #[test]
+    fn a_deleted_file_leaves_the_search_index() {
+        let (db, d, vol) = setup();
+        scan_dir(&db, vol, d.path()).unwrap();
+        assert_eq!(
+            names(&crate::search::search(&db, "bare", &[], 20).unwrap()),
+            ["bare.wav"]
+        );
+
+        std::fs::remove_file(d.path().join("bare.wav")).unwrap();
+        scan_dir(&db, vol, d.path()).unwrap();
+
+        assert!(
+            crate::search::search(&db, "bare", &[], 20)
+                .unwrap()
+                .is_empty(),
+            "a removed file must not remain searchable"
+        );
+    }
+
+    /// Scoping is what makes `Ctrl+F` search the folders you work in rather than
+    /// every drive in the machine.
+    #[test]
+    fn scopes_restrict_results_to_a_subtree() {
+        let (db, d, vol) = setup();
+        scan_dir(&db, vol, d.path()).unwrap();
+
+        let inside = vec![d.path().to_string_lossy().to_lowercase()];
+        assert_eq!(
+            names(&crate::search::search(&db, "bare", &inside, 20).unwrap()),
+            ["bare.wav"]
+        );
+
+        let elsewhere = vec!["z:\\nowhere".to_string()];
+        assert!(
+            crate::search::search(&db, "bare", &elsewhere, 20)
+                .unwrap()
+                .is_empty(),
+            "a scope that contains nothing must return nothing"
+        );
     }
 
     #[test]

@@ -100,3 +100,32 @@ pub struct ProbeProgress {
     pub done: bool,
     pub elapsed_ms: u64,
 }
+
+/// What the user is looking for, and where.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchRequest {
+    pub query: String,
+    /// Directory subtrees to search: the pinned folders plus the current tree.
+    /// Empty searches everything indexed.
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+/// One search result, formatted for display.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub file_id: i64,
+    /// 0 directory, 1 audio, 2 other.
+    pub kind: i64,
+    pub name: String,
+    /// Folder holding it, as a person should read it.
+    pub dir_path: String,
+    pub bpm: String,
+    pub key: String,
+    pub duration: String,
+    pub artist: String,
+}

@@ -81,6 +81,7 @@ fn main() {
             commands::roots,
             commands::list_rows,
             commands::probe,
+            commands::search,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

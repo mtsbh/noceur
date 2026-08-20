@@ -132,6 +132,52 @@ mod tests {
         assert_eq!(kept, "keep", "existing rows must survive the upgrade");
     }
 
+    /// A library browsed before search existed must be searchable the moment the
+    /// build that has search opens it — not only the folders reopened afterwards.
+    #[test]
+    fn upgrading_backfills_the_search_index() {
+        let d = TempDir::new().unwrap();
+        let path = d.path().join("index.db");
+
+        // A v3 file: everything up to and including the empty FTS table.
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            for sql in &crate::schema::MIGRATIONS[..3] {
+                conn.execute_batch(sql).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 3).unwrap();
+            conn.execute(
+                "INSERT INTO volume (id, kind, fs_uuid, label, mount_path)
+                 VALUES (1, 'fixed', 'u', 'l', 'e:\\')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO dir (id, volume_id, name, path_lower)
+                 VALUES (1, 1, 'music', 'e:\\music')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO file (id, dir_id, name, kind) VALUES (1, 1, 'Kindness.wav', 1)",
+                [],
+            )
+            .unwrap();
+
+            let indexed: i64 = conn
+                .query_row("SELECT COUNT(*) FROM file_fts", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(indexed, 0, "v3 leaves the search index empty");
+        }
+
+        let db = Db::open(&path).unwrap();
+        assert_eq!(db.version().unwrap(), SCHEMA_VERSION);
+
+        let hits = crate::search::search(&db, "Kindness", &[], 10).unwrap();
+        assert_eq!(hits.len(), 1, "the existing file must have been backfilled");
+        assert_eq!(hits[0].name, "Kindness.wav");
+    }
+
     #[test]
     fn records_the_schema_version() {
         let db = Db::open_in_memory().unwrap();

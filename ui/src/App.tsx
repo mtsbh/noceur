@@ -1,4 +1,12 @@
-import { createSignal, createResource, createEffect, on, For, Show } from "solid-js";
+import {
+  createSignal,
+  createResource,
+  createEffect,
+  on,
+  onCleanup,
+  For,
+  Show,
+} from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import {
@@ -14,6 +22,7 @@ import {
   type RowDisplay,
 } from "./api";
 import Tree, { storedPins } from "./Tree";
+import Search from "./Search";
 
 /**
  * Where the browser opens.
@@ -180,6 +189,41 @@ export default function App() {
 
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
+  }
+
+  const [finding, setFinding] = createSignal(false);
+
+  // Ctrl+F from anywhere. Registered on the window rather than a focusable
+  // element so it works without the list having been clicked first.
+  createEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setFinding(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    onCleanup(() => window.removeEventListener("keydown", onKey));
+  });
+
+  /**
+   * Where search looks: every pinned folder, plus the tree currently open.
+   *
+   * The current path is included whether or not it is pinned — searching only
+   * pinned folders would ignore wherever the user actually is.
+   */
+  const searchScopes = () => {
+    const pins = storedPins();
+    const here = current();
+    return pins.some((p) => here.toLowerCase().startsWith(p.toLowerCase()))
+      ? pins
+      : [...pins, here];
+  };
+
+  /** Opens a folder from a search result, selecting the file that matched. */
+  function revealFromSearch(dirPath: string, fileId: number) {
+    navigate(dirPath);
+    setSelected(fileId);
   }
 
   const current = () => history()[cursor()];
@@ -579,6 +623,14 @@ export default function App() {
           <span class="slow">{windowError()}</span>
         </Show>
       </div>
+
+      <Show when={finding()}>
+        <Search
+          scopes={searchScopes()}
+          onClose={() => setFinding(false)}
+          onOpen={revealFromSearch}
+        />
+      </Show>
     </div>
   );
 }

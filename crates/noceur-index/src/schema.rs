@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 4;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -94,4 +94,47 @@ CREATE TABLE thumb (
     miss       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (content_id, size)
 );
+"#;
+
+/// Full-text search over the names and tags of every indexed file.
+///
+/// A plain FTS5 table rather than an external-content one: the text it indexes is
+/// spread across `file` and `content_tag`, and external content wants a single
+/// source table. `rowid` is the `file.id`, so a match joins straight back to the
+/// row it came from.
+///
+/// `path` is indexed alongside the tags because a DJ library encodes a great deal
+/// in its folder names — labels, years, the set a track was played in — and a
+/// search that ignored them would miss the obvious query.
+///
+/// `remove_diacritics 2` makes "Rêves" findable by typing "reves", which matters
+/// for a library full of names nobody can type.
+const V3: &str = r#"
+CREATE VIRTUAL TABLE file_fts USING fts5(
+    name, artist, title, album, path,
+    tokenize = "unicode61 remove_diacritics 2"
+);
+"#;
+
+/// Backfills the search index with everything already scanned.
+///
+/// V3 created the table empty, which left every folder indexed before it
+/// invisible to search until it happened to be reopened — a library that had
+/// been browsed for weeks would have answered `Ctrl+F` with nothing.
+///
+/// Written as its own migration rather than folded into V3 because V3 has
+/// already run on real databases. The `NOT IN` makes it a no-op where V3 and V4
+/// are applied together on a fresh file.
+const V4: &str = r#"
+INSERT INTO file_fts (rowid, name, artist, title, album, path)
+SELECT f.id,
+       f.name,
+       COALESCE(ct.artist, ''),
+       COALESCE(ct.title, ''),
+       COALESCE(ct.album, ''),
+       d.path_lower
+FROM file f
+JOIN dir d ON d.id = f.dir_id
+LEFT JOIN content_tag ct ON ct.content_id = f.content_id
+WHERE f.id NOT IN (SELECT rowid FROM file_fts);
 "#;
