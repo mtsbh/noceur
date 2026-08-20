@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export type RowDisplay = {
   fileId: number;
@@ -12,7 +12,25 @@ export type RowDisplay = {
   album: string;
   size: string;
   state: string;
+  /** True only for audio files the last probe found a picture in. */
+  hasArt: boolean;
 };
+
+/** The cover-art sizes the backend will render. */
+export type ArtSize = "small" | "medium" | "large";
+
+/**
+ * URL of one row's cover art.
+ *
+ * Cover art is fetched by the web view as an ordinary image rather than returned
+ * from a command, so the bytes never pass through JSON and the browser does its
+ * own caching and off-thread decoding. `convertFileSrc` spells the custom scheme
+ * the way the current platform needs it — `http://thumb.localhost/…` on Windows,
+ * `thumb://localhost/…` elsewhere.
+ */
+export function thumbUrl(fileId: number, size: ArtSize): string {
+  return `${convertFileSrc(String(fileId), "thumb")}?size=${size}`;
+}
 
 export type Segment = { label: string; path: string };
 

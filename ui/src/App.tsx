@@ -5,12 +5,39 @@ import {
   openDir,
   listRows,
   parentOf,
+  thumbUrl,
+  type ArtSize,
   type DirListing,
   type RowDisplay,
 } from "./api";
 
 /** Where the browser opens. Adjust freely — pinned folders arrive in a later milestone. */
 const HOME = "E:\\music";
+
+/**
+ * Cover-art edge length and the row height that holds it, per size.
+ *
+ * `art` must match `ThumbSize::px()` in `noceur-art`: the backend renders at
+ * exactly these edges, and asking for a different one in CSS would scale an
+ * image that was rasterised precisely to avoid being scaled.
+ *
+ * Small keeps the 26px row milestone 3 was built around, so choosing the compact
+ * size costs nothing against the list as it was.
+ */
+const ART: Record<ArtSize, { art: number; row: number }> = {
+  small: { art: 22, row: 26 },
+  medium: { art: 44, row: 48 },
+  large: { art: 88, row: 92 },
+};
+
+const ART_SIZES: ArtSize[] = ["small", "medium", "large"];
+
+const ART_KEY = "noceur.artSize";
+
+function storedArtSize(): ArtSize {
+  const v = localStorage.getItem(ART_KEY);
+  return v === "medium" || v === "large" || v === "small" ? v : "small";
+}
 
 /**
  * Rows per window.
@@ -25,19 +52,16 @@ const PAGE = 200;
 const OVERSCAN = 12;
 
 /**
- * Row height in pixels.
+ * Row height is now owned by JavaScript rather than by `--row-h` in the
+ * stylesheet.
  *
- * `--row-h` in `theme.css` stays the source of truth — the virtualizer needs the
- * same number in JavaScript, and reading it back is the only way the two cannot
- * drift. Measured once: it does not change while the app runs.
+ * Milestone 3 had CSS as the source of truth and read the value back, because
+ * the height was a constant only the virtualizer also needed to know. Now the
+ * user changes it at runtime, so the signal has to be authoritative and the
+ * stylesheet is fed from it.
  */
-let cachedRowHeight = 0;
-function rowHeight(): number {
-  if (!cachedRowHeight) {
-    const declared = getComputedStyle(document.documentElement).getPropertyValue("--row-h");
-    cachedRowHeight = parseFloat(declared) || 26;
-  }
-  return cachedRowHeight;
+function metrics(size: ArtSize) {
+  return ART[size];
 }
 
 export default function App() {
@@ -46,6 +70,12 @@ export default function App() {
   const [cursor, setCursor] = createSignal(0);
   const [selected, setSelected] = createSignal<number | null>(null);
   const [windowError, setWindowError] = createSignal("");
+  const [artSize, setArtSize] = createSignal<ArtSize>(storedArtSize());
+
+  function chooseArtSize(size: ArtSize) {
+    setArtSize(size);
+    localStorage.setItem(ART_KEY, size);
+  }
 
   const current = () => history()[cursor()];
   // The fetcher must be wrapped: Solid calls it as `fetcher(source, info)`, and
@@ -70,9 +100,20 @@ export default function App() {
       return total();
     },
     getScrollElement: () => scrollEl ?? null,
-    estimateSize: () => rowHeight(),
+    estimateSize: () => metrics(artSize()).row,
     overscan: OVERSCAN,
   });
+
+  // Changing the art size changes every row's height at once. The virtualizer
+  // caches what it has measured, so it has to be told the old numbers are void —
+  // without this the rows keep their previous spacing and overlap or gap.
+  createEffect(
+    on(
+      artSize,
+      () => virtualizer.measure(),
+      { defer: true },
+    ),
+  );
 
   // A new listing invalidates every cached window. Drop them, seed page 0 from
   // the window that arrived with the listing, and go back to the top — otherwise
@@ -175,7 +216,13 @@ export default function App() {
   }
 
   return (
-    <div class="app">
+    <div
+      class="app"
+      style={{
+        "--row-h": `${metrics(artSize()).row}px`,
+        "--art": `${metrics(artSize()).art}px`,
+      }}
+    >
       <div class="crumbs">
         <button class="navbtn" onClick={back} disabled={!canBack()}>
           ←
@@ -203,9 +250,25 @@ export default function App() {
             )}
           </For>
         </Show>
+
+        <span class="grow" />
+        <div class="sizes" role="group" aria-label="Cover art size">
+          <For each={ART_SIZES}>
+            {(size) => (
+              <button
+                class={`sizebtn ${artSize() === size ? "on" : ""}`}
+                title={`${size[0].toUpperCase()}${size.slice(1)} cover art`}
+                onClick={() => chooseArtSize(size)}
+              >
+                {size[0].toUpperCase()}
+              </button>
+            )}
+          </For>
+        </div>
       </div>
 
       <div class="hdr">
+        <span class="art" />
         <span>Name</span>
         <span class="num">BPM</span>
         <span>Key</span>
@@ -244,6 +307,25 @@ export default function App() {
                         <Show when={row()} fallback={<span class="ph" />}>
                           {(r) => (
                             <>
+                              {/* Only rows the probe found a picture in get an
+                                  <img> at all; the rest render the empty cell
+                                  directly rather than firing a request that can
+                                  only 404. On error the image hides itself and
+                                  the cell's own background shows through, which
+                                  covers art that turns out not to decode. */}
+                              <span class="art">
+                                <Show when={r().hasArt}>
+                                  <img
+                                    src={thumbUrl(r().fileId, artSize())}
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                    draggable={false}
+                                    onLoad={(e) => e.currentTarget.classList.remove("blank")}
+                                    onError={(e) => e.currentTarget.classList.add("blank")}
+                                  />
+                                </Show>
+                              </span>
                               <span class="name" title={r().name}>
                                 {r().name}
                                 <Show when={r().state}>

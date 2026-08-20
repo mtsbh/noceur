@@ -12,6 +12,11 @@
   --fg3: rgba(238, 234, 228, 0.28);
   --fg4: rgba(238, 234, 228, 0.14);
   --acc: #e8a55f;
+  /* Muted accent, for shapes that fill real area rather than marking a point.
+     The accent at full strength is meant for small marks; an 88px tile of it
+     overwhelms everything else on screen. */
+  --acc-fill: rgba(232, 165, 95, 0.16);
+  --acc-line: rgba(232, 165, 95, 0.42);
   --row-h: 26px;
 }
 
@@ -91,7 +96,7 @@ body {
 .hdr,
 .row {
   display: grid;
-  grid-template-columns: 1fr 62px 46px 62px 180px 84px;
+  grid-template-columns: var(--art) 1fr 62px 46px 62px 180px 84px;
   gap: 10px;
   padding: 0 14px;
   align-items: center;
@@ -130,16 +135,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.row.dir .name::before {
-  content: "";
-  display: inline-block;
-  width: 9px;
-  height: 7px;
-  border-radius: 2px 2px 1px 1px;
-  background: var(--acc);
-  opacity: 0.7;
-  margin-right: 9px;
-}
+/* The folder mark lives in the art column now — see `.row.dir .art` below. */
 .row.other .name {
   color: var(--fg3);
 }
@@ -200,4 +196,79 @@ body {
   opacity: 0.5;
   width: 40%;
   max-width: 220px;
+}
+
+/* Cover art. The square is always exactly --art on a side and the backend
+   rasterises to that same number, so nothing here scales an image. */
+.art {
+  width: var(--art);
+  height: var(--art);
+  border-radius: 2px;
+  overflow: hidden;
+  /* Shows through for rows with no art, and for art that fails to decode.
+     Quiet on purpose: a folder of untagged files should read as a list, not
+     as a grid of broken images. */
+  background: var(--hair);
+}
+/* The header only needs to reserve the art column's *width*. Letting it inherit
+   the height too made an 88px cell inside a 28px header, which pushed the column
+   labels out of the header entirely at the large size. */
+.hdr .art {
+  background: none;
+  height: auto;
+}
+.art img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.art img.blank {
+  visibility: hidden;
+}
+
+/* A directory has no cover, so its glyph moves into the art column and scales
+   with it. Left beside the name it stayed 9px wide while the row grew to 92,
+   which read as a broken image rather than as a folder. */
+.row.dir .art {
+  background: none;
+  display: grid;
+  place-items: center;
+}
+.row.dir .art::after {
+  content: "";
+  width: 68%;
+  height: 52%;
+  border-radius: 2px 2px 1px 1px;
+  background: var(--acc-fill);
+  border: 1px solid var(--acc-line);
+}
+
+.grow {
+  flex: 1;
+}
+.sizes {
+  display: flex;
+  gap: 2px;
+}
+.sizebtn {
+  background: none;
+  border: 1px solid var(--hair2);
+  color: var(--fg3);
+  border-radius: 4px;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.sizebtn:hover {
+  color: var(--fg);
+  background: var(--raise);
+}
+.sizebtn.on {
+  color: var(--acc);
+  border-color: var(--acc);
 }
