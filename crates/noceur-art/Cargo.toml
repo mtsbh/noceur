@@ -1,0 +1,13 @@
+[package]
+name = "noceur-art"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+noceur-tags = { path = "../noceur-tags" }
+thiserror.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
+
+[dev-dependencies]
+tempfile = "3"
