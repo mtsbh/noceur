@@ -5,6 +5,8 @@
 //! frontend full-size JPEGs and ask it to scale them. The web view receives image
 //! bytes at exactly the size it is about to draw.
 
+pub mod shell;
+
 use std::path::Path;
 
 /// The three thumbnail sizes the list offers.
@@ -63,6 +65,8 @@ pub enum ArtError {
     },
     #[error("embedded artwork is not a decodable image: {0}")]
     Decode(#[source] image::ImageError),
+    #[error("shell icon unavailable: {0}")]
+    Shell(String),
     #[error("cannot encode thumbnail: {0}")]
     Encode(#[source] image::ImageError),
 }

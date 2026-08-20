@@ -2051,6 +2051,7 @@ dependencies = [
  "noceur-tags",
  "tempfile",
  "thiserror 2.0.19",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

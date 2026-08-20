@@ -38,8 +38,9 @@ pub struct RowDisplay {
     pub size: String,
     /// Empty when the file is fine; otherwise the reason it is not.
     pub state: String,
-    /// Whether this row has cover art worth requesting. Directories and
-    /// non-audio files never do, so the frontend can skip the request entirely.
+    /// Whether this row has an image worth requesting — embedded cover art for
+    /// audio, the shell's own icon for a directory. Files with neither are left
+    /// alone, so a folder of untagged tracks issues no requests at all.
     pub has_art: bool,
 }
 
@@ -139,7 +140,8 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         } else {
             row.state.clone()
         },
-        has_art: is_audio && row.has_artwork,
+        // A directory always has one: the shell will give us its icon.
+        has_art: row.kind == 0 || (is_audio && row.has_artwork),
     }
 }
 
@@ -167,17 +169,28 @@ mod tests {
         }
     }
 
-    /// A folder has no cover to show, whatever the index happens to record.
+    /// A directory has no cover art but always has a shell icon, so it still
+    /// advertises an image. A non-audio file has neither.
     #[test]
-    fn only_audio_rows_advertise_cover_art() {
-        let audio = display(&row(), KeyNotation::Camelot);
-        assert!(audio.has_art);
+    fn directories_and_tagged_audio_advertise_an_image() {
+        assert!(display(&row(), KeyNotation::Camelot).has_art);
 
         let dir = ListRow { kind: 0, ..row() };
-        assert!(!display(&dir, KeyNotation::Camelot).has_art);
+        assert!(display(&dir, KeyNotation::Camelot).has_art);
 
         let other = ListRow { kind: 2, ..row() };
         assert!(!display(&other, KeyNotation::Camelot).has_art);
+    }
+
+    /// Even without artwork, a folder still has an icon to draw.
+    #[test]
+    fn a_directory_advertises_an_image_regardless_of_artwork() {
+        let dir = ListRow {
+            kind: 0,
+            has_artwork: false,
+            ..row()
+        };
+        assert!(display(&dir, KeyNotation::Camelot).has_art);
     }
 
     #[test]

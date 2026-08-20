@@ -20,36 +20,41 @@ pub enum Cached {
     Unknown,
 }
 
-/// Where a file lives and which content it carries.
+/// Where a row lives, and what it carries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Located {
-    pub content_id: i64,
+    /// `None` for a directory, and for a file no probe has linked yet.
+    pub content_id: Option<i64>,
     pub path: PathBuf,
+    /// `EntryKind::group()`: 0 directory, 1 audio, 2 other.
+    pub kind: i64,
     /// What the last probe saw. `false` means skip the decode entirely.
     pub has_artwork: bool,
 }
 
-/// Resolves a file row to the content it carries and the path to read it from.
+/// Resolves a row to its path and what it carries.
 ///
-/// Returns `None` for a file that has not been linked to content yet — an
-/// unprobed or non-audio row has no cover art to find.
+/// Deliberately does not require a linked content: a directory has no content but
+/// still has an icon to draw, so the caller decides what to do with each kind.
 pub fn locate(db: &Db, file_id: i64) -> Result<Option<Located>, IndexError> {
     Ok(db
         .conn()
         .query_row(
-            "SELECT f.content_id, d.path_lower, f.name, COALESCE(ct.has_artwork, 0)
+            "SELECT f.content_id, d.path_lower, f.name, f.kind,
+                    COALESCE(ct.has_artwork, 0)
              FROM file f
              JOIN dir d ON d.id = f.dir_id
              LEFT JOIN content_tag ct ON ct.content_id = f.content_id
-             WHERE f.id = ?1 AND f.content_id IS NOT NULL",
+             WHERE f.id = ?1",
             params![file_id],
             |r| {
                 let dir: String = r.get(1)?;
                 let name: String = r.get(2)?;
-                let has: i64 = r.get(3)?;
+                let has: i64 = r.get(4)?;
                 Ok(Located {
                     content_id: r.get(0)?,
                     path: PathBuf::from(dir).join(name),
+                    kind: r.get(3)?,
                     has_artwork: has != 0,
                 })
             },

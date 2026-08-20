@@ -8,9 +8,13 @@
 //! work we would otherwise have to reimplement badly.
 
 use crate::state::AppState;
+use noceur_art::shell::{self, IconKey};
 use noceur_art::ThumbSize;
 use noceur_index::thumb::{self, Cached};
 use noceur_index::Db;
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 use tauri::http::{Request, Response, StatusCode};
 
 /// Parses `/{file_id}?size={small|medium|large}` out of a request URI.
@@ -37,16 +41,58 @@ fn parse(uri: &str) -> Option<(i64, ThumbSize)> {
     Some((file_id, size))
 }
 
-/// Produces the PNG for one file at one size, rendering and caching on a miss.
+/// Rendered shell icons, kept in memory for the life of the process.
 ///
-/// `Ok(None)` means "this file has no usable cover art" and is a normal answer,
-/// not a failure: most libraries are full of untagged files.
+/// Not in the database: an icon belongs to the running Windows theme, not to the
+/// library, and would go stale the moment the user changed it. The key collapses
+/// an entire drive of ordinary folders onto one entry per size, because they all
+/// resolve to the same icon file and index — while a folder that sets its own
+/// icon through `desktop.ini` still gets its own.
+static ICONS: OnceLock<Mutex<HashMap<IconKey, Option<Vec<u8>>>>> = OnceLock::new();
+
+fn icon_cache() -> &'static Mutex<HashMap<IconKey, Option<Vec<u8>>>> {
+    ICONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The shell's own icon for a directory, rendered once per icon and size.
+fn folder_png(path: &Path, size: ThumbSize) -> Option<Vec<u8>> {
+    let key = shell::locate(path, size)?;
+
+    if let Ok(cache) = icon_cache().lock() {
+        if let Some(hit) = cache.get(&key) {
+            return hit.clone();
+        }
+    }
+
+    let png = shell::render(&key).ok().map(|t| t.png);
+    if let Ok(mut cache) = icon_cache().lock() {
+        cache.insert(key, png.clone());
+    }
+    png
+}
+
+/// Produces the PNG for one row at one size, rendering and caching on a miss.
+///
+/// `Ok(None)` means "nothing to draw here" and is a normal answer, not a failure:
+/// most libraries are full of untagged files.
 fn png_for(db: &Db, file_id: i64, size: ThumbSize) -> Result<Option<Vec<u8>>, String> {
     let Some(found) = thumb::locate(db, file_id).map_err(|e| e.to_string())? else {
         return Ok(None);
     };
 
-    match thumb::get(db, found.content_id, size.as_str()).map_err(|e| e.to_string())? {
+    // These rows are real directories, so they get the icon the shell gives them
+    // rather than a glyph of our own invention — custom folder icons included.
+    if found.kind == 0 {
+        return Ok(folder_png(&found.path, size));
+    }
+
+    // A file no probe has linked to content yet has nothing to look up and
+    // nowhere to cache the answer.
+    let Some(content_id) = found.content_id else {
+        return Ok(None);
+    };
+
+    match thumb::get(db, content_id, size.as_str()).map_err(|e| e.to_string())? {
         Cached::Png(png) => return Ok(Some(png)),
         Cached::Miss => return Ok(None),
         Cached::Unknown => {}
@@ -56,7 +102,7 @@ fn png_for(db: &Db, file_id: i64, size: ThumbSize) -> Result<Option<Vec<u8>>, St
     // it here turns the common case — a folder of untagged WAVs — from one failed
     // decode per row into no work at all.
     if !found.has_artwork {
-        thumb::put(db, found.content_id, size.as_str(), None).map_err(|e| e.to_string())?;
+        thumb::put(db, content_id, size.as_str(), None).map_err(|e| e.to_string())?;
         return Ok(None);
     }
 
@@ -67,8 +113,7 @@ fn png_for(db: &Db, file_id: i64, size: ThumbSize) -> Result<Option<Vec<u8>>, St
         .flatten()
         .map(|t| t.png);
 
-    thumb::put(db, found.content_id, size.as_str(), rendered.as_deref())
-        .map_err(|e| e.to_string())?;
+    thumb::put(db, content_id, size.as_str(), rendered.as_deref()).map_err(|e| e.to_string())?;
     Ok(rendered)
 }
 
