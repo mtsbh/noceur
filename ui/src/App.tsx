@@ -17,6 +17,8 @@ import {
   probeBatch,
   play,
   transportCmd,
+  reveal,
+  pathOf,
   type Transport as TransportState,
   type ArtSize,
   type Order,
@@ -258,6 +260,50 @@ export default function App() {
     if (row.kind !== 1) return;
     setSelected(row.fileId);
     play(row.fileId).then(setTransport).catch(() => {});
+  }
+
+  // The row menu, and where it was opened.
+  const [menu, setMenu] = createSignal<{
+    row: RowDisplay;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  function openMenu(e: MouseEvent, row: RowDisplay) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelected(row.fileId);
+    // Kept inside the window: a row near the bottom or right edge would
+    // otherwise open a menu half off-screen.
+    setMenu({
+      row,
+      x: Math.min(e.clientX, window.innerWidth - 190),
+      y: Math.min(e.clientY, window.innerHeight - 130),
+    });
+  }
+
+  /**
+   * Copies text, preferring the async clipboard and falling back to a hidden
+   * textarea.
+   *
+   * `navigator.clipboard` needs a secure context, which a custom-scheme web view
+   * is not always considered to be; the fallback is deprecated but works
+   * everywhere and costs nothing when it is not needed.
+   */
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      const box = document.createElement("textarea");
+      box.value = text;
+      box.style.position = "fixed";
+      box.style.opacity = "0";
+      document.body.appendChild(box);
+      box.select();
+      document.execCommand("copy");
+      box.remove();
+    }
   }
 
   // Ctrl+F from anywhere. Registered on the window rather than a focusable
@@ -679,6 +725,10 @@ export default function App() {
                           const r = row();
                           if (r) playRow(r);
                         }}
+                        onContextMenu={(e) => {
+                          const r = row();
+                          if (r) openMenu(e, r);
+                        }}
                       >
                         <Show when={row()} fallback={<span class="ph" />}>
                           {(r) => (
@@ -742,6 +792,45 @@ export default function App() {
       </div>
         </div>
       </div>
+
+      <Show when={menu()}>
+        <div class="scrim bare" onPointerDown={() => setMenu(null)} />
+        <div
+          class="ctxmenu"
+          style={{ left: `${menu()!.x}px`, top: `${menu()!.y}px` }}
+        >
+          <Show when={menu()!.row.kind === 1}>
+            <div
+              class="ctxitem"
+              onClick={() => {
+                playRow(menu()!.row);
+                setMenu(null);
+              }}
+            >
+              Play
+            </div>
+          </Show>
+          <div
+            class="ctxitem"
+            onClick={() => {
+              reveal(menu()!.row.fileId).catch(() => {});
+              setMenu(null);
+            }}
+          >
+            Reveal in Explorer
+          </div>
+          <div
+            class="ctxitem"
+            onClick={() => {
+              const id = menu()!.row.fileId;
+              pathOf(id).then(copyText).catch(() => {});
+              setMenu(null);
+            }}
+          >
+            Copy path
+          </div>
+        </div>
+      </Show>
 
       <Transport state={transport()} onState={setTransport} />
 

@@ -477,3 +477,58 @@ fn transport(state: &AppState) -> Transport {
         error: p.error.unwrap_or_default(),
     }
 }
+
+/// Shows a row in Explorer, selected.
+///
+/// The shell is asked to select the file rather than just open its folder, so a
+/// track in a folder of four hundred is actually findable when it gets there.
+#[tauri::command]
+pub async fn reveal(state: State<'_, AppState>, file_id: i64) -> Result<(), String> {
+    let db = state.db.clone();
+    let found = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    let Some(found) = found else {
+        return Err("no such row".into());
+    };
+    reveal_in_shell(&found.path)
+}
+
+#[cfg(windows)]
+fn reveal_in_shell(path: &Path) -> Result<(), String> {
+    // `/select,` takes the path as one argument and Explorer parses it itself,
+    // so it is passed unquoted here; quoting it would make the quotes part of
+    // the path Explorer looks for.
+    std::process::Command::new("explorer")
+        .arg(format!("/select,{}", path.display()))
+        .spawn()
+        .map(|_| ())
+        // Explorer returns a non-zero exit code even when it succeeds, so only
+        // the failure to launch it at all is worth reporting.
+        .map_err(|e| format!("cannot open Explorer: {e}"))
+}
+
+#[cfg(not(windows))]
+fn reveal_in_shell(_path: &Path) -> Result<(), String> {
+    Err("revealing a file is only implemented on Windows".into())
+}
+
+/// The full path of a row, for copying.
+#[tauri::command]
+pub async fn path_of(state: State<'_, AppState>, file_id: i64) -> Result<String, String> {
+    let db = state.db.clone();
+    let found = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    found
+        .map(|f| f.path.display().to_string())
+        .ok_or_else(|| "no such row".into())
+}

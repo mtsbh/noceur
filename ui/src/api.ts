@@ -215,3 +215,13 @@ export function transportCmd(
 export function transportState(): Promise<Transport> {
   return invoke<Transport>("transport_state");
 }
+
+/** Opens Explorer with the row selected. */
+export function reveal(fileId: number): Promise<void> {
+  return invoke<void>("reveal", { fileId });
+}
+
+/** The full path of a row, for copying. */
+export function pathOf(fileId: number): Promise<string> {
+  return invoke<string>("path_of", { fileId });
+}

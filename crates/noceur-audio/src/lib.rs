@@ -241,20 +241,34 @@ fn open(
     mixer: &rodio::mixer::Mixer,
     volume: f32,
 ) -> Result<(rodio::Player, Option<u64>), AudioError> {
-    let file = std::fs::File::open(noceur_extended(path)).map_err(|source| AudioError::Open {
+    let full = noceur_extended(path);
+    let file = std::fs::File::open(&full).map_err(|source| AudioError::Open {
         path: path.display().to_string(),
         source,
     })?;
 
-    let decoder = rodio::Decoder::builder()
+    // Length in bytes, which seeking needs as much as the seekable flag does.
+    // A WAV seeks on frame arithmetic and manages without it; FLAC binary-searches
+    // the stream and cannot, so leaving it out gives a player that plays FLACs
+    // and refuses to seek them.
+    let byte_len = file.metadata().ok().map(|m| m.len());
+
+    let mut builder = rodio::Decoder::builder()
         .with_data(std::io::BufReader::new(file))
-        // The decoder needs a hint on containers whose bytes alone are ambiguous.
-        .with_seekable(true)
-        .build()
-        .map_err(|e| AudioError::Decode {
-            path: path.display().to_string(),
-            reason: e.to_string(),
-        })?;
+        .with_seekable(true);
+    if let Some(len) = byte_len {
+        builder = builder.with_byte_len(len);
+    }
+    // The extension is a strong hint for containers whose first bytes are
+    // ambiguous, and costs nothing when the sniffer would have got there anyway.
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        builder = builder.with_hint(ext);
+    }
+
+    let decoder = builder.build().map_err(|e| AudioError::Decode {
+        path: path.display().to_string(),
+        reason: e.to_string(),
+    })?;
 
     let duration = rodio::Source::total_duration(&decoder).map(|d| d.as_millis() as u64);
 

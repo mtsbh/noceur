@@ -781,3 +781,27 @@ body.resizing * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Row context menu. Replaces the web view's own Back/Refresh/Print menu, none
+   of which means anything in a file browser. */
+.ctxmenu {
+  position: fixed;
+  z-index: 12;
+  min-width: 180px;
+  padding: 4px 0;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+.ctxitem {
+  padding: 6px 14px;
+  cursor: pointer;
+  color: var(--fg2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ctxitem:hover {
+  background: rgba(238, 234, 228, 0.05);
+  color: var(--fg);
+}
