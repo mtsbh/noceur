@@ -1,6 +1,6 @@
 //! Tauri commands. Every one that touches the filesystem runs off-thread.
 
-use crate::dto::{DirListing, ListRequest, RowWindow, RowsRequest, Segment};
+use crate::dto::{DirListing, ListRequest, ProbeProgress, RowWindow, RowsRequest, Segment};
 use crate::format;
 use crate::state::AppState;
 use noceur_fsmodel::path::simplify;
@@ -22,7 +22,14 @@ const MAX_LIMIT: i64 = 1000;
 /// screenful at the 26px row height, so the first paint is never placeholders.
 const FIRST_WINDOW: i64 = 200;
 
-/// Opens a directory: scans it, probes it, and reports how many rows it holds.
+/// Opens a directory: scans it and reports how many rows it holds.
+///
+/// Deliberately does **not** read tags. Enumeration is milliseconds; reading tags
+/// out of every file in the folder is seconds to minutes — thirty-five seconds
+/// was measured on a 667-file folder — and doing it here meant the window sat on
+/// "Reading…" for the whole of it while holding the index locked against
+/// everything else. Explorer shows you the folder immediately because it does not
+/// open the files; so does this now. Tags arrive afterwards, over [`probe`].
 ///
 /// Runs entirely on the blocking pool. A cold SMB mount has been measured at
 /// twenty seconds for thirty-one entries; doing this on the main thread would
@@ -43,10 +50,6 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
         let dir_id = noceur_index::scan_dir(&db, volume_id, &path).map_err(|e| e.to_string())?;
         let scan_ms = started.elapsed().as_millis() as u64;
 
-        let probe_started = Instant::now();
-        noceur_index::probe_dir(&db, dir_id).map_err(|e| e.to_string())?;
-        let probe_ms = probe_started.elapsed().as_millis() as u64;
-
         let total = noceur_index::count(&db, dir_id, options(audio_only, 0, FIRST_WINDOW))
             .map_err(|e| e.to_string())?;
         let first = window(&db, dir_id, audio_only, 0, FIRST_WINDOW).map_err(|e| e.to_string())?;
@@ -59,11 +62,39 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
             total,
             first,
             scan_ms,
-            probe_ms,
         })
     })
     .await
     .map_err(|e| format!("listing task failed: {e}"))?
+}
+
+/// Reads tags for one batch of a directory's files.
+///
+/// The frontend drives this in a loop after the folder is already on screen, so
+/// BPM, key, duration and cover art fill in behind a listing the user can already
+/// read and scroll. Returning after a fixed number of files is what keeps the
+/// index available: the lock is taken and released once per batch instead of once
+/// per folder.
+///
+/// Returns how many files were attempted. Zero means the folder is fully probed
+/// and the caller should stop.
+#[tauri::command]
+pub async fn probe(state: State<'_, AppState>, dir_id: i64) -> Result<ProbeProgress, String> {
+    let db = state.db.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        let started = Instant::now();
+        let probed = noceur_index::probe_batch(&db, dir_id, noceur_index::PROBE_BATCH)
+            .map_err(|e| e.to_string())?;
+        Ok(ProbeProgress {
+            probed: probed as i64,
+            done: probed == 0,
+            elapsed_ms: started.elapsed().as_millis() as u64,
+        })
+    })
+    .await
+    .map_err(|e| format!("probe task failed: {e}"))?
 }
 
 /// Reads one window of an already-opened directory.

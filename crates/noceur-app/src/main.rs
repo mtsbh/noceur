@@ -66,7 +66,12 @@ fn main() {
         // the main loop: a slow thumbnail delays its own row, not the window.
         .register_asynchronous_uri_scheme_protocol("thumb", move |_ctx, request, responder| {
             let state = art_state.clone();
-            std::thread::spawn(move || {
+            // The blocking pool, not a fresh thread per request. A screen of rows
+            // asks for its images all at once and again on every scroll, and
+            // spawning an OS thread for each was paying thread-creation cost per
+            // thumbnail and letting unbounded numbers of them contend for the
+            // index at the same time.
+            tauri::async_runtime::spawn_blocking(move || {
                 responder.respond(art::respond(&state, &request));
             });
         })
@@ -75,6 +80,7 @@ fn main() {
             commands::subdirs,
             commands::roots,
             commands::list_rows,
+            commands::probe,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

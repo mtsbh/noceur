@@ -17,12 +17,43 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use tauri::http::{Request, Response, StatusCode};
 
-/// Parses `/{file_id}?size={small|medium|large}` out of a request URI.
+/// What a `thumb://` URL is asking for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Target {
+    /// A row in the listing, identified by its `file` id.
+    Row(i64),
+    /// A directory named directly by path. The tree reads the filesystem rather
+    /// than the index, so its nodes have no row to point at.
+    Folder(String),
+}
+
+/// Decodes `%XX` escapes. Windows paths arrive with `:` and `\` encoded.
+fn percent_decode(s: &str) -> String {
+    let raw = s.as_bytes();
+    let mut out = Vec::with_capacity(raw.len());
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == b'%' && i + 2 < raw.len() {
+            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(raw[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Parses `/{file_id}?size={small|medium|large}[&path={percent-encoded}]`.
 ///
-/// Returns `None` for anything malformed, which the caller turns into a 400. The
-/// web view is the only thing that builds these URLs, so a malformed one is a bug
-/// here rather than something to accommodate.
-fn parse(uri: &str) -> Option<(i64, ThumbSize)> {
+/// A `path` parameter wins over the id, and the id is then a placeholder the
+/// frontend sends because the URL shape requires one. Returns `None` for anything
+/// malformed, which the caller turns into a 400: the web view is the only thing
+/// that builds these URLs, so a malformed one is a bug here rather than something
+/// to accommodate.
+fn parse(uri: &str) -> Option<(Target, ThumbSize)> {
     let uri = uri.split("://").nth(1).unwrap_or(uri);
     let path_and_query = uri.split_once('/').map(|(_, rest)| rest).unwrap_or("");
 
@@ -31,14 +62,23 @@ fn parse(uri: &str) -> Option<(i64, ThumbSize)> {
         None => (path_and_query, ""),
     };
 
-    let file_id: i64 = path.trim_matches('/').parse().ok()?;
-    let size = query
-        .split('&')
-        .find_map(|kv| kv.strip_prefix("size="))
-        .and_then(ThumbSize::parse)
+    let param = |key: &str| {
+        query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix(key))
+            .map(|v| v.to_string())
+    };
+
+    let size = param("size=")
+        .and_then(|v| ThumbSize::parse(&v))
         .unwrap_or(ThumbSize::Small);
 
-    Some((file_id, size))
+    if let Some(folder) = param("path=").filter(|p| !p.is_empty()) {
+        return Some((Target::Folder(percent_decode(&folder)), size));
+    }
+
+    let file_id: i64 = path.trim_matches('/').parse().ok()?;
+    Some((Target::Row(file_id), size))
 }
 
 /// Rendered shell icons, kept in memory for the life of the process.
@@ -123,8 +163,21 @@ fn png_for(db: &Db, file_id: i64, size: ThumbSize) -> Result<Option<Vec<u8>>, St
 /// asynchronous protocol handlers off the main loop, so a slow decode delays one
 /// image rather than the window.
 pub fn respond(state: &AppState, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
-    let Some((file_id, size)) = parse(&request.uri().to_string()) else {
+    let Some((target, size)) = parse(&request.uri().to_string()) else {
         return reply(StatusCode::BAD_REQUEST, Vec::new());
+    };
+
+    // A folder named by path needs no index at all, so it never waits on the
+    // database lock — which matters because the tree asks for one of these per
+    // visible node.
+    let file_id = match target {
+        Target::Folder(path) => {
+            return match folder_png(Path::new(&path), size) {
+                Some(png) => reply(StatusCode::OK, png),
+                None => reply(StatusCode::NOT_FOUND, Vec::new()),
+            }
+        }
+        Target::Row(id) => id,
     };
 
     let Ok(db) = state.db.lock() else {
@@ -161,7 +214,7 @@ mod tests {
     fn parses_a_file_id_and_size() {
         assert_eq!(
             parse("thumb://localhost/42?size=large"),
-            Some((42, ThumbSize::Large))
+            Some((Target::Row(42), ThumbSize::Large))
         );
     }
 
@@ -171,20 +224,23 @@ mod tests {
     fn parses_the_windows_http_form_identically() {
         assert_eq!(
             parse("http://thumb.localhost/42?size=large"),
-            Some((42, ThumbSize::Large))
+            Some((Target::Row(42), ThumbSize::Large))
         );
     }
 
     #[test]
     fn defaults_to_small_when_no_size_is_given() {
-        assert_eq!(parse("thumb://localhost/7"), Some((7, ThumbSize::Small)));
+        assert_eq!(
+            parse("thumb://localhost/7"),
+            Some((Target::Row(7), ThumbSize::Small))
+        );
     }
 
     #[test]
     fn tolerates_other_query_parameters_around_the_size() {
         assert_eq!(
             parse("thumb://localhost/7?v=2&size=medium&x=1"),
-            Some((7, ThumbSize::Medium))
+            Some((Target::Row(7), ThumbSize::Medium))
         );
     }
 
@@ -192,5 +248,41 @@ mod tests {
     fn rejects_a_non_numeric_file_id() {
         assert_eq!(parse("thumb://localhost/not-a-number?size=small"), None);
         assert_eq!(parse("thumb://localhost/"), None);
+    }
+
+    /// The tree names folders by path because it never touches the index.
+    #[test]
+    fn a_path_parameter_names_a_folder_directly() {
+        assert_eq!(
+            parse("thumb://localhost/0?size=small&path=E%3A%5Cmusic%5Cdownloads"),
+            Some((
+                Target::Folder("E:\\music\\downloads".into()),
+                ThumbSize::Small
+            ))
+        );
+    }
+
+    /// A path wins over the id, so the placeholder the frontend sends is ignored.
+    #[test]
+    fn a_path_parameter_beats_the_file_id() {
+        assert_eq!(
+            parse("thumb://localhost/99?size=small&path=C%3A%5C"),
+            Some((Target::Folder("C:\\".into()), ThumbSize::Small))
+        );
+    }
+
+    #[test]
+    fn percent_decoding_leaves_ordinary_characters_alone() {
+        assert_eq!(percent_decode("E%3A%5Cmusic"), "E:\\music");
+        assert_eq!(percent_decode("plain"), "plain");
+        assert_eq!(percent_decode("a%20b"), "a b");
+        // A stray escape at the end must not panic on a short slice.
+        assert_eq!(percent_decode("trailing%"), "trailing%");
+    }
+
+    #[test]
+    fn non_ascii_paths_survive_the_round_trip() {
+        // "Rêves" as UTF-8 percent escapes.
+        assert_eq!(percent_decode("R%C3%AAves"), "Rêves");
     }
 }

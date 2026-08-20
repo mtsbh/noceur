@@ -284,7 +284,7 @@ body {
 }
 
 .tree {
-  width: 250px;
+  width: var(--tree-w);
   flex: none;
   overflow: auto;
   border-right: 1px solid var(--hair);
@@ -295,7 +295,9 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 22px;
+  /* Tall enough for the 22px shell icon to sit at its native size — scaling a
+     raster icon down is exactly the softness the extractor avoids. */
+  height: 26px;
   padding-right: 8px;
   cursor: pointer;
   color: var(--fg2);
@@ -345,4 +347,43 @@ body {
 }
 .tnode:hover .twisty::before {
   border-color: var(--fg);
+}
+
+/* Work happening behind a listing that is already usable. Dimmer than an error
+   and dimmer than a timing — it is progress, not a problem. */
+.status .working {
+  color: var(--fg2);
+}
+
+/* Divider between the tree and the list. The strip is wider than the hairline
+   it draws, so it can actually be grabbed. */
+.vsplit {
+  flex: none;
+  width: 5px;
+  margin-left: -1px;
+  cursor: col-resize;
+  background: none;
+}
+.vsplit:hover {
+  background: var(--hair2);
+}
+/* While dragging, stop the pointer selecting text or turning into an I-beam as
+   it crosses the panes on either side. */
+body.resizing {
+  cursor: col-resize;
+}
+body.resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+/* Folder icon in a tree node — the same shell icon the list draws. */
+.ticon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  object-fit: contain;
+}
+.ticon.blank {
+  visibility: hidden;
 }
