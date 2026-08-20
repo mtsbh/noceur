@@ -2,7 +2,7 @@
 
 use crate::dto::{
     DirListing, ListRequest, Order, ProbeProgress, RowWindow, RowsRequest, SearchHit,
-    SearchRequest, Segment,
+    SearchRequest, Segment, Transport,
 };
 use crate::format;
 use crate::state::AppState;
@@ -394,5 +394,86 @@ mod tests {
                 "{p} produced an empty crumb"
             );
         }
+    }
+}
+
+/// Loads a file into the player and starts it.
+///
+/// Takes a `file_id` rather than a path: the list already has ids, and resolving
+/// through the index keeps the frontend from constructing paths of its own.
+#[tauri::command]
+pub async fn play(state: State<'_, AppState>, file_id: i64) -> Result<Transport, String> {
+    let db = state.db.clone();
+    let found = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    let Some(found) = found.filter(|f| f.kind == 1) else {
+        return Err("that row is not an audio file".into());
+    };
+
+    state
+        .player
+        .load(&found.path, true)
+        .map_err(|e| e.to_string())?;
+    Ok(transport(&state))
+}
+
+/// Play/pause, stop, and seek. One command rather than four, because they are
+/// the same interaction from the UI's point of view: change what the transport
+/// is doing and tell me what it is doing now.
+#[tauri::command]
+pub async fn transport_cmd(
+    state: State<'_, AppState>,
+    action: String,
+    value: Option<u64>,
+) -> Result<Transport, String> {
+    let result = match action.as_str() {
+        "toggle" => state.player.toggle(),
+        "pause" => state.player.pause(),
+        "resume" => state.player.resume(),
+        "stop" => state.player.stop(),
+        "seek" => state
+            .player
+            .seek(std::time::Duration::from_millis(value.unwrap_or(0))),
+        "volume" => state.player.set_volume(value.unwrap_or(100) as f32 / 100.0),
+        other => return Err(format!("unknown transport action: {other}")),
+    };
+
+    result.map_err(|e| e.to_string())?;
+    Ok(transport(&state))
+}
+
+/// Polled by the transport bar while something is playing.
+#[tauri::command]
+pub fn transport_state(state: State<'_, AppState>) -> Transport {
+    transport(&state)
+}
+
+fn transport(state: &AppState) -> Transport {
+    let p = state.player.state();
+    let path = p.path.unwrap_or_default();
+    let name = Path::new(&path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let duration_ms = p.duration_ms.unwrap_or(0);
+
+    Transport {
+        path,
+        name,
+        playing: p.playing,
+        position_ms: p.position_ms,
+        duration_ms,
+        position: format::duration(Some(p.position_ms as i64)),
+        duration: if duration_ms > 0 {
+            format::duration(Some(duration_ms as i64))
+        } else {
+            format::ABSENT.to_string()
+        },
+        error: p.error.unwrap_or_default(),
     }
 }

@@ -82,6 +82,9 @@ fn main() {
             commands::list_rows,
             commands::probe,
             commands::search,
+            commands::play,
+            commands::transport_cmd,
+            commands::transport_state,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

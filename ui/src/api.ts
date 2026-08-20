@@ -179,3 +179,39 @@ export type SearchHit = {
 export function search(query: string, scopes: string[]): Promise<SearchHit[]> {
   return invoke<SearchHit[]>("search", { req: { query, scopes } });
 }
+
+/** What the transport bar shows. */
+export type Transport = {
+  path: string;
+  name: string;
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+  position: string;
+  duration: string;
+  error: string;
+};
+
+/** Loads a row into the player and starts it. */
+export function play(fileId: number): Promise<Transport> {
+  return invoke<Transport>("play", { fileId });
+}
+
+/**
+ * Drives the transport: `toggle`, `pause`, `resume`, `stop`, `seek`, `volume`.
+ *
+ * `seek` takes milliseconds; `volume` takes 0–100. One command rather than six,
+ * because from the UI's side they are the same interaction — change what the
+ * transport is doing, and tell me what it is doing now.
+ */
+export function transportCmd(
+  action: "toggle" | "pause" | "resume" | "stop" | "seek" | "volume",
+  value?: number,
+): Promise<Transport> {
+  return invoke<Transport>("transport_cmd", { action, value });
+}
+
+/** Polled while something is playing, to move the position. */
+export function transportState(): Promise<Transport> {
+  return invoke<Transport>("transport_state");
+}

@@ -15,6 +15,9 @@ import {
   parentOf,
   thumbUrl,
   probeBatch,
+  play,
+  transportCmd,
+  type Transport as TransportState,
   type ArtSize,
   type Order,
   type SortColumn,
@@ -23,6 +26,7 @@ import {
 } from "./api";
 import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
+import Transport from "./Transport";
 import {
   DEFAULT_COLUMNS,
   cellText,
@@ -247,6 +251,14 @@ export default function App() {
   }
 
   const [finding, setFinding] = createSignal(false);
+  const [transport, setTransport] = createSignal<TransportState | null>(null);
+
+  /** Loads a row into the player. Non-audio rows have nothing to play. */
+  function playRow(row: RowDisplay) {
+    if (row.kind !== 1) return;
+    setSelected(row.fileId);
+    play(row.fileId).then(setTransport).catch(() => {});
+  }
 
   // Ctrl+F from anywhere. Registered on the window rather than a focusable
   // element so it works without the list having been clicked first.
@@ -255,6 +267,18 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setFinding(true);
+        return;
+      }
+
+      // Space toggles playback, unless the user is typing — the search box is a
+      // text field and a space there is a space, not a transport command.
+      const typing =
+        e.target instanceof HTMLElement &&
+        (e.target.tagName === "INPUT" || e.target.isContentEditable);
+
+      if (e.key === " " && !typing && !finding()) {
+        e.preventDefault();
+        transportCmd("toggle").then(setTransport).catch(() => {});
       }
     };
     window.addEventListener("keydown", onKey);
@@ -651,6 +675,10 @@ export default function App() {
                           const r = row();
                           if (r) onRow(r);
                         }}
+                        onDblClick={() => {
+                          const r = row();
+                          if (r) playRow(r);
+                        }}
                       >
                         <Show when={row()} fallback={<span class="ph" />}>
                           {(r) => (
@@ -714,6 +742,8 @@ export default function App() {
       </div>
         </div>
       </div>
+
+      <Transport state={transport()} onState={setTransport} />
 
       <div class="status">
         <Show when={!listing.error && listing()}>

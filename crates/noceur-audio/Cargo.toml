@@ -1,0 +1,31 @@
+[package]
+name = "noceur-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[dependencies]
+thiserror.workspace = true
+noceur-fsmodel = { path = "../noceur-fsmodel" }
+# rodio drives cpal for output and symphonia for decoding, which is what the
+# design calls for; wrapping them by hand would be the same two crates plus the
+# resampling and device-format work rodio already does.
+#
+# Use rodio's own format features, not the `symphonia-*` ones they expand to.
+# Those are split between container readers and codecs — `symphonia-wav` parses
+# a WAV header but decodes nothing without `symphonia-pcm`, and a file whose
+# container reads and whose samples do not is reported as "cannot decode".
+rodio = { version = "0.22", default-features = false, features = [
+  "playback",
+  "wav",
+  "flac",
+  "mp3",
+  "mp4",
+  "vorbis",
+  "symphonia-aiff",
+  "symphonia-alac",
+  "symphonia-adpcm",
+] }

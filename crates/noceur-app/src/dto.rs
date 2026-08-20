@@ -129,3 +129,22 @@ pub struct SearchHit {
     pub duration: String,
     pub artist: String,
 }
+
+/// What the transport bar shows.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transport {
+    /// Path of the loaded track, readable form, or empty when nothing is loaded.
+    pub path: String,
+    /// Just the file name, which is what the bar has room for.
+    pub name: String,
+    pub playing: bool,
+    pub position_ms: u64,
+    /// 0 when the decoder never reported one.
+    pub duration_ms: u64,
+    /// `mm:ss` of the position and the duration, formatted once here.
+    pub position: String,
+    pub duration: String,
+    /// Why the last command did nothing, if it did nothing.
+    pub error: String,
+}

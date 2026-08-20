@@ -11,13 +11,20 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Mutex<Db>>,
+    /// The audio thread. Started once and shared: playback outlives any one
+    /// listing, and the output device cannot be opened per command.
+    pub player: Arc<noceur_audio::Player>,
 }
 
 impl AppState {
     /// Opens the index at the given path, creating it if needed.
+    ///
+    /// Starting the player cannot fail here — a machine with no output device
+    /// still browses, and the failure surfaces on the first command instead.
     pub fn open(path: &std::path::Path) -> Result<Self, IndexError> {
         Ok(AppState {
             db: Arc::new(Mutex::new(Db::open(path)?)),
+            player: Arc::new(noceur_audio::Player::start()),
         })
     }
 

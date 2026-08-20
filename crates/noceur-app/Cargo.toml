@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 noceur-fsmodel = { path = "../noceur-fsmodel" }
 noceur-tags = { path = "../noceur-tags" }
 noceur-art = { path = "../noceur-art" }
+noceur-audio = { path = "../noceur-audio" }
 noceur-index = { path = "../noceur-index" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
