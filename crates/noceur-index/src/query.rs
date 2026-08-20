@@ -77,12 +77,14 @@ pub struct ListRow {
     pub key_tag: Option<String>,
     pub key_norm: Option<i64>,
     pub duration_ms: Option<i64>,
+    /// Whether the file carries embedded cover art, from the last probe.
+    pub has_artwork: bool,
 }
 
 const SELECT: &str = "
 SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        ct.artist, ct.title, ct.album, ct.bpm_tag, ct.key_tag, ct.key_norm,
-       c.duration_ms
+       c.duration_ms, COALESCE(ct.has_artwork, 0)
 FROM file f
 LEFT JOIN content     c  ON c.id  = f.content_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
@@ -123,6 +125,7 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
             key_tag: r.get(11)?,
             key_norm: r.get(12)?,
             duration_ms: r.get(13)?,
+            has_artwork: r.get::<_, i64>(14)? != 0,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)

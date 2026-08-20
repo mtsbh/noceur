@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1];
+pub const MIGRATIONS: &[&str] = &[V1, V2];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -74,4 +74,24 @@ CREATE TABLE content_tag (
 CREATE INDEX idx_file_dir    ON file(dir_id, kind, name);
 CREATE INDEX idx_file_content ON file(content_id);
 CREATE INDEX idx_dir_parent  ON dir(parent_id);
+"#;
+
+/// Thumbnail cache.
+///
+/// Keyed by content rather than by file, because identity is the audio: the same
+/// track copied to the party SSD and into a Rekordbox folder is one `content`
+/// row, and rendering its cover three times would be three decodes of the same
+/// JPEG for three rows that look identical.
+///
+/// `miss` records that a decode was already attempted and produced nothing, so a
+/// file with corrupt or unreadable artwork is not re-decoded on every scroll past
+/// it. Without it the expensive case — failure — would be the uncached one.
+const V2: &str = r#"
+CREATE TABLE thumb (
+    content_id INTEGER NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+    size       TEXT    NOT NULL,             -- small | medium | large
+    png        BLOB,                         -- NULL when miss = 1
+    miss       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (content_id, size)
+);
 "#;

@@ -95,12 +95,41 @@ mod tests {
     fn creates_every_table() {
         let db = Db::open_in_memory().unwrap();
         let t = tables(&db);
-        for expected in ["volume", "dir", "file", "content", "content_tag"] {
+        for expected in ["volume", "dir", "file", "content", "content_tag", "thumb"] {
             assert!(
                 t.contains(&expected.to_string()),
                 "missing table {expected}"
             );
         }
+    }
+
+    /// An index written by an earlier build must gain new tables in place, not
+    /// send the app to the startup error box. There are already v1 files on disk.
+    #[test]
+    fn an_older_index_is_upgraded_in_place() {
+        let d = TempDir::new().unwrap();
+        let path = d.path().join("index.db");
+
+        // A v1 file: first migration only, version pinned where v1 left it.
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(crate::schema::MIGRATIONS[0]).unwrap();
+            conn.pragma_update(None, "user_version", 1).unwrap();
+            conn.execute("INSERT INTO content (id, quick_key) VALUES (1, 'keep')", [])
+                .unwrap();
+        }
+
+        let db = Db::open(&path).unwrap();
+        assert_eq!(db.version().unwrap(), SCHEMA_VERSION);
+        assert!(tables(&db).contains(&"thumb".to_string()));
+
+        let kept: String = db
+            .conn()
+            .query_row("SELECT quick_key FROM content WHERE id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(kept, "keep", "existing rows must survive the upgrade");
     }
 
     #[test]
