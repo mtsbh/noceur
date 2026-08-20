@@ -488,3 +488,24 @@ body.resizing * {
 .tnode:hover .pin.on {
   color: var(--acc);
 }
+
+/* Virtualized tree. Same shape as the list: a full-height spacer holding
+   absolutely positioned rows, so only what is on screen exists. */
+.tcanvas {
+  position: relative;
+  width: 100%;
+}
+.trow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+/* Rows are positioned by the virtualizer now, so the node and section fill the
+   row rather than setting their own height. */
+.trow .tnode,
+.trow .tsection {
+  height: 100%;
+  padding-top: 0;
+  padding-bottom: 0;
+}

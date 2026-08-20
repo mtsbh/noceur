@@ -13,10 +13,18 @@ import {
   type DirListing,
   type RowDisplay,
 } from "./api";
-import Tree from "./Tree";
+import Tree, { storedPins } from "./Tree";
 
-/** Where the browser opens. Adjust freely — pinned folders arrive in a later milestone. */
-const HOME = "E:\\music";
+/**
+ * Where the browser opens.
+ *
+ * The first pinned folder, if there is one — a pin is the user saying "this is
+ * where I work", and opening anywhere else ignores it. The fallback only matters
+ * before anything has been pinned.
+ */
+function home(): string {
+  return storedPins()[0] ?? "E:\\music";
+}
 
 /**
  * Cover-art edge length and the row height that holds it, per size.
@@ -116,7 +124,7 @@ function metrics(size: ArtSize) {
 
 export default function App() {
   // Back/forward history for this pane. Index points at the current entry.
-  const [history, setHistory] = createSignal<string[]>([HOME]);
+  const [history, setHistory] = createSignal<string[]>([home()]);
   const [cursor, setCursor] = createSignal(0);
   const [selected, setSelected] = createSignal<number | null>(null);
   const [windowError, setWindowError] = createSignal("");
