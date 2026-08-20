@@ -91,6 +91,7 @@ pub fn read_dir(dir: &Path) -> Result<DirListing, EnumerateError> {
         out.entries.push(FsEntry {
             kind: EntryKind::classify(Path::new(&name), is_dir),
             path: dir.join(&name),
+            hidden: is_hidden(&meta, &name),
             name,
             ext,
             size: if is_dir { 0 } else { meta.len() },
@@ -98,6 +99,21 @@ pub fn read_dir(dir: &Path) -> Result<DirListing, EnumerateError> {
         });
     }
     Ok(out)
+}
+
+/// Windows marks what the shell hides with file attributes.
+#[cfg(windows)]
+fn is_hidden(meta: &std::fs::Metadata, _name: &str) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const HIDDEN: u32 = 0x2;
+    const SYSTEM: u32 = 0x4;
+    meta.file_attributes() & (HIDDEN | SYSTEM) != 0
+}
+
+/// Elsewhere the convention is a leading dot.
+#[cfg(not(windows))]
+fn is_hidden(_meta: &std::fs::Metadata, name: &str) -> bool {
+    name.starts_with('.')
 }
 
 #[cfg(test)]

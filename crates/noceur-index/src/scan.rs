@@ -64,6 +64,11 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
         |r| r.get(0),
     )?;
 
+    // What the shell hides never enters the index. `$RECYCLE.BIN` and
+    // `System Volume Information` are not part of anybody's library, and a
+    // listing that includes them is a listing you have to read past.
+    let entries: Vec<_> = entries.into_iter().filter(|e| !e.hidden).collect();
+
     for e in &entries {
         tx.execute(
             "INSERT INTO file (dir_id, name, ext, size, mtime, kind)

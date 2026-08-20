@@ -34,7 +34,9 @@ mod imp {
         BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HDC,
     };
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
-    use windows_sys::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICONLOCATION};
+    use windows_sys::Win32::UI::Shell::{
+        SHDefExtractIconW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICONLOCATION,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         DestroyIcon, GetIconInfo, PrivateExtractIconsW, HICON, ICONINFO,
     };
@@ -92,22 +94,48 @@ mod imp {
         let file = wide(&key.file);
         let mut icon: HICON = std::ptr::null_mut();
 
-        // SAFETY: `file` is NUL-terminated; exactly one icon is requested into
-        // `icon`, which is a valid single-element destination.
-        let got = unsafe {
-            PrivateExtractIconsW(
+        // SHGetFileInfoW reports the icon's location the way the shell records
+        // it, where a *negative* index means a resource ID rather than an offset
+        // into the file's icon table. `SHDefExtractIconW` understands that
+        // convention; `PrivateExtractIconsW` does not, and silently hands back
+        // the wrong icon — every drive looked identical because C:'s icon is
+        // resource -36 and it was being read as index 36.
+        //
+        // This matters beyond drives: a folder that sets its own icon through
+        // `desktop.ini` usually names it by resource ID too.
+        //
+        // SAFETY: `file` is NUL-terminated; `icon` is a valid destination for
+        // one HICON, and the small-icon slot is declined with a null pointer.
+        let hr = unsafe {
+            SHDefExtractIconW(
                 file.as_ptr(),
                 key.index,
-                px as i32,
-                px as i32,
+                0,
                 &mut icon,
                 std::ptr::null_mut(),
-                1,
-                0,
+                px,
             )
         };
-        if got == 0 || icon.is_null() {
-            return Err(ArtError::Shell("no icon at that index".into()));
+
+        // Falls back to the index-based extractor, which is still right for the
+        // ordinary case of a positive index into an icon table.
+        if hr != 0 || icon.is_null() {
+            // SAFETY: same contract as above; exactly one icon is requested.
+            let got = unsafe {
+                PrivateExtractIconsW(
+                    file.as_ptr(),
+                    key.index,
+                    px as i32,
+                    px as i32,
+                    &mut icon,
+                    std::ptr::null_mut(),
+                    1,
+                    0,
+                )
+            };
+            if got == 0 || icon.is_null() {
+                return Err(ArtError::Shell("no icon at that index".into()));
+            }
         }
 
         let result = to_rgba(icon);

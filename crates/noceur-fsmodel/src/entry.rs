@@ -29,6 +29,13 @@ pub struct FsEntry {
     /// Modification time as seconds since the Unix epoch. 0 if unavailable.
     pub mtime: i64,
     pub kind: EntryKind,
+    /// Whether the shell would keep this out of sight: hidden or system on
+    /// Windows, a leading dot elsewhere.
+    ///
+    /// Carried here rather than decided by name downstream, because the names
+    /// worth hiding — `$RECYCLE.BIN`, `System Volume Information` — are localised
+    /// and per-drive, while the attribute is neither.
+    pub hidden: bool,
 }
 
 impl FsEntry {

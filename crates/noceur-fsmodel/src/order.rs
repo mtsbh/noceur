@@ -125,6 +125,7 @@ mod tests {
             size,
             mtime,
             kind,
+            hidden: false,
         }
     }
 

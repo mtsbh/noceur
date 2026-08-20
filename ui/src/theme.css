@@ -448,3 +448,43 @@ body.resizing * {
 ::-webkit-scrollbar-button {
   display: none;
 }
+
+/* Tree section headings: "Pinned", "Drives". */
+.tsection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 4px;
+  color: var(--fg4);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  user-select: none;
+}
+.tsection.clickable {
+  cursor: pointer;
+}
+.tsection.clickable:hover {
+  color: var(--fg2);
+}
+
+/* The pin star. Present on every node but only inked on hover or when set, so
+   the tree stays a list of folders rather than a column of controls. */
+.pin {
+  margin-left: auto;
+  padding: 0 2px;
+  color: transparent;
+  font-size: 11px;
+  line-height: 1;
+  flex: none;
+}
+.tnode:hover .pin {
+  color: var(--fg4);
+}
+.tnode:hover .pin:hover {
+  color: var(--acc);
+}
+.pin.on,
+.tnode:hover .pin.on {
+  color: var(--acc);
+}
