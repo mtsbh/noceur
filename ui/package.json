@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/solid-virtual": "^3.13.37",
     "@tauri-apps/api": "^2",
     "solid-js": "^1"
   },

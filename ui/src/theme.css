@@ -174,3 +174,30 @@ body {
   text-align: center;
   color: var(--fg3);
 }
+
+/* Virtualized list. The canvas is a full-height spacer so the scrollbar
+   reflects the whole folder; only the rows in view are actually in the DOM,
+   positioned by transform rather than by flow. */
+.canvas {
+  position: relative;
+  width: 100%;
+}
+.canvas .row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* A row whose window has not arrived yet. Deliberately quiet — a scroll that
+   outruns the fetch should read as "not yet", not as an error. */
+.row.pending {
+  cursor: default;
+}
+.ph {
+  height: 1px;
+  background: var(--fg4);
+  opacity: 0.5;
+  width: 40%;
+  max-width: 220px;
+}

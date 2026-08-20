@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@tanstack/solid-virtual':
+        specifier: ^3.13.37
+        version: 3.13.37(solid-js@1.9.14)
       '@tauri-apps/api':
         specifier: ^2
         version: 2.11.1
@@ -424,6 +427,14 @@ packages:
     resolution: {integrity: sha512-zD6NdeWEByGE9QF9vCrlJ5YQB4oq9q91kPZS37Jwj5hOkvR1lTBSpsKhKDw4IJtbQ35LsTS1HD9DZYGKIshU1Q==}
     cpu: [x64]
     os: [win32]
+
+  '@tanstack/solid-virtual@3.13.37':
+    resolution: {integrity: sha512-RxJC8n/6nnFHcPvDGMg7ZkqSzCVUco4JNw3ctIChj1HjoKs5I9wt5nsU+DUVtMVEiMfizUxOAx4TPIN8SHjxUQ==}
+    peerDependencies:
+      solid-js: ^1.3.0
+
+  '@tanstack/virtual-core@3.17.8':
+    resolution: {integrity: sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA==}
 
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
@@ -966,6 +977,13 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
+
+  '@tanstack/solid-virtual@3.13.37(solid-js@1.9.14)':
+    dependencies:
+      '@tanstack/virtual-core': 3.17.8
+      solid-js: 1.9.14
+
+  '@tanstack/virtual-core@3.17.8': {}
 
   '@tauri-apps/api@2.11.1': {}
 
