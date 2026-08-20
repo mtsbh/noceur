@@ -6,11 +6,15 @@ export type RowDisplay = {
   name: string;
   bpm: string;
   key: string;
+  /** Canonical key 0..23, for colouring by Camelot position. Null when unknown. */
+  keyNorm: number | null;
   duration: string;
   artist: string;
   title: string;
   album: string;
   size: string;
+  /** `YYYY-MM-DD HH:MM` in UTC. */
+  modified: string;
   state: string;
   /** True only for audio files the last probe found a picture in. */
   hasArt: boolean;

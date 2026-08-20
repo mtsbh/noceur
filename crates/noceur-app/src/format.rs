@@ -31,11 +31,19 @@ pub struct RowDisplay {
     pub name: String,
     pub bpm: String,
     pub key: String,
+    /// Canonical key value 0..23, or `None` when unknown.
+    ///
+    /// Carried beside the formatted text so the frontend can colour by position
+    /// on the Camelot wheel without parsing a string whose notation the user can
+    /// change.
+    pub key_norm: Option<i64>,
     pub duration: String,
     pub artist: String,
     pub title: String,
     pub album: String,
     pub size: String,
+    /// `YYYY-MM-DD HH:MM` in UTC.
+    pub modified: String,
     /// Empty when the file is fine; otherwise the reason it is not.
     pub state: String,
     /// Whether this row has an image worth requesting — embedded cover art for
@@ -85,6 +93,101 @@ pub fn key(norm: Option<i64>, tag: Option<&str>, notation: KeyNotation) -> Strin
     }
 }
 
+/// Civil date and time-of-day from a Unix timestamp, in UTC.
+///
+/// Written out rather than pulling in a date library: the whole requirement is
+/// one fixed, sortable format with no locale and no parsing. The conversion is
+/// Howard Hinnant's `civil_from_days`.
+fn civil_utc(unix_seconds: i64) -> (i64, i64, i64, i64, i64) {
+    let days = unix_seconds.div_euclid(86_400);
+    let secs = unix_seconds.rem_euclid(86_400);
+
+    // Shift the epoch to 0000-03-01 so leap days fall at the end of the cycle.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+
+    (y, m, d, secs / 3_600, (secs % 3_600) / 60)
+}
+
+/// Last-modified time as `YYYY-MM-DD HH:MM`, or [`ABSENT`] where the filesystem
+/// gave none.
+///
+/// Shown in **local** time. The stamp exists to be compared against what
+/// Explorer says about the same file, and a column that is silently three hours
+/// off is worse than no column: it looks authoritative and is wrong.
+pub fn modified(unix_seconds: i64) -> String {
+    if unix_seconds <= 0 {
+        return ABSENT.to_string();
+    }
+
+    let (y, m, d, h, mi) = local_civil(unix_seconds);
+    format!("{y:04}-{m:02}-{d:02} {h:02}:{mi:02}")
+}
+
+/// Converts to the machine's local time, honouring daylight saving as it stood
+/// on that date rather than as it stands today.
+#[cfg(windows)]
+fn local_civil(unix_seconds: i64) -> (i64, i64, i64, i64, i64) {
+    use windows_sys::Win32::Foundation::SYSTEMTIME;
+    use windows_sys::Win32::System::Time::SystemTimeToTzSpecificLocalTime;
+
+    let (y, m, d, h, mi) = civil_utc(unix_seconds);
+    let utc = SYSTEMTIME {
+        wYear: y as u16,
+        wMonth: m as u16,
+        wDayOfWeek: 0,
+        wDay: d as u16,
+        wHour: h as u16,
+        wMinute: mi as u16,
+        wSecond: (unix_seconds.rem_euclid(60)) as u16,
+        wMilliseconds: 0,
+    };
+
+    let mut local = SYSTEMTIME {
+        wYear: 0,
+        wMonth: 0,
+        wDayOfWeek: 0,
+        wDay: 0,
+        wHour: 0,
+        wMinute: 0,
+        wSecond: 0,
+        wMilliseconds: 0,
+    };
+
+    // SAFETY: both structs are fully initialised and outlive the call; a null
+    // time-zone pointer asks for the machine's current zone.
+    let ok = unsafe { SystemTimeToTzSpecificLocalTime(std::ptr::null(), &utc, &mut local) };
+
+    if ok == 0 {
+        // A conversion that fails is still better answered with UTC than with
+        // nothing; it is off by an offset rather than absent.
+        return (y, m, d, h, mi);
+    }
+
+    (
+        local.wYear as i64,
+        local.wMonth as i64,
+        local.wDay as i64,
+        local.wHour as i64,
+        local.wMinute as i64,
+    )
+}
+
+/// Elsewhere, UTC. Local-time rules without a date library are not worth the
+/// risk of being quietly wrong, and Windows is the tested target.
+#[cfg(not(windows))]
+fn local_civil(unix_seconds: i64) -> (i64, i64, i64, i64, i64) {
+    civil_utc(unix_seconds)
+}
+
 /// Binary units, one decimal above a kilobyte.
 pub fn size(bytes: i64) -> String {
     const KB: f64 = 1024.0;
@@ -126,6 +229,7 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         } else {
             blank.clone()
         },
+        key_norm: if is_audio { row.key_norm } else { None },
         duration: if is_audio {
             duration(row.duration_ms)
         } else {
@@ -135,6 +239,7 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         title: row.title.clone().unwrap_or_default(),
         album: row.album.clone().unwrap_or_default(),
         size: if row.kind == 0 { blank } else { size(row.size) },
+        modified: modified(row.mtime),
         state: if row.state == "ok" {
             String::new()
         } else {
@@ -200,6 +305,53 @@ mod tests {
             ..row()
         };
         assert!(!display(&bare, KeyNotation::Camelot).has_art);
+    }
+
+    /// The civil conversion is asserted in UTC, where the answer is fixed.
+    /// `modified` renders local time, which depends on the machine.
+    #[test]
+    fn civil_utc_converts_known_instants() {
+        assert_eq!(civil_utc(1_609_459_200), (2021, 1, 1, 0, 0));
+        assert_eq!(civil_utc(1_700_000_000), (2023, 11, 14, 22, 13));
+    }
+
+    /// Leap years are where a hand-written civil date conversion goes wrong.
+    #[test]
+    fn civil_utc_handles_leap_days_and_century_rules() {
+        // 2020-02-29 is a leap day; 2000 is a leap year, 1900 was not.
+        assert_eq!(civil_utc(1_582_934_400), (2020, 2, 29, 0, 0));
+        assert_eq!(civil_utc(951_782_400), (2000, 2, 29, 0, 0));
+        assert_eq!(civil_utc(-2_208_988_800), (1900, 1, 1, 0, 0));
+    }
+
+    #[test]
+    fn modified_renders_a_sortable_stamp() {
+        let stamp = modified(1_700_000_000);
+        assert_eq!(stamp.len(), 16, "expected YYYY-MM-DD HH:MM, got {stamp}");
+        assert_eq!(&stamp[4..5], "-");
+        assert_eq!(&stamp[10..11], " ");
+        assert_eq!(&stamp[13..14], ":");
+    }
+
+    /// Whatever the machine's zone, local time is within a day of UTC — enough
+    /// to catch a conversion that lands in the wrong year or fails silently.
+    #[test]
+    fn modified_stays_near_the_utc_instant() {
+        let (y, m, _, _, _) = civil_utc(1_700_000_000);
+        let stamp = modified(1_700_000_000);
+        let year: i64 = stamp[..4].parse().unwrap();
+        let month: i64 = stamp[5..7].parse().unwrap();
+        assert_eq!(year, y);
+        assert!(
+            (month - m).abs() <= 1,
+            "local month {month} is nowhere near UTC month {m}"
+        );
+    }
+
+    #[test]
+    fn an_absent_timestamp_is_an_em_dash() {
+        assert_eq!(modified(0), "—");
+        assert_eq!(modified(-1), "—");
     }
 
     #[test]

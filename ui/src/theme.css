@@ -1,6 +1,7 @@
 /* Sodium — monochrome interface, one warm light.
-   The accent appears in exactly four places in this milestone: the active
-   breadcrumb segment, the selected row edge, directory glyphs, and timings. */
+   The accent marks the few things worth finding at a glance: the active
+   breadcrumb segment, the selected row edge, the sort arrow, pinned folders,
+   and the musical key — the column a DJ actually scans down. */
 :root {
   --bg: #0a0a0c;
   --panel: #0e0e11;
@@ -96,7 +97,7 @@ body {
 .hdr,
 .row {
   display: grid;
-  grid-template-columns: var(--art) 1fr 62px 46px 62px 180px 84px;
+  grid-template-columns: var(--cols);
   gap: 10px;
   padding: 0 14px;
   align-items: center;
@@ -603,4 +604,86 @@ body.resizing * {
   color: var(--fg4);
   font-size: 10px;
   flex: none;
+}
+
+/* Column resize grip: sits on the heading's right edge, wider than the line it
+   suggests so it can be grabbed. */
+.hdr .col {
+  position: relative;
+}
+.grip {
+  position: absolute;
+  right: -6px;
+  top: 0;
+  bottom: 0;
+  width: 11px;
+  cursor: col-resize;
+  z-index: 1;
+}
+.grip:hover {
+  background: linear-gradient(
+    to right,
+    transparent 4px,
+    var(--hair2) 4px,
+    var(--hair2) 6px,
+    transparent 6px
+  );
+}
+/* A heading mid-drag, so it is obvious which one is being moved. */
+.hdr .col[draggable="true"]:active {
+  color: var(--acc);
+}
+
+/* Column chooser. */
+.colpick {
+  cursor: pointer;
+  text-align: right;
+  padding-right: 2px;
+  color: var(--fg4);
+}
+.colpick:hover {
+  color: var(--fg);
+}
+.scrim.bare {
+  background: none;
+}
+.colmenu {
+  position: absolute;
+  z-index: 12;
+  right: 14px;
+  top: 74px;
+  min-width: 150px;
+  padding: 4px 0;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+.colopt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--fg2);
+  font-size: 11px;
+}
+.colopt:hover {
+  background: rgba(238, 234, 228, 0.05);
+  color: var(--fg);
+}
+.tick {
+  width: 10px;
+  color: transparent;
+  font-size: 10px;
+}
+.tick.on {
+  color: var(--acc);
+}
+
+/* Musical key. The one column read by scanning rather than by looking up, so it
+   carries the accent: harmonic mixing means finding neighbours in this column
+   and nowhere else. Short values, so the colour stays a mark rather than a wash. */
+.keycol {
+  color: var(--acc);
 }

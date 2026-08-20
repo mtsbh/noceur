@@ -23,6 +23,17 @@ import {
 } from "./api";
 import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
+import {
+  DEFAULT_COLUMNS,
+  cellText,
+  clampWidth,
+  gridTemplate,
+  keyColour,
+  loadColumns,
+  reorder,
+  saveColumns,
+  type Column,
+} from "./columns";
 
 /**
  * Where the browser opens.
@@ -60,22 +71,6 @@ function storedArtSize(): ArtSize {
   return v === "medium" || v === "large" || v === "small" ? v : "small";
 }
 
-/**
- * The sortable columns, in display order.
- *
- * The art column is not here: it has no heading and nothing to sort by, but it
- * still occupies the first cell of the grid, so the header renders an empty span
- * before this list to keep the template lined up with the rows.
- */
-const COLUMNS: { key: SortColumn; label: string; cls: string }[] = [
-  { key: "name", label: "Name", cls: "" },
-  { key: "bpm", label: "BPM", cls: "num" },
-  { key: "key", label: "Key", cls: "" },
-  { key: "duration", label: "Time", cls: "num" },
-  { key: "artist", label: "Artist", cls: "" },
-  { key: "size", label: "Size", cls: "num" },
-];
-
 const SORT_KEY = "noceur.sort";
 
 function storedOrder(): Order {
@@ -83,7 +78,7 @@ function storedOrder(): Order {
     const raw = localStorage.getItem(SORT_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Order;
-      if (COLUMNS.some((c) => c.key === parsed.sort)) return parsed;
+      if (DEFAULT_COLUMNS.some((c) => c.key === parsed.sort)) return parsed;
     }
   } catch {
     // A corrupt preference is not worth failing over; fall through to the default.
@@ -142,6 +137,66 @@ export default function App() {
   const [artSize, setArtSize] = createSignal<ArtSize>(storedArtSize());
   const [treeWidth, setTreeWidth] = createSignal(storedTreeWidth());
   const [order, setOrder] = createSignal<Order>(storedOrder());
+  const [columns, setColumns] = createSignal<Column[]>(loadColumns());
+  const [pickingColumns, setPickingColumns] = createSignal(false);
+
+  const shownColumns = () => columns().filter((c) => c.visible);
+
+  function commitColumns(next: Column[]) {
+    setColumns(next);
+    saveColumns(next);
+  }
+
+  function toggleColumn(key: SortColumn) {
+    commitColumns(
+      columns().map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)),
+    );
+  }
+
+  /**
+   * Drags the right edge of a column heading.
+   *
+   * Same shape as the tree divider: listeners on the window so the drag survives
+   * the pointer leaving a 5px strip, and one write to storage at the end rather
+   * than on every move.
+   */
+  function startColumnDrag(e: PointerEvent, key: SortColumn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = columns().find((c) => c.key === key)?.width ?? 100;
+    document.body.classList.add("resizing");
+
+    const move = (ev: PointerEvent) =>
+      setColumns(
+        columns().map((c) =>
+          c.key === key
+            ? { ...c, width: clampWidth(startWidth + ev.clientX - startX) }
+            : c,
+        ),
+      );
+
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      document.body.classList.remove("resizing");
+      saveColumns(columns());
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
+
+  // Which heading is being dragged, as an index into the visible columns.
+  let dragFrom = -1;
+
+  function dropColumn(toKey: SortColumn) {
+    const all = columns();
+    const from = all.findIndex((c) => c.key === shownColumns()[dragFrom]?.key);
+    const to = all.findIndex((c) => c.key === toKey);
+    if (from >= 0 && to >= 0) commitColumns(reorder(all, from, to));
+    dragFrom = -1;
+  }
 
   /**
    * Clicking a header sorts by it; clicking the one already active reverses it.
@@ -455,6 +510,7 @@ export default function App() {
         "--row-h": `${metrics(artSize()).row}px`,
         "--art": `${metrics(artSize()).art}px`,
         "--tree-w": `${treeWidth()}px`,
+        "--cols": gridTemplate(columns()),
       }}
     >
       <div class="crumbs">
@@ -516,21 +572,58 @@ export default function App() {
         <div class="pane">
       <div class="hdr">
         <span class="art" />
-        <For each={COLUMNS}>
-          {(col) => (
+        <For each={shownColumns()}>
+          {(col, i) => (
             <span
-              class={`col ${col.cls} ${order().sort === col.key ? "sorted" : ""}`}
+              class={`col ${col.num ? "num" : ""} ${order().sort === col.key ? "sorted" : ""}`}
               onClick={() => chooseSort(col.key)}
-              title={`Sort by ${col.label.toLowerCase()}`}
+              title={`Sort by ${col.label.toLowerCase()} · drag to reorder`}
+              draggable={true}
+              onDragStart={() => (dragFrom = i())}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => dropColumn(col.key)}
             >
               {col.label}
               <Show when={order().sort === col.key}>
                 <span class="arrow">{order().desc ? "▾" : "▴"}</span>
               </Show>
+              {/* Sits on the boundary and swallows the click, so grabbing the
+                  edge resizes rather than sorting. */}
+              <span
+                class="grip"
+                title={`Resize ${col.label.toLowerCase()}`}
+                onPointerDown={(e) => startColumnDrag(e, col.key)}
+                onClick={(e) => e.stopPropagation()}
+                onDragStart={(e) => e.preventDefault()}
+              />
             </span>
           )}
         </For>
+        <span
+          class="colpick"
+          title="Choose columns"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPickingColumns(!pickingColumns());
+          }}
+        >
+          ⋮
+        </span>
       </div>
+
+      <Show when={pickingColumns()}>
+        <div class="scrim bare" onClick={() => setPickingColumns(false)} />
+        <div class="colmenu">
+          <For each={columns()}>
+            {(col) => (
+              <div class="colopt" onClick={() => toggleColumn(col.key)}>
+                <span class={`tick ${col.visible ? "on" : ""}`}>✓</span>
+                {col.label}
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
 
       {/* The scroll container is the virtualizer's measuring stick, so it is
           always mounted — the loading and empty states render inside it. */}
@@ -581,17 +674,32 @@ export default function App() {
                                   />
                                 </Show>
                               </span>
-                              <span class="name" title={r().name}>
-                                {r().name}
-                                <Show when={r().state}>
-                                  <span class="bad"> [{r().state}]</span>
-                                </Show>
-                              </span>
-                              <span class="num mono">{r().bpm}</span>
-                              <span class="mono">{r().key}</span>
-                              <span class="num mono">{r().duration}</span>
-                              <span class="dim">{r().artist}</span>
-                              <span class="num mono">{r().size}</span>
+                              <For each={shownColumns()}>
+                                {(col) =>
+                                  col.key === "name" ? (
+                                    <span class="name" title={r().name}>
+                                      {r().name}
+                                      <Show when={r().state}>
+                                        <span class="bad"> [{r().state}]</span>
+                                      </Show>
+                                    </span>
+                                  ) : (
+                                    <span
+                                      class={`${col.num ? "num mono" : col.dim ? "dim" : "mono"}${
+                                        col.key === "key" ? " keycol" : ""
+                                      }`}
+                                      style={
+                                        col.key === "key"
+                                          ? { color: keyColour(r().keyNorm) }
+                                          : undefined
+                                      }
+                                      title={cellText(r(), col.key)}
+                                    >
+                                      {cellText(r(), col.key)}
+                                    </span>
+                                  )
+                                }
+                              </For>
                             </>
                           )}
                         </Show>
