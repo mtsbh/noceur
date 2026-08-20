@@ -1,22 +1,35 @@
 //! Tauri commands. Every one that touches the filesystem runs off-thread.
 
-use crate::dto::{DirListing, ListRequest, Segment};
+use crate::dto::{DirListing, ListRequest, RowWindow, RowsRequest, Segment};
 use crate::format;
 use crate::state::AppState;
 use noceur_fsmodel::path::simplify;
-use noceur_index::{list, volume, ListOptions, SortColumn};
+use noceur_index::{list, volume, Db, IndexError, ListOptions, SortColumn};
 use noceur_tags::KeyNotation;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tauri::State;
 
-/// Lists a directory, scanning and probing it first.
+/// Largest window a single request may ask for.
+///
+/// The frontend asks for a few hundred rows at a time; anything far above that
+/// is either a bug or an attempt to pull a whole 40k-file folder through the
+/// bridge in one call, which is exactly what windowing exists to prevent.
+const MAX_LIMIT: i64 = 1000;
+
+/// Rows returned alongside the listing itself. Comfortably more than one
+/// screenful at the 26px row height, so the first paint is never placeholders.
+const FIRST_WINDOW: i64 = 200;
+
+/// Opens a directory: scans it, probes it, and reports how many rows it holds.
 ///
 /// Runs entirely on the blocking pool. A cold SMB mount has been measured at
 /// twenty seconds for thirty-one entries; doing this on the main thread would
 /// freeze the window for that whole time.
+///
+/// Returns the first window of rows but not the rest — see [`list_rows`].
 #[tauri::command]
-pub async fn list_dir(state: State<'_, AppState>, req: ListRequest) -> Result<DirListing, String> {
+pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<DirListing, String> {
     let db = state.db.clone();
     let path = PathBuf::from(&req.path);
     let audio_only = req.audio_only;
@@ -33,33 +46,72 @@ pub async fn list_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
         noceur_index::probe_dir(&db, dir_id).map_err(|e| e.to_string())?;
         let probe_ms = probe_started.elapsed().as_millis() as u64;
 
-        let opts = ListOptions {
-            sort: SortColumn::Name,
-            desc: false,
-            audio_only,
-            offset: 0,
-            limit: -1,
-        };
-        let total = noceur_index::count(&db, dir_id, opts.clone()).map_err(|e| e.to_string())?;
-        let rows = list(&db, dir_id, opts).map_err(|e| e.to_string())?;
-
-        let display: Vec<_> = rows
-            .iter()
-            .map(|r| format::display(r, KeyNotation::Camelot))
-            .collect();
+        let total = noceur_index::count(&db, dir_id, options(audio_only, 0, FIRST_WINDOW))
+            .map_err(|e| e.to_string())?;
+        let first = window(&db, dir_id, audio_only, 0, FIRST_WINDOW).map_err(|e| e.to_string())?;
 
         let shown = simplify(&path);
         Ok(DirListing {
+            dir_id,
             path: shown.to_string_lossy().into_owned(),
             segments: segments_of(&shown),
-            rows: display,
             total,
+            first,
             scan_ms,
             probe_ms,
         })
     })
     .await
     .map_err(|e| format!("listing task failed: {e}"))?
+}
+
+/// Reads one window of an already-opened directory.
+///
+/// Cheap by design — no scan, no probe, just an indexed `LIMIT`/`OFFSET` read —
+/// because this is what fires while the user drags a scrollbar.
+#[tauri::command]
+pub async fn list_rows(state: State<'_, AppState>, req: RowsRequest) -> Result<RowWindow, String> {
+    let db = state.db.clone();
+    let offset = req.offset.max(0);
+    let limit = req.limit.clamp(0, MAX_LIMIT);
+    let (dir_id, audio_only) = (req.dir_id, req.audio_only);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        window(&db, dir_id, audio_only, offset, limit).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("window task failed: {e}"))?
+}
+
+/// The one place list options are built, so `open_dir` and `list_rows` cannot
+/// drift into cutting windows from differently ordered lists.
+fn options(audio_only: bool, offset: i64, limit: i64) -> ListOptions {
+    ListOptions {
+        sort: SortColumn::Name,
+        desc: false,
+        audio_only,
+        offset,
+        limit,
+    }
+}
+
+/// Reads and formats one window of rows.
+fn window(
+    db: &Db,
+    dir_id: i64,
+    audio_only: bool,
+    offset: i64,
+    limit: i64,
+) -> Result<RowWindow, IndexError> {
+    let rows = list(db, dir_id, options(audio_only, offset, limit))?;
+    Ok(RowWindow {
+        offset,
+        rows: rows
+            .iter()
+            .map(|r| format::display(r, KeyNotation::Camelot))
+            .collect(),
+    })
 }
 
 /// Resolves the parent of a path, or `None` at a root.

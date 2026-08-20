@@ -58,7 +58,8 @@ fn main() {
     if let Err(e) = tauri::Builder::default()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
-            commands::list_dir,
+            commands::open_dir,
+            commands::list_rows,
             commands::parent_of
         ])
         .run(tauri::generate_context!())
