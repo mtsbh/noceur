@@ -114,6 +114,50 @@ pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag) {
     }
 }
 
+/// Embedded cover art, exactly as the file stores it.
+///
+/// Undecoded on purpose: this crate knows about tags, not about images. Whoever
+/// wants pixels decodes these bytes themselves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Artwork {
+    /// The container's declared MIME type, when it declares one.
+    pub mime: Option<String>,
+    pub data: Vec<u8>,
+}
+
+/// Reads the front cover out of a file, if it has one.
+///
+/// Separate from [`read`] because the bytes are large and almost never wanted:
+/// a listing needs `has_artwork` for every row and the actual image for only the
+/// handful of rows on screen.
+///
+/// Prefers a picture explicitly typed as the front cover, and otherwise falls
+/// back to the first one present — plenty of files in a real library carry a
+/// single untyped picture, and refusing to show it would be pedantic.
+pub fn artwork(path: &Path) -> Result<Option<Artwork>, MetaError> {
+    let tagged = Probe::open(path)
+        .and_then(|p| p.read())
+        .map_err(|source| MetaError::Read {
+            path: path.display().to_string(),
+            source,
+        })?;
+
+    let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
+        return Ok(None);
+    };
+
+    let front = tag
+        .pictures()
+        .iter()
+        .find(|p| p.pic_type() == lofty::picture::PictureType::CoverFront)
+        .or_else(|| tag.pictures().first());
+
+    Ok(front.map(|p| Artwork {
+        mime: p.mime_type().map(|m| m.to_string()),
+        data: p.data().to_vec(),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,5 +408,65 @@ mod tests {
         let mut meta = TrackMeta::default();
         apply_tag(&mut meta, &tag);
         assert!(meta.has_artwork, "picture was inserted");
+    }
+
+    /// Writes a WAV carrying the given pictures and returns its path.
+    fn with_pictures(dir: &TempDir, name: &str, pics: Vec<Picture>) -> PathBuf {
+        let p = dir.path().join(name);
+        write_wav(&p);
+        let mut tag = Tag::new(TagType::Id3v2);
+        for pic in pics {
+            tag.push_picture(pic);
+        }
+        tag.save_to_path(&p, WriteOptions::default()).unwrap();
+        p
+    }
+
+    fn picture(kind: PictureType, byte: u8) -> Picture {
+        Picture::new_unchecked(kind, Some(MimeType::Jpeg), None, vec![byte; 8])
+    }
+
+    #[test]
+    fn artwork_is_none_when_the_file_carries_no_picture() {
+        let d = TempDir::new().unwrap();
+        let p = d.path().join("bare.wav");
+        write_wav(&p);
+        assert_eq!(artwork(&p).unwrap(), None);
+    }
+
+    #[test]
+    fn artwork_prefers_the_front_cover_over_other_pictures() {
+        let d = TempDir::new().unwrap();
+        let p = with_pictures(
+            &d,
+            "many.wav",
+            vec![
+                picture(PictureType::Media, 0x11),
+                picture(PictureType::CoverFront, 0x22),
+                picture(PictureType::CoverBack, 0x33),
+            ],
+        );
+
+        let art = artwork(&p).unwrap().expect("a picture is present");
+        assert_eq!(art.data, vec![0x22u8; 8], "must be the front cover");
+        assert_eq!(art.mime.as_deref(), Some("image/jpeg"));
+    }
+
+    /// Plenty of real files carry one untyped picture; refusing it would leave
+    /// rows blank that plainly do have art.
+    #[test]
+    fn artwork_falls_back_to_the_first_picture_when_none_is_a_front_cover() {
+        let d = TempDir::new().unwrap();
+        let p = with_pictures(
+            &d,
+            "untyped.wav",
+            vec![
+                picture(PictureType::Other, 0x44),
+                picture(PictureType::CoverBack, 0x55),
+            ],
+        );
+
+        let art = artwork(&p).unwrap().expect("a picture is present");
+        assert_eq!(art.data, vec![0x44u8; 8]);
     }
 }

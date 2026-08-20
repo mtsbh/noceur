@@ -4,4 +4,4 @@ pub mod key;
 pub mod meta;
 
 pub use key::{KeyNotation, MusicalKey};
-pub use meta::{read, MetaError, TrackMeta};
+pub use meta::{artwork, read, Artwork, MetaError, TrackMeta};
