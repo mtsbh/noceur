@@ -534,14 +534,17 @@ body.resizing * {
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
   overflow: hidden;
 }
+/* Kept close to the result rows in weight. The query is a means to the list
+   below it, not the subject of the panel, so it should not tower over the
+   answers. */
 .finput {
   background: none;
   border: none;
   border-bottom: 1px solid var(--hair);
   color: var(--fg);
   font: inherit;
-  font-size: 14px;
-  padding: 14px 16px;
+  font-size: 12px;
+  padding: 8px 14px;
   outline: none;
 }
 .finput::placeholder {
