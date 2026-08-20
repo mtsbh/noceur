@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod art;
 mod commands;
 mod dto;
 mod format;
@@ -55,8 +56,20 @@ fn main() {
         Err(e) => fatal(&format!("Noceur could not open its index.\n\n{e}")),
     };
 
+    let art_state = app_state.clone();
+
     if let Err(e) = tauri::Builder::default()
         .manage(app_state)
+        // Cover art is served as images the web view fetches by URL rather than
+        // as command results, so scrolling does not push megabytes of base64
+        // through the IPC bridge. `register_asynchronous_*` keeps the decode off
+        // the main loop: a slow thumbnail delays its own row, not the window.
+        .register_asynchronous_uri_scheme_protocol("thumb", move |_ctx, request, responder| {
+            let state = art_state.clone();
+            std::thread::spawn(move || {
+                responder.respond(art::respond(&state, &request));
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             commands::open_dir,
             commands::list_rows,

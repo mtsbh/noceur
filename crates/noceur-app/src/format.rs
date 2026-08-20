@@ -38,6 +38,9 @@ pub struct RowDisplay {
     pub size: String,
     /// Empty when the file is fine; otherwise the reason it is not.
     pub state: String,
+    /// Whether this row has cover art worth requesting. Directories and
+    /// non-audio files never do, so the frontend can skip the request entirely.
+    pub has_art: bool,
 }
 
 /// `mm:ss`, or [`ABSENT`].
@@ -136,6 +139,7 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         } else {
             row.state.clone()
         },
+        has_art: is_audio && row.has_artwork,
     }
 }
 
@@ -159,7 +163,30 @@ mod tests {
             key_tag: Some("8A".into()),
             key_norm: Some(14),
             duration_ms: Some(671_000),
+            has_artwork: true,
         }
+    }
+
+    /// A folder has no cover to show, whatever the index happens to record.
+    #[test]
+    fn only_audio_rows_advertise_cover_art() {
+        let audio = display(&row(), KeyNotation::Camelot);
+        assert!(audio.has_art);
+
+        let dir = ListRow { kind: 0, ..row() };
+        assert!(!display(&dir, KeyNotation::Camelot).has_art);
+
+        let other = ListRow { kind: 2, ..row() };
+        assert!(!display(&other, KeyNotation::Camelot).has_art);
+    }
+
+    #[test]
+    fn an_audio_row_without_artwork_does_not_advertise_it() {
+        let bare = ListRow {
+            has_artwork: false,
+            ..row()
+        };
+        assert!(!display(&bare, KeyNotation::Camelot).has_art);
     }
 
     #[test]
