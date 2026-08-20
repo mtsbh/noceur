@@ -132,10 +132,11 @@ sub-project 3 is the tagger (writing, Quick Tag, multi-source metadata fetch).
   cannot freeze it, breadcrumb and back/forward history
 - Virtualized list — windowed IPC and virtualized rendering, so folder size stops mattering
 - Cover art — embedded artwork per row at three sizes, rasterised in Rust and cached by content
+- Folder tree — drives and directories beside the list, lazily expanded, kept in sync with it
 
 **Next**
 
-Resizable, reorderable and persisted columns · sortable columns · the folder tree · pinned
+Resizable, reorderable and persisted columns · sortable columns · pinned
 folders · search · split panes and tabs · file operations with undo · waveform rendering ·
 playback · the action system · real volume identity
 
