@@ -23,7 +23,6 @@ pub struct DirListing {
     pub first: RowWindow,
     /// How long enumeration took, so slow network paths are visible.
     pub scan_ms: u64,
-    pub probe_ms: u64,
 }
 
 /// One clickable breadcrumb segment.
@@ -68,4 +67,15 @@ pub struct RowsRequest {
 pub struct RowWindow {
     pub offset: i64,
     pub rows: Vec<RowDisplay>,
+}
+
+/// What one probe batch accomplished.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeProgress {
+    /// Files this batch attempted to read.
+    pub probed: i64,
+    /// Nothing left to probe in this directory.
+    pub done: bool,
+    pub elapsed_ms: u64,
 }

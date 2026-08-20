@@ -32,6 +32,18 @@ export function thumbUrl(fileId: number, size: ArtSize): string {
   return `${convertFileSrc(String(fileId), "thumb")}?size=${size}`;
 }
 
+/**
+ * Shell icon for a folder named by path.
+ *
+ * The tree reads the filesystem rather than the index, so its nodes have no row
+ * to point at. The `0` is a placeholder the URL shape requires; the backend
+ * prefers `path` when it is present, and answers it without touching the index
+ * at all.
+ */
+export function folderIconUrl(path: string, size: ArtSize = "small"): string {
+  return `${convertFileSrc("0", "thumb")}?size=${size}&path=${encodeURIComponent(path)}`;
+}
+
 export type Segment = { label: string; path: string };
 
 /** A contiguous slice of a listing, starting at `offset`. */
@@ -46,8 +58,8 @@ export type DirListing = {
   total: number;
   /** The window at offset 0, so the first screen paints without a round trip. */
   first: RowWindow;
+  /** How long enumeration took, so slow network paths stay visible. */
   scanMs: number;
-  probeMs: number;
 };
 
 /** Scans, probes and counts a directory, returning its first window of rows. */
@@ -85,6 +97,20 @@ export function parentOf(path: string): Promise<string | null> {
  */
 export function subdirs(path: string): Promise<Segment[]> {
   return invoke<Segment[]>("subdirs", { path });
+}
+
+/** What one probe batch accomplished. */
+export type ProbeProgress = { probed: number; done: boolean; elapsedMs: number };
+
+/**
+ * Reads tags for one batch of a directory's files.
+ *
+ * Called in a loop after the folder is already on screen. Each call takes and
+ * releases the index lock once, so listing and cover-art requests interleave with
+ * it instead of queueing behind a folder-long hold.
+ */
+export function probeBatch(dirId: number): Promise<ProbeProgress> {
+  return invoke<ProbeProgress>("probe", { dirId });
 }
 
 /** The drives the tree is rooted at. */

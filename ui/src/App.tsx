@@ -6,6 +6,7 @@ import {
   listRows,
   parentOf,
   thumbUrl,
+  probeBatch,
   type ArtSize,
   type DirListing,
   type RowDisplay,
@@ -40,6 +41,21 @@ function storedArtSize(): ArtSize {
   return v === "medium" || v === "large" || v === "small" ? v : "small";
 }
 
+const TREE_KEY = "noceur.treeWidth";
+const TREE_MIN = 140;
+const TREE_MAX = 700;
+const TREE_DEFAULT = 250;
+
+/** Keeps a dragged width usable: never so narrow it vanishes, never so wide the list does. */
+function clampTree(px: number): number {
+  return Math.min(TREE_MAX, Math.max(TREE_MIN, Math.round(px)));
+}
+
+function storedTreeWidth(): number {
+  const v = Number(localStorage.getItem(TREE_KEY));
+  return Number.isFinite(v) && v > 0 ? clampTree(v) : TREE_DEFAULT;
+}
+
 /**
  * Rows per window.
  *
@@ -71,11 +87,41 @@ export default function App() {
   const [cursor, setCursor] = createSignal(0);
   const [selected, setSelected] = createSignal<number | null>(null);
   const [windowError, setWindowError] = createSignal("");
+  // Files tag-read so far in this folder; 0 once the folder is fully probed.
+  const [probed, setProbed] = createSignal(0);
   const [artSize, setArtSize] = createSignal<ArtSize>(storedArtSize());
+  const [treeWidth, setTreeWidth] = createSignal(storedTreeWidth());
 
   function chooseArtSize(size: ArtSize) {
     setArtSize(size);
     localStorage.setItem(ART_KEY, size);
+  }
+
+  /**
+   * Drags the divider between the tree and the list.
+   *
+   * Listeners go on the window rather than the handle so the drag survives the
+   * pointer outrunning a 5px strip, which it will on any real drag. The width is
+   * written to storage once at the end, not on every move.
+   */
+  function startTreeDrag(e: PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = treeWidth();
+    document.body.classList.add("resizing");
+
+    const move = (ev: PointerEvent) =>
+      setTreeWidth(clampTree(startWidth + ev.clientX - startX));
+
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      document.body.classList.remove("resizing");
+      localStorage.setItem(TREE_KEY, String(treeWidth()));
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
   }
 
   const current = () => history()[cursor()];
@@ -125,10 +171,71 @@ export default function App() {
       setPages(reconcile({}));
       inflight = new Set();
       setWindowError("");
+      setProbed(0);
       if (l.first.rows.length > 0) setPages(0, l.first.rows);
       if (scrollEl) scrollEl.scrollTop = 0;
+      void runProbe(l.dirId);
     }),
   );
+
+  /**
+   * Re-reads the windows currently on screen.
+   *
+   * Rows are replaced rather than cleared, so a refresh mid-probe updates the
+   * cells that gained a BPM and leaves the rest of the row untouched — clearing
+   * first would blink the whole list on every batch.
+   */
+  function refreshVisible(dirId: number) {
+    const items = virtualizer.getVirtualItems();
+    if (items.length === 0) return;
+
+    const from = Math.floor(items[0].index / PAGE);
+    const to = Math.floor(items[items.length - 1].index / PAGE);
+    for (let p = from; p <= to; p++) {
+      listRows(dirId, p * PAGE, PAGE)
+        .then((w) => {
+          if (listing()?.dirId !== dirId) return;
+          setPages(Math.floor(w.offset / PAGE), w.rows);
+        })
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * Reads the folder's tags in the background, a batch at a time.
+   *
+   * The listing is already on screen by now; this is what fills in BPM, key,
+   * duration and cover art behind it. Each batch is a separate call so the index
+   * is released between them — a folder-long hold is what used to make opening a
+   * large folder feel like the app had stopped.
+   *
+   * Stops as soon as the user navigates elsewhere: the tags of a folder nobody is
+   * looking at are not worth the disk.
+   */
+  async function runProbe(dirId: number) {
+    let done = 0;
+    for (;;) {
+      if (listing()?.dirId !== dirId) return;
+
+      let progress;
+      try {
+        progress = await probeBatch(dirId);
+      } catch {
+        return;
+      }
+      if (listing()?.dirId !== dirId) return;
+
+      if (progress.done) {
+        setProbed(0);
+        refreshVisible(dirId);
+        return;
+      }
+
+      done += progress.probed;
+      setProbed(done);
+      refreshVisible(dirId);
+    }
+  }
 
   /** The row at a listing-wide index, or `undefined` while its window is in flight. */
   function rowAt(index: number): RowDisplay | undefined {
@@ -222,6 +329,7 @@ export default function App() {
       style={{
         "--row-h": `${metrics(artSize()).row}px`,
         "--art": `${metrics(artSize()).art}px`,
+        "--tree-w": `${treeWidth()}px`,
       }}
     >
       <div class="crumbs">
@@ -270,6 +378,15 @@ export default function App() {
 
       <div class="body">
         <Tree current={current()} onNavigate={navigate} />
+        <div
+          class="vsplit"
+          onPointerDown={startTreeDrag}
+          onDblClick={() => {
+            setTreeWidth(TREE_DEFAULT);
+            localStorage.setItem(TREE_KEY, String(TREE_DEFAULT));
+          }}
+          title="Drag to resize · double-click to reset"
+        />
 
         <div class="pane">
       <div class="hdr">
@@ -363,9 +480,11 @@ export default function App() {
           <span class={listing()!.scanMs > 500 ? "slow" : ""}>
             scan {listing()!.scanMs}ms
           </span>
-          <span class={listing()!.probeMs > 2000 ? "slow" : ""}>
-            probe {listing()!.probeMs}ms
-          </span>
+        </Show>
+        {/* Only while tags are still being read. A folder already in the index
+            opens with everything filled in and says nothing here. */}
+        <Show when={probed() > 0}>
+          <span class="working">reading tags… {probed()}</span>
         </Show>
         <Show when={windowError()}>
           <span class="slow">{windowError()}</span>

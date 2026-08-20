@@ -70,7 +70,12 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(dir_id, name) DO UPDATE SET
                  ext = excluded.ext, size = excluded.size,
-                 mtime = excluded.mtime, kind = excluded.kind",
+                 mtime = excluded.mtime, kind = excluded.kind,
+                 -- A file the probe gave up on is skipped from then on, so that
+                 -- one corrupt file cannot be retried on every pass. Rewriting it
+                 -- changes its mtime and earns it another look.
+                 state = CASE WHEN excluded.mtime <> file.mtime
+                              THEN 'ok' ELSE file.state END",
             params![
                 dir_id,
                 e.name,
@@ -114,6 +119,26 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
 /// Failures mark the individual row and continue — one corrupt file must never
 /// cost the folder.
 pub fn probe_dir(db: &Db, dir_id: i64) -> Result<(), IndexError> {
+    while probe_batch(db, dir_id, PROBE_BATCH)? > 0 {}
+    Ok(())
+}
+
+/// Files one batch reads before the caller gets a chance to release the database.
+///
+/// Small enough that a listing query or a thumbnail request waits milliseconds
+/// rather than minutes, large enough that the per-batch query is noise.
+pub const PROBE_BATCH: usize = 32;
+
+/// Probes at most `limit` unprobed files, returning how many it attempted.
+///
+/// Exists so a caller can probe a large folder without holding the database for
+/// the whole of it. A 667-file folder took thirty-five seconds to probe, and for
+/// that entire time nothing else could read the index: not the listing that was
+/// waiting to paint, not the cover art beside it. Batching turns one long
+/// exclusive hold into many short ones.
+///
+/// Returns 0 when there is nothing left to do, which is the caller's cue to stop.
+pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexError> {
     let mut stmt = db.conn().prepare(
         "SELECT f.id, f.name, d.path_lower
          FROM file f
@@ -121,15 +146,20 @@ pub fn probe_dir(db: &Db, dir_id: i64) -> Result<(), IndexError> {
          LEFT JOIN content_tag ct ON ct.content_id = f.content_id
          WHERE f.dir_id = ?1
            AND f.kind = ?2
-           AND (f.content_id IS NULL OR ct.read_at IS NULL OR f.mtime > ct.read_at)",
+           AND f.state NOT IN ('unreadable', 'undecodable')
+           AND (f.content_id IS NULL OR ct.read_at IS NULL OR f.mtime > ct.read_at)
+         LIMIT ?3",
     )?;
     let targets: Vec<(i64, String, String)> = stmt
-        .query_map(params![dir_id, EntryKind::Audio.group() as i64], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-        })?
+        .query_map(
+            params![dir_id, EntryKind::Audio.group() as i64, limit as i64],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?
         .filter_map(Result::ok)
         .collect();
     drop(stmt);
+
+    let attempted = targets.len();
 
     for (file_id, name, dir_path) in targets {
         let full = Path::new(&dir_path).join(&name);
@@ -210,7 +240,7 @@ pub fn probe_dir(db: &Db, dir_id: i64) -> Result<(), IndexError> {
             params![content_id, file_id],
         )?;
     }
-    Ok(())
+    Ok(attempted)
 }
 
 fn mark_state(db: &Db, file_id: i64, state: &str) -> Result<(), IndexError> {

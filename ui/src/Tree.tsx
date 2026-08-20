@@ -1,6 +1,6 @@
 import { createSignal, createEffect, on, For, Show } from "solid-js";
 import { createStore } from "solid-js/store";
-import { roots, subdirs, type Segment } from "./api";
+import { folderIconUrl, roots, subdirs, type Segment } from "./api";
 
 /**
  * The folder tree.
@@ -96,6 +96,19 @@ export default function Tree(props: {
               e.stopPropagation();
               toggle(p.node.path);
             }}
+          />
+          {/* The same shell icon the list draws, so a folder looks like itself
+              on both sides of the window. Hidden rather than broken if the shell
+              has nothing to give — a drive that went offline, most likely. */}
+          <img
+            class="ticon"
+            src={folderIconUrl(p.node.path)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            onLoad={(e) => e.currentTarget.classList.remove("blank")}
+            onError={(e) => e.currentTarget.classList.add("blank")}
           />
           <span class="tlabel">{p.node.label}</span>
         </div>
