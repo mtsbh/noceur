@@ -303,6 +303,43 @@ mod tests {
         assert_eq!(names(&window), names(&all)[1..3]);
     }
 
+    /// The frontend caches windows by page and stitches them together, so
+    /// consecutive windows must tile the listing exactly — no row repeated at a
+    /// seam, none skipped, and a short final window where the rows run out.
+    #[test]
+    fn consecutive_windows_tile_the_listing_exactly() {
+        let (db, _d, dir_id) = setup();
+        let all = list(&db, dir_id, ListOptions::default()).unwrap();
+
+        for page in [1, 2, 3, 5, 8] {
+            let mut stitched: Vec<String> = Vec::new();
+            let mut offset = 0;
+            loop {
+                let window = list(
+                    &db,
+                    dir_id,
+                    ListOptions {
+                        offset,
+                        limit: page,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                if window.is_empty() {
+                    break;
+                }
+                assert!(
+                    window.len() as i64 <= page,
+                    "window of {page} returned {} rows",
+                    window.len()
+                );
+                stitched.extend(window.iter().map(|r| r.name.clone()));
+                offset += page;
+            }
+            assert_eq!(stitched, names(&all), "windows of {page} did not tile");
+        }
+    }
+
     #[test]
     fn rows_carry_tag_values() {
         let (db, _d, dir_id) = setup();
