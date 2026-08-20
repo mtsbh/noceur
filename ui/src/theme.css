@@ -524,7 +524,7 @@ body.resizing * {
   top: 12%;
   left: 50%;
   transform: translateX(-50%);
-  width: min(1100px, 90vw);
+  width: min(760px, 74vw);
   max-height: 70vh;
   display: flex;
   flex-direction: column;
