@@ -46,13 +46,19 @@ the DOM, 200 rows per fetch.
 **Everything the user reads is formatted in Rust.** Durations, BPM precision, key notation and
 file sizes are produced in one unit-tested place. The frontend renders strings it is handed.
 
+**Images are rasterised in Rust and fetched by URL.** Cover art is decoded, cropped square and
+re-encoded at the exact size it will be drawn, then served over a `thumb://` scheme the web view
+fetches like any other image — so it decodes off the main thread and caches what it has already
+drawn. Nothing image-shaped goes through the IPC bridge. Waveforms will arrive the same way.
+
 ## Layout
 
 ```
 crates/
   noceur-fsmodel   enumeration, classification, ordering, Windows long-path handling
   noceur-tags      tag reading, key normalisation (Camelot / Open Key / classical)
-  noceur-index     SQLite index, directory scanner, windowed sorted queries
+  noceur-art       cover-art extraction and thumbnail rasterisation
+  noceur-index     SQLite index, directory scanner, windowed queries, thumbnail cache
   noceur-app       the only Tauri-aware crate: commands, state, display formatting
   noceur-cli       debug CLI for driving the engine headless
 ui/                Solid + Vite frontend, TanStack Virtual, the Sodium theme
@@ -125,6 +131,7 @@ sub-project 3 is the tagger (writing, Quick Tag, multi-source metadata fetch).
 - Shell foundation — a Tauri window browsing a real library, off-thread so a cold SMB mount
   cannot freeze it, breadcrumb and back/forward history
 - Virtualized list — windowed IPC and virtualized rendering, so folder size stops mattering
+- Cover art — embedded artwork per row at three sizes, rasterised in Rust and cached by content
 
 **Next**
 
