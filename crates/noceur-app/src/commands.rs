@@ -1,6 +1,6 @@
 //! Tauri commands. Every one that touches the filesystem runs off-thread.
 
-use crate::dto::{DirListing, ListRequest, ProbeProgress, RowWindow, RowsRequest, Segment};
+use crate::dto::{DirListing, ListRequest, Order, ProbeProgress, RowWindow, RowsRequest, Segment};
 use crate::format;
 use crate::state::AppState;
 use noceur_fsmodel::path::simplify;
@@ -50,9 +50,13 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
         let dir_id = noceur_index::scan_dir(&db, volume_id, &path).map_err(|e| e.to_string())?;
         let scan_ms = started.elapsed().as_millis() as u64;
 
-        let total = noceur_index::count(&db, dir_id, options(audio_only, 0, FIRST_WINDOW))
-            .map_err(|e| e.to_string())?;
-        let first = window(&db, dir_id, audio_only, 0, FIRST_WINDOW).map_err(|e| e.to_string())?;
+        let total = noceur_index::count(
+            &db,
+            dir_id,
+            options(&req.order, audio_only, 0, FIRST_WINDOW)?,
+        )
+        .map_err(|e| e.to_string())?;
+        let first = window(&db, dir_id, &req.order, audio_only, 0, FIRST_WINDOW)?;
 
         let shown = simplify(&path);
         Ok(DirListing {
@@ -107,10 +111,11 @@ pub async fn list_rows(state: State<'_, AppState>, req: RowsRequest) -> Result<R
     let offset = req.offset.max(0);
     let limit = req.limit.clamp(0, MAX_LIMIT);
     let (dir_id, audio_only) = (req.dir_id, req.audio_only);
+    let order = req.order.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
         let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
-        window(&db, dir_id, audio_only, offset, limit).map_err(|e| e.to_string())
+        window(&db, dir_id, &order, audio_only, offset, limit)
     })
     .await
     .map_err(|e| format!("window task failed: {e}"))?
@@ -118,25 +123,44 @@ pub async fn list_rows(state: State<'_, AppState>, req: RowsRequest) -> Result<R
 
 /// The one place list options are built, so `open_dir` and `list_rows` cannot
 /// drift into cutting windows from differently ordered lists.
-fn options(audio_only: bool, offset: i64, limit: i64) -> ListOptions {
-    ListOptions {
-        sort: SortColumn::Name,
-        desc: false,
+///
+/// An unrecognised column name is an error rather than a silent fall back to
+/// name order: a frontend asking for a column that does not exist is a bug, and
+/// a list that quietly ignores the header you clicked is worse than one that
+/// says so.
+fn options(
+    order: &Order,
+    audio_only: bool,
+    offset: i64,
+    limit: i64,
+) -> Result<ListOptions, String> {
+    let sort = match order.sort.as_deref() {
+        None | Some("") => SortColumn::Name,
+        Some(name) => {
+            SortColumn::parse(name).ok_or_else(|| format!("unknown sort column: {name}"))?
+        }
+    };
+
+    Ok(ListOptions {
+        sort,
+        desc: order.desc,
         audio_only,
         offset,
         limit,
-    }
+    })
 }
 
 /// Reads and formats one window of rows.
 fn window(
     db: &Db,
     dir_id: i64,
+    order: &Order,
     audio_only: bool,
     offset: i64,
     limit: i64,
-) -> Result<RowWindow, IndexError> {
-    let rows = list(db, dir_id, options(audio_only, offset, limit))?;
+) -> Result<RowWindow, String> {
+    let rows = list(db, dir_id, options(order, audio_only, offset, limit)?)
+        .map_err(|e: IndexError| e.to_string())?;
     Ok(RowWindow {
         offset,
         rows: rows
@@ -167,6 +191,7 @@ pub async fn subdirs(path: String) -> Result<Vec<Segment>, String> {
             .entries
             .iter()
             .filter(|e| e.kind == EntryKind::Directory)
+            .filter(|e| !is_hidden(&Path::new(&path).join(&e.name)))
             .map(|e| Segment {
                 label: e.name.clone(),
                 path: Path::new(&path)
@@ -181,6 +206,31 @@ pub async fn subdirs(path: String) -> Result<Vec<Segment>, String> {
     })
     .await
     .map_err(|e| format!("subdirectory task failed: {e}"))
+}
+
+/// Whether the shell would keep this out of sight.
+///
+/// Tested by attribute rather than by name, so `$RECYCLE.BIN` and
+/// `System Volume Information` are excluded for the reason Explorer excludes
+/// them — they are hidden system directories — and so is anything else that is,
+/// on every drive, in every language, without a list to maintain.
+#[cfg(windows)]
+fn is_hidden(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const HIDDEN: u32 = 0x2;
+    const SYSTEM: u32 = 0x4;
+
+    std::fs::metadata(path)
+        .map(|m| m.file_attributes() & (HIDDEN | SYSTEM) != 0)
+        .unwrap_or(false)
+}
+
+/// Dotfiles are the closest equivalent where there are no file attributes.
+#[cfg(not(windows))]
+fn is_hidden(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with('.'))
 }
 
 /// The drives the tree is rooted at.

@@ -62,26 +62,60 @@ export type DirListing = {
   scanMs: number;
 };
 
-/** Scans, probes and counts a directory, returning its first window of rows. */
-export function openDir(path: string, audioOnly = false): Promise<DirListing> {
-  return invoke<DirListing>("open_dir", { req: { path, audioOnly } });
+/** Columns the list can be sorted by. Must match `SortColumn::as_str` in Rust. */
+export type SortColumn =
+  | "name"
+  | "bpm"
+  | "key"
+  | "duration"
+  | "artist"
+  | "title"
+  | "album"
+  | "size"
+  | "modified";
+
+/**
+ * How a listing is ordered.
+ *
+ * Sorting happens in SQLite, so the order is globally correct across a 40k-file
+ * folder rather than correct only across the rows that happen to be loaded. The
+ * same order must be sent when opening a directory and when reading windows of
+ * it: a window cut in a different order than the listing it belongs to shows
+ * duplicated and missing rows rather than an error.
+ */
+export type Order = { sort: SortColumn; desc: boolean };
+
+/**
+ * Scans and counts a directory, returning its first window of rows.
+ *
+ * Does not read tags — see `probeBatch`, which fills those in afterwards.
+ */
+export function openDir(
+  path: string,
+  order: Order,
+  audioOnly = false,
+): Promise<DirListing> {
+  return invoke<DirListing>("open_dir", {
+    req: { path, audioOnly, sort: order.sort, desc: order.desc },
+  });
 }
 
 /**
  * Reads one window of an already-opened directory.
  *
- * `audioOnly` must match the value `openDir` was called with — the backend cuts
- * the window from the filtered list, so a mismatch silently returns rows from a
- * different list than the one on screen.
+ * `order` and `audioOnly` must match the values `openDir` was called with — the
+ * backend cuts the window from the ordered, filtered list, so a mismatch
+ * silently returns rows from a different list than the one on screen.
  */
 export function listRows(
   dirId: number,
   offset: number,
   limit: number,
+  order: Order,
   audioOnly = false,
 ): Promise<RowWindow> {
   return invoke<RowWindow>("list_rows", {
-    req: { dirId, offset, limit, audioOnly },
+    req: { dirId, offset, limit, audioOnly, sort: order.sort, desc: order.desc },
   });
 }
 

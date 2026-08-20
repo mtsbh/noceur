@@ -387,3 +387,64 @@ body.resizing * {
 .ticon.blank {
   visibility: hidden;
 }
+
+/* Sortable column headings. The whole cell is the target, not just the word. */
+.hdr .col {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+}
+.hdr .col.num {
+  justify-content: flex-end;
+}
+.hdr .col:hover {
+  color: var(--fg2);
+}
+.hdr .col.sorted {
+  color: var(--fg);
+}
+.arrow {
+  color: var(--acc);
+  font-size: 8px;
+  line-height: 1;
+}
+
+/* Scrollbars.
+   WebView2 ships Chromium's default light scrollbars, which sit on a dark
+   interface like a strip of tape. These are drawn in the same greys as the
+   hairlines: a floating thumb with no track, brightening on hover. The
+   transparent border plus padding-box clip is what makes the thumb slimmer than
+   the gutter it moves in, so it never crowds the last column. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair2) transparent;
+}
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(238, 234, 228, 0.15);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(238, 234, 228, 0.3);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:active {
+  background: rgba(238, 234, 228, 0.42);
+  background-clip: padding-box;
+}
+/* Chromium draws stepper buttons at the ends by default; they have no place
+   here and cannot be styled into anything that does. */
+::-webkit-scrollbar-button {
+  display: none;
+}

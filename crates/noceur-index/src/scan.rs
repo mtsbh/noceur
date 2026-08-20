@@ -140,7 +140,7 @@ pub const PROBE_BATCH: usize = 32;
 /// Returns 0 when there is nothing left to do, which is the caller's cue to stop.
 pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexError> {
     let mut stmt = db.conn().prepare(
-        "SELECT f.id, f.name, d.path_lower
+        "SELECT f.id, f.name, d.path_lower, f.mtime
          FROM file f
          JOIN dir d ON d.id = f.dir_id
          LEFT JOIN content_tag ct ON ct.content_id = f.content_id
@@ -150,10 +150,10 @@ pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexErr
            AND (f.content_id IS NULL OR ct.read_at IS NULL OR f.mtime > ct.read_at)
          LIMIT ?3",
     )?;
-    let targets: Vec<(i64, String, String)> = stmt
+    let targets: Vec<(i64, String, String, i64)> = stmt
         .query_map(
             params![dir_id, EntryKind::Audio.group() as i64, limit as i64],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )?
         .filter_map(Result::ok)
         .collect();
@@ -161,7 +161,7 @@ pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexErr
 
     let attempted = targets.len();
 
-    for (file_id, name, dir_path) in targets {
+    for (file_id, name, dir_path, file_mtime) in targets {
         let full = Path::new(&dir_path).join(&name);
 
         let quick = match quickkey::compute(&full) {
@@ -231,7 +231,15 @@ pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexErr
                 meta.key_tag,
                 meta.key_norm.map(|v| v as i64),
                 meta.has_artwork as i64,
-                now(),
+                // Never behind the mtime we just read the file at.
+                //
+                // Staleness is `f.mtime > ct.read_at`. Recording only the wall
+                // clock leaves a file whose mtime is in the future — a bad clock,
+                // an SMB share, a copy that preserved timestamps — permanently
+                // stale, and a caller that probes until nothing is stale would
+                // re-read it forever. Recording the mtime we actually read says
+                // what is true: the tags are current as of that stamp.
+                now().max(file_mtime),
             ],
         )?;
 
@@ -571,6 +579,31 @@ mod tests {
         assert_eq!(
             artist, "New Artist",
             "a file with a newer mtime must be reprobed and pick up its new tags"
+        );
+    }
+
+    /// Probing must reach a fixed point even when a file's mtime is ahead of the
+    /// clock, which happens with bad clocks, SMB shares and timestamp-preserving
+    /// copies. `probe_dir` loops until nothing is stale, so a file that is
+    /// permanently "newer than its last read" would spin forever.
+    #[test]
+    fn a_file_with_a_future_mtime_stops_being_stale_once_probed() {
+        let (db, d, vol) = setup();
+        let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+
+        db.conn()
+            .execute(
+                "UPDATE file SET mtime = ?1 WHERE name = 'a.wav'",
+                params![now() + 1_000_000],
+            )
+            .unwrap();
+
+        probe_dir(&db, dir_id).unwrap();
+
+        assert_eq!(
+            probe_batch(&db, dir_id, 32).unwrap(),
+            0,
+            "nothing should still be stale after a full probe"
         );
     }
 

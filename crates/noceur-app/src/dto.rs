@@ -42,6 +42,25 @@ pub struct ListRequest {
     pub path: String,
     #[serde(default)]
     pub audio_only: bool,
+    #[serde(flatten)]
+    pub order: Order,
+}
+
+/// How a listing is ordered.
+///
+/// Shared by the request that opens a directory and the requests that read
+/// windows of it, because a window cut in a different order than the listing it
+/// belongs to shows duplicated and missing rows rather than an error.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Order {
+    /// Wire name of the sort column. Unrecognised values are rejected rather than
+    /// quietly falling back, so a frontend asking for a column that does not
+    /// exist is a visible failure.
+    #[serde(default)]
+    pub sort: Option<String>,
+    #[serde(default)]
+    pub desc: bool,
 }
 
 /// A request for one window of an already-opened directory.
@@ -55,6 +74,8 @@ pub struct RowsRequest {
     /// will be cut from a differently-filtered list than the one being scrolled.
     #[serde(default)]
     pub audio_only: bool,
+    #[serde(flatten)]
+    pub order: Order,
 }
 
 /// A window of rows, carrying the offset it was cut from.

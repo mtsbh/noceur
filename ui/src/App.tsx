@@ -8,6 +8,8 @@ import {
   thumbUrl,
   probeBatch,
   type ArtSize,
+  type Order,
+  type SortColumn,
   type DirListing,
   type RowDisplay,
 } from "./api";
@@ -39,6 +41,37 @@ const ART_KEY = "noceur.artSize";
 function storedArtSize(): ArtSize {
   const v = localStorage.getItem(ART_KEY);
   return v === "medium" || v === "large" || v === "small" ? v : "small";
+}
+
+/**
+ * The sortable columns, in display order.
+ *
+ * The art column is not here: it has no heading and nothing to sort by, but it
+ * still occupies the first cell of the grid, so the header renders an empty span
+ * before this list to keep the template lined up with the rows.
+ */
+const COLUMNS: { key: SortColumn; label: string; cls: string }[] = [
+  { key: "name", label: "Name", cls: "" },
+  { key: "bpm", label: "BPM", cls: "num" },
+  { key: "key", label: "Key", cls: "" },
+  { key: "duration", label: "Time", cls: "num" },
+  { key: "artist", label: "Artist", cls: "" },
+  { key: "size", label: "Size", cls: "num" },
+];
+
+const SORT_KEY = "noceur.sort";
+
+function storedOrder(): Order {
+  try {
+    const raw = localStorage.getItem(SORT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Order;
+      if (COLUMNS.some((c) => c.key === parsed.sort)) return parsed;
+    }
+  } catch {
+    // A corrupt preference is not worth failing over; fall through to the default.
+  }
+  return { sort: "name", desc: false };
 }
 
 const TREE_KEY = "noceur.treeWidth";
@@ -91,6 +124,23 @@ export default function App() {
   const [probed, setProbed] = createSignal(0);
   const [artSize, setArtSize] = createSignal<ArtSize>(storedArtSize());
   const [treeWidth, setTreeWidth] = createSignal(storedTreeWidth());
+  const [order, setOrder] = createSignal<Order>(storedOrder());
+
+  /**
+   * Clicking a header sorts by it; clicking the one already active reverses it.
+   *
+   * Directories stay grouped first either way — `desc` reverses the sort column,
+   * not the grouping, so reversing by size does not bury the folders at the
+   * bottom of the listing.
+   */
+  function chooseSort(column: SortColumn) {
+    const next: Order =
+      order().sort === column
+        ? { sort: column, desc: !order().desc }
+        : { sort: column, desc: false };
+    setOrder(next);
+    localStorage.setItem(SORT_KEY, JSON.stringify(next));
+  }
 
   function chooseArtSize(size: ArtSize) {
     setArtSize(size);
@@ -125,10 +175,16 @@ export default function App() {
   }
 
   const current = () => history()[cursor()];
-  // The fetcher must be wrapped: Solid calls it as `fetcher(source, info)`, and
-  // passing `openDir` directly would hand the info object to its `audioOnly`
-  // parameter, silently filtering out every directory.
-  const [listing] = createResource<DirListing, string>(current, (p) => openDir(p));
+  // Keyed on the path only. Changing the sort must not re-open the directory:
+  // opening re-enumerates it, and the order is a property of the read, not of
+  // the folder. A sort change clears the cached windows instead.
+  //
+  // The fetcher is wrapped rather than passed directly, because Solid calls it
+  // as `fetcher(source, info)` and would hand that info object to openDir's
+  // second parameter.
+  const [listing] = createResource<DirListing, string>(current, (p) =>
+    openDir(p, order()),
+  );
 
   /** Row count of the whole listing — what the virtualizer sizes itself against. */
   const total = () => (listing.error ? 0 : (listing()?.total ?? 0));
@@ -189,17 +245,32 @@ export default function App() {
     const items = virtualizer.getVirtualItems();
     if (items.length === 0) return;
 
+    const asked = order();
     const from = Math.floor(items[0].index / PAGE);
     const to = Math.floor(items[items.length - 1].index / PAGE);
     for (let p = from; p <= to; p++) {
-      listRows(dirId, p * PAGE, PAGE)
+      listRows(dirId, p * PAGE, PAGE, asked)
         .then((w) => {
-          if (listing()?.dirId !== dirId) return;
+          if (listing()?.dirId !== dirId || order() !== asked) return;
           setPages(Math.floor(w.offset / PAGE), w.rows);
         })
         .catch(() => {});
     }
   }
+
+  // Re-sorting reorders every row, so every cached window is wrong. Deferred so
+  // it does not fire on the initial render, which already has the right order.
+  createEffect(
+    on(
+      order,
+      () => {
+        setPages(reconcile({}));
+        inflight = new Set();
+        if (scrollEl) scrollEl.scrollTop = 0;
+      },
+      { defer: true },
+    ),
+  );
 
   /**
    * Reads the folder's tags in the background, a batch at a time.
@@ -246,12 +317,14 @@ export default function App() {
     if (pages[page] !== undefined || inflight.has(page)) return;
     inflight.add(page);
     const dirId = l.dirId;
+    const asked = order();
 
-    listRows(dirId, page * PAGE, PAGE)
+    listRows(dirId, page * PAGE, PAGE, asked)
       .then((w) => {
-        // A window that lands after we have navigated belongs to a listing that
-        // is no longer on screen; filing it would show another folder's rows.
-        if (listing()?.dirId !== dirId) return;
+        // A window that lands after we have navigated, or after the sort
+        // changed, belongs to a listing that is no longer on screen; filing it
+        // would show another folder's rows, or these rows in the wrong places.
+        if (listing()?.dirId !== dirId || order() !== asked) return;
         setPages(Math.floor(w.offset / PAGE), w.rows);
         setWindowError("");
       })
@@ -391,12 +464,20 @@ export default function App() {
         <div class="pane">
       <div class="hdr">
         <span class="art" />
-        <span>Name</span>
-        <span class="num">BPM</span>
-        <span>Key</span>
-        <span class="num">Time</span>
-        <span>Artist</span>
-        <span class="num">Size</span>
+        <For each={COLUMNS}>
+          {(col) => (
+            <span
+              class={`col ${col.cls} ${order().sort === col.key ? "sorted" : ""}`}
+              onClick={() => chooseSort(col.key)}
+              title={`Sort by ${col.label.toLowerCase()}`}
+            >
+              {col.label}
+              <Show when={order().sort === col.key}>
+                <span class="arrow">{order().desc ? "▾" : "▴"}</span>
+              </Show>
+            </span>
+          )}
+        </For>
       </div>
 
       {/* The scroll container is the virtualizer's measuring stick, so it is

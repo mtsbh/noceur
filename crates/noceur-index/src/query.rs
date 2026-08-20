@@ -18,6 +18,44 @@ pub enum SortColumn {
 }
 
 impl SortColumn {
+    /// Every column, in the order the list shows them.
+    pub fn all() -> [SortColumn; 9] {
+        [
+            SortColumn::Name,
+            SortColumn::Bpm,
+            SortColumn::Key,
+            SortColumn::Duration,
+            SortColumn::Artist,
+            SortColumn::Title,
+            SortColumn::Album,
+            SortColumn::Size,
+            SortColumn::Modified,
+        ]
+    }
+
+    /// The name this column travels under on the wire.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SortColumn::Name => "name",
+            SortColumn::Size => "size",
+            SortColumn::Modified => "modified",
+            SortColumn::Bpm => "bpm",
+            SortColumn::Key => "key",
+            SortColumn::Duration => "duration",
+            SortColumn::Artist => "artist",
+            SortColumn::Title => "title",
+            SortColumn::Album => "album",
+        }
+    }
+
+    /// Parses a wire name back, or `None` for anything unrecognised.
+    ///
+    /// The caller decides what to do with `None`; falling back to `Name` silently
+    /// would hide a frontend that is asking for a column that does not exist.
+    pub fn parse(s: &str) -> Option<Self> {
+        SortColumn::all().into_iter().find(|c| c.as_str() == s)
+    }
+
     /// SQL expression to sort by. Tag columns are NULL for directories, which
     /// SQLite orders first — acceptable because the group clause runs first.
     fn sql(self) -> &'static str {
@@ -287,6 +325,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(names(&rows), ["a.wav", "b.wav", "c.wav"]);
+    }
+
+    /// The header sends a column name back over the wire; if the two spellings
+    /// drift, clicking a column silently sorts by something else.
+    #[test]
+    fn every_sort_column_round_trips_through_its_wire_name() {
+        for column in SortColumn::all() {
+            assert_eq!(SortColumn::parse(column.as_str()), Some(column));
+        }
+        assert_eq!(SortColumn::parse("loudness"), None);
+    }
+
+    #[test]
+    fn sort_column_names_are_distinct() {
+        let mut names: Vec<&str> = SortColumn::all().iter().map(|c| c.as_str()).collect();
+        names.sort_unstable();
+        let before = names.len();
+        names.dedup();
+        assert_eq!(names.len(), before, "two columns share a wire name");
     }
 
     #[test]
