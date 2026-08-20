@@ -4,6 +4,7 @@ use crate::dto::{DirListing, ListRequest, RowWindow, RowsRequest, Segment};
 use crate::format;
 use crate::state::AppState;
 use noceur_fsmodel::path::simplify;
+use noceur_fsmodel::{natural_cmp, EntryKind};
 use noceur_index::{list, volume, Db, IndexError, ListOptions, SortColumn};
 use noceur_tags::KeyNotation;
 use std::path::{Path, PathBuf};
@@ -112,6 +113,77 @@ fn window(
             .map(|r| format::display(r, KeyNotation::Camelot))
             .collect(),
     })
+}
+
+/// Lists the subdirectories of a path, for one level of the folder tree.
+///
+/// Reads the filesystem directly rather than going through the index. The tree
+/// expands nodes the user is merely looking at, and scanning each one into the
+/// index would write a row for every folder they happened to unfold.
+///
+/// A directory that cannot be read yields an empty list rather than an error: a
+/// permission-denied system folder should render as an empty branch, not stop
+/// the tree.
+#[tauri::command]
+pub async fn subdirs(path: String) -> Result<Vec<Segment>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let listing = match noceur_fsmodel::read_dir(Path::new(&path)) {
+            Ok(l) => l,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut dirs: Vec<Segment> = listing
+            .entries
+            .iter()
+            .filter(|e| e.kind == EntryKind::Directory)
+            .map(|e| Segment {
+                label: e.name.clone(),
+                path: Path::new(&path)
+                    .join(&e.name)
+                    .to_string_lossy()
+                    .into_owned(),
+            })
+            .collect();
+
+        dirs.sort_by(|a, b| natural_cmp(&a.label, &b.label));
+        dirs
+    })
+    .await
+    .map_err(|e| format!("subdirectory task failed: {e}"))
+}
+
+/// The drives the tree is rooted at.
+///
+/// Roots rather than a single home folder, because the library genuinely spans
+/// volumes — local disks, the party SSD, and the `Z:` share — and the whole point
+/// of the tree is moving between them.
+#[tauri::command]
+pub async fn roots() -> Result<Vec<Segment>, String> {
+    tauri::async_runtime::spawn_blocking(volume_roots)
+        .await
+        .map_err(|e| format!("root task failed: {e}"))
+}
+
+#[cfg(windows)]
+fn volume_roots() -> Vec<Segment> {
+    // A drive letter that answers `read_dir` is mounted and readable. Probing
+    // this way avoids a Win32 call and skips empty card readers for free.
+    (b'A'..=b'Z')
+        .map(|letter| format!("{}:\\", letter as char))
+        .filter(|root| std::fs::read_dir(root).is_ok())
+        .map(|root| Segment {
+            label: root.trim_end_matches('\\').to_string(),
+            path: root,
+        })
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn volume_roots() -> Vec<Segment> {
+    vec![Segment {
+        label: "/".into(),
+        path: "/".into(),
+    }]
 }
 
 /// Resolves the parent of a path, or `None` at a root.

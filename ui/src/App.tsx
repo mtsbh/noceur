@@ -10,6 +10,7 @@ import {
   type DirListing,
   type RowDisplay,
 } from "./api";
+import Tree from "./Tree";
 
 /** Where the browser opens. Adjust freely — pinned folders arrive in a later milestone. */
 const HOME = "E:\\music";
@@ -267,6 +268,10 @@ export default function App() {
         </div>
       </div>
 
+      <div class="body">
+        <Tree current={current()} onNavigate={navigate} />
+
+        <div class="pane">
       <div class="hdr">
         <span class="art" />
         <span>Name</span>
@@ -348,6 +353,8 @@ export default function App() {
             </Show>
           </Show>
         </Show>
+      </div>
+        </div>
       </div>
 
       <div class="status">

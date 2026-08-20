@@ -72,6 +72,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::open_dir,
+            commands::subdirs,
+            commands::roots,
             commands::list_rows,
             commands::parent_of
         ])

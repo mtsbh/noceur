@@ -76,3 +76,18 @@ export function listRows(
 export function parentOf(path: string): Promise<string | null> {
   return invoke<string | null>("parent_of", { path });
 }
+
+/**
+ * Subdirectories of one path, for a single level of the tree.
+ *
+ * Reads the filesystem rather than the index, so unfolding a branch does not
+ * write an index row for every folder that was merely looked at.
+ */
+export function subdirs(path: string): Promise<Segment[]> {
+  return invoke<Segment[]>("subdirs", { path });
+}
+
+/** The drives the tree is rooted at. */
+export function roots(): Promise<Segment[]> {
+  return invoke<Segment[]>("roots");
+}

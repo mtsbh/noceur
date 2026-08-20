@@ -227,21 +227,16 @@ body {
   visibility: hidden;
 }
 
-/* A directory has no cover, so its glyph moves into the art column and scales
-   with it. Left beside the name it stayed 9px wide while the row grew to 92,
-   which read as a broken image rather than as a folder. */
+/* A directory shows the shell's own folder icon, which arrives through the same
+   URL as cover art. No placeholder tint behind it: the icon has its own shape
+   and transparency, and a square backing would box it in. */
 .row.dir .art {
   background: none;
-  display: grid;
-  place-items: center;
 }
-.row.dir .art::after {
-  content: "";
-  width: 68%;
-  height: 52%;
-  border-radius: 2px 2px 1px 1px;
-  background: var(--acc-fill);
-  border: 1px solid var(--acc-line);
+/* Icons are drawn to fit rather than cropped — a folder icon is not square and
+   cover-art cropping would clip its corners. */
+.row.dir .art img {
+  object-fit: contain;
 }
 
 .grow {
@@ -271,4 +266,83 @@ body {
 .sizebtn.on {
   color: var(--acc);
   border-color: var(--acc);
+}
+
+/* Body: tree beside the list. The inspector joins them on the right in a later
+   milestone, which is why this is a row rather than the list simply having a
+   left margin. */
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tree {
+  width: 250px;
+  flex: none;
+  overflow: auto;
+  border-right: 1px solid var(--hair);
+  padding: 6px 0;
+  background: var(--bg);
+}
+.tnode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding-right: 8px;
+  cursor: pointer;
+  color: var(--fg2);
+  white-space: nowrap;
+}
+.tnode:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+/* The folder the list is showing. The tree and the list must never disagree
+   about where you are. */
+.tnode.on {
+  color: var(--fg);
+  background: rgba(238, 234, 228, 0.045);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+.tlabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The twisty is a caret drawn in CSS: a chevron rotated a quarter turn when the
+   branch is open. Its hit area is deliberately wider than the mark. */
+.twisty {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  position: relative;
+}
+.twisty::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--fg3);
+  border-bottom: 1.5px solid var(--fg3);
+  transform: rotate(-45deg);
+  transition: transform 90ms ease;
+}
+.twisty.open::before {
+  transform: rotate(45deg);
+}
+.twisty.leaf::before {
+  display: none;
+}
+.tnode:hover .twisty::before {
+  border-color: var(--fg);
 }
