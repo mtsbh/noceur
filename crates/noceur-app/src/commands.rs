@@ -532,3 +532,70 @@ pub async fn path_of(state: State<'_, AppState>, file_id: i64) -> Result<String,
         .map(|f| f.path.display().to_string())
         .ok_or_else(|| "no such row".into())
 }
+
+/// Starts a native drag of the given rows.
+///
+/// This is what makes a track draggable into Rekordbox, Explorer, or anything
+/// else that accepts files: the payload is a real `CF_HDROP`, offered from the
+/// window's own HWND, so the receiving application sees a file drop and not a
+/// web page's idea of one.
+///
+/// `DoDragDrop` runs a modal loop on the thread owning the window, so the drag
+/// is scheduled onto the main thread and this command returns immediately. The
+/// result of the drop is reported through the `drag-finished` event rather than
+/// as a return value — the drag outlives the call by design.
+#[tauri::command]
+pub async fn start_drag(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    file_ids: Vec<i64>,
+) -> Result<(), String> {
+    let db = state.db.clone();
+    let paths = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        let mut out = Vec::new();
+        for id in file_ids {
+            if let Some(found) = noceur_index::thumb::locate(&db, id).map_err(|e| e.to_string())? {
+                out.push(found.path);
+            }
+        }
+        Ok::<_, String>(out)
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    drag_on_main_thread(app, paths)
+}
+
+#[cfg(windows)]
+fn drag_on_main_thread(app: tauri::AppHandle, paths: Vec<PathBuf>) -> Result<(), String> {
+    use tauri::{Emitter, Manager};
+
+    let hwnd = {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "no main window".to_string())?;
+        window.hwnd().map_err(|e| e.to_string())?.0 as isize
+    };
+
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let app = handle;
+        let outcome = match crate::dragdrop::drag_files(hwnd, &paths) {
+            Ok(dropped) => dropped.as_str().to_string(),
+            Err(e) => format!("error: {e}"),
+        };
+        // The listing may need re-reading: a move takes the files out of it.
+        let _ = app.emit("drag-finished", outcome);
+    })
+    .map_err(|e| format!("cannot start the drag: {e}"))
+}
+
+#[cfg(not(windows))]
+fn drag_on_main_thread(_app: tauri::AppHandle, _paths: Vec<PathBuf>) -> Result<(), String> {
+    Err("native drag is only implemented on Windows".into())
+}

@@ -805,3 +805,9 @@ body.resizing * {
   background: rgba(238, 234, 228, 0.05);
   color: var(--fg);
 }
+
+/* The row shift-selection extends from. Only marked when more than one row is
+   selected, since with a single selection it is the selection. */
+.row.anchor {
+  box-shadow: inset 2px 0 0 var(--acc), inset 0 0 0 1px var(--hair2);
+}

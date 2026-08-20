@@ -7,6 +7,7 @@
 
 mod art;
 mod commands;
+mod dragdrop;
 mod dto;
 mod format;
 mod state;
@@ -87,6 +88,7 @@ fn main() {
             commands::transport_state,
             commands::reveal,
             commands::path_of,
+            commands::start_drag,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

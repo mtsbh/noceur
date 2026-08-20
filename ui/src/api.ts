@@ -225,3 +225,15 @@ export function reveal(fileId: number): Promise<void> {
 export function pathOf(fileId: number): Promise<string> {
   return invoke<string>("path_of", { fileId });
 }
+
+/**
+ * Starts a native drag of the given rows.
+ *
+ * The payload is a real `CF_HDROP` offered from the window's own handle, so
+ * Rekordbox, Explorer and anything else that accepts files sees a file drop
+ * rather than a web page's idea of one. Returns as soon as the drag begins; the
+ * drop outcome arrives on the `drag-finished` event.
+ */
+export function startDrag(fileIds: number[]): Promise<void> {
+  return invoke<void>("start_drag", { fileIds });
+}

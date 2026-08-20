@@ -8,6 +8,7 @@ import {
   Show,
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { listen } from "@tauri-apps/api/event";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import {
   openDir,
@@ -19,6 +20,7 @@ import {
   transportCmd,
   reveal,
   pathOf,
+  startDrag,
   type Transport as TransportState,
   type ArtSize,
   type Order,
@@ -137,6 +139,57 @@ export default function App() {
   const [history, setHistory] = createSignal<string[]>([home()]);
   const [cursor, setCursor] = createSignal(0);
   const [selected, setSelected] = createSignal<number | null>(null);
+  /**
+   * Every selected row, by file id.
+   *
+   * Separate from `selected`, which is the anchor the keyboard and the range
+   * shortcut work from. A set rather than a list because the only questions
+   * asked of it are "is this row in it" and "what is in it".
+   */
+  const [selection, setSelection] = createSignal<Set<number>>(new Set());
+
+  /** Ctrl adds and removes, shift extends from the anchor, a plain click replaces. */
+  function selectRow(row: RowDisplay, e: MouseEvent) {
+    const total = listing()?.total ?? 0;
+
+    if (e.ctrlKey || e.metaKey) {
+      const next = new Set(selection());
+      if (next.has(row.fileId)) next.delete(row.fileId);
+      else next.add(row.fileId);
+      setSelection(next);
+      setSelected(row.fileId);
+      return;
+    }
+
+    if (e.shiftKey && selected() !== null) {
+      // Both ends have to be on screen for the range to be known — the rows
+      // between them may not be loaded, and inventing ids would select the
+      // wrong files.
+      const from = indexOf(selected()!);
+      const to = indexOf(row.fileId);
+      if (from >= 0 && to >= 0) {
+        const next = new Set(selection());
+        for (let i = Math.min(from, to); i <= Math.max(from, to) && i < total; i++) {
+          const at = rowAt(i);
+          if (at) next.add(at.fileId);
+        }
+        setSelection(next);
+        return;
+      }
+    }
+
+    setSelection(new Set([row.fileId]));
+    setSelected(row.fileId);
+  }
+
+  /** Position of a row in the listing, or -1 if its window is not loaded. */
+  function indexOf(fileId: number): number {
+    for (const [page, rows] of Object.entries(pages)) {
+      const at = rows.findIndex((r) => r.fileId === fileId);
+      if (at >= 0) return Number(page) * PAGE + at;
+    }
+    return -1;
+  }
   const [windowError, setWindowError] = createSignal("");
   // Files tag-read so far in this folder; 0 once the folder is fully probed.
   const [probed, setProbed] = createSignal(0);
@@ -262,6 +315,50 @@ export default function App() {
     play(row.fileId).then(setTransport).catch(() => {});
   }
 
+  /**
+   * Begins a native drag once the pointer has actually moved.
+   *
+   * A drag has to be told apart from a click, and the threshold is what does it:
+   * without it, every click on a row would hand the mouse to the shell's modal
+   * drag loop and selecting a track would become impossible.
+   *
+   * Everything selected is dragged, so dragging one of several selected rows
+   * takes the whole selection — as Explorer does.
+   */
+  function startRowDrag(e: PointerEvent, row: RowDisplay) {
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    const move = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) < 5 && Math.abs(ev.clientY - startY) < 5) {
+        return;
+      }
+      stop();
+      const ids = selection().has(row.fileId) ? [...selection()] : [row.fileId];
+      startDrag(ids).catch(() => {});
+    };
+
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
+
+  // A move drops rows out of this folder, so the listing is re-read once the
+  // shell says the drag is over.
+  createEffect(() => {
+    const unlisten = listen<string>("drag-finished", (event) => {
+      if (event.payload === "moved") refetchListing();
+    });
+    onCleanup(() => {
+      unlisten.then((off) => off()).catch(() => {});
+    });
+  });
+
   // The row menu, and where it was opened.
   const [menu, setMenu] = createSignal<{
     row: RowDisplay;
@@ -359,8 +456,9 @@ export default function App() {
   // The fetcher is wrapped rather than passed directly, because Solid calls it
   // as `fetcher(source, info)` and would hand that info object to openDir's
   // second parameter.
-  const [listing] = createResource<DirListing, string>(current, (p) =>
-    openDir(p, order()),
+  const [listing, { refetch: refetchListing }] = createResource<DirListing, string>(
+    current,
+    (p) => openDir(p, order()),
   );
 
   /** Row count of the whole listing — what the virtualizer sizes itself against. */
@@ -560,7 +658,7 @@ export default function App() {
   }
 
   function onRow(row: RowDisplay) {
-    setSelected(row.fileId);
+    // Selection is handled by the pointer handler; this is the open action.
     if (row.kind === 0) {
       const sep = current().endsWith("\\") || current().endsWith("/") ? "" : "\\";
       navigate(`${current()}${sep}${row.name}`);
@@ -570,7 +668,11 @@ export default function App() {
   function rowClass(row: RowDisplay | undefined): string {
     if (!row) return "row pending";
     const kind = row.kind === 0 ? " dir" : row.kind === 2 ? " other" : "";
-    return "row" + kind + (selected() === row.fileId ? " sel" : "");
+    const chosen = selection().has(row.fileId) ? " sel" : "";
+    // The anchor is marked separately: with several rows selected it is the one
+    // shift extends from, and it would otherwise be indistinguishable.
+    const anchor = selected() === row.fileId && selection().size > 1 ? " anchor" : "";
+    return "row" + kind + chosen + anchor;
   }
 
   return (
@@ -713,6 +815,12 @@ export default function App() {
                     return (
                       <div
                         class={rowClass(row())}
+                        onPointerDown={(e) => {
+                          const r = row();
+                          if (!r) return;
+                          selectRow(r, e);
+                          startRowDrag(e, r);
+                        }}
                         style={{
                           height: `${item.size}px`,
                           transform: `translateY(${item.start}px)`,
