@@ -237,3 +237,26 @@ export function pathOf(fileId: number): Promise<string> {
 export function startDrag(fileIds: number[]): Promise<void> {
   return invoke<void>("start_drag", { fileIds });
 }
+
+/** Copy, move or delete rows through the shell's own file operation. */
+export function fileOp(
+  action: "copy" | "move" | "delete",
+  fileIds: number[],
+  destination?: string,
+): Promise<void> {
+  return invoke<void>("file_op", { action, fileIds, destination });
+}
+
+/** The same, for paths the index has never seen — files dropped in from Explorer. */
+export function fileOpPaths(
+  action: "copy" | "move" | "delete",
+  paths: string[],
+  destination?: string,
+): Promise<void> {
+  return invoke<void>("file_op_paths", { action, paths, destination });
+}
+
+/** Copy or move? Decided the way Explorer decides it: move within a volume, copy across. */
+export function dropEffect(sources: string[], destination: string): Promise<string> {
+  return invoke<string>("drop_effect", { sources, destination });
+}

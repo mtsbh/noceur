@@ -811,3 +811,18 @@ body.resizing * {
 .row.anchor {
   box-shadow: inset 2px 0 0 var(--acc), inset 0 0 0 1px var(--hair2);
 }
+
+.ctxsep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--hair);
+}
+.ctxitem.danger:hover {
+  color: var(--acc);
+}
+
+/* Files being dragged in from outside. A border rather than a wash: the listing
+   underneath still has to be readable to see where they are going. */
+.app.dropping .pane {
+  box-shadow: inset 0 0 0 2px var(--acc-line);
+}

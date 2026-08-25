@@ -599,3 +599,103 @@ fn drag_on_main_thread(app: tauri::AppHandle, paths: Vec<PathBuf>) -> Result<(),
 fn drag_on_main_thread(_app: tauri::AppHandle, _paths: Vec<PathBuf>) -> Result<(), String> {
     Err("native drag is only implemented on Windows".into())
 }
+
+/// Copies, moves or deletes rows through the shell.
+///
+/// Everything the shell does for Explorer it does here: the progress dialog, the
+/// name-collision prompt, elevation where a destination needs it, deletion to the
+/// recycle bin, and the system undo stack — so a mistaken move is Ctrl+Z away
+/// rather than gone.
+#[tauri::command]
+pub async fn file_op(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    action: String,
+    file_ids: Vec<i64>,
+    destination: Option<String>,
+) -> Result<(), String> {
+    let db = state.db.clone();
+    let paths = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        let mut out = Vec::new();
+        for id in file_ids {
+            if let Some(found) = noceur_index::thumb::locate(&db, id).map_err(|e| e.to_string())? {
+                out.push(found.path);
+            }
+        }
+        Ok::<_, String>(out)
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    shell_file_op(app, action, paths, destination.map(PathBuf::from)).await
+}
+
+/// The same operation on paths the index has never seen — files dropped in from
+/// Explorer, which have no row here until they land.
+#[tauri::command]
+pub async fn file_op_paths(
+    app: tauri::AppHandle,
+    action: String,
+    paths: Vec<String>,
+    destination: Option<String>,
+) -> Result<(), String> {
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    shell_file_op(app, action, paths, destination.map(PathBuf::from)).await
+}
+
+/// Decides copy-versus-move for a drop, the way Explorer decides it.
+///
+/// Within a volume a drop moves; across volumes it copies. Anything else would
+/// surprise a user whose hands already know Explorer.
+#[tauri::command]
+pub fn drop_effect(sources: Vec<String>, destination: String) -> String {
+    let dest = PathBuf::from(&destination);
+    let same = sources
+        .first()
+        .map(|s| crate::fileops::same_volume(Path::new(s), &dest))
+        .unwrap_or(false);
+    if same {
+        "move".into()
+    } else {
+        "copy".into()
+    }
+}
+
+#[cfg(windows)]
+async fn shell_file_op(
+    app: tauri::AppHandle,
+    action: String,
+    paths: Vec<PathBuf>,
+    destination: Option<PathBuf>,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let op = crate::fileops::Operation::parse(&action)
+        .ok_or_else(|| format!("unknown file operation: {action}"))?;
+
+    let hwnd = {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "no main window".to_string())?;
+        window.hwnd().map_err(|e| e.to_string())?.0 as isize
+    };
+
+    // Off the UI thread: the shell shows its own modal dialogs and drives its own
+    // message loop, and it must not be the loop this window is drawn from.
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::fileops::run(hwnd, op, &paths, destination.as_deref())
+    })
+    .await
+    .map_err(|e| format!("file operation task failed: {e}"))?
+}
+
+#[cfg(not(windows))]
+async fn shell_file_op(
+    _app: tauri::AppHandle,
+    _action: String,
+    _paths: Vec<PathBuf>,
+    _destination: Option<PathBuf>,
+) -> Result<(), String> {
+    Err("shell file operations are only implemented on Windows".into())
+}

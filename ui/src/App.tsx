@@ -21,6 +21,9 @@ import {
   reveal,
   pathOf,
   startDrag,
+  fileOp,
+  fileOpPaths,
+  dropEffect,
   type Transport as TransportState,
   type ArtSize,
   type Order,
@@ -359,6 +362,57 @@ export default function App() {
     });
   });
 
+  const [dropping, setDropping] = createSignal(false);
+
+  /**
+   * Files dragged in from Explorer.
+   *
+   * The shell decides copy or move the same way Explorer does — move within a
+   * volume, copy across one — and performs it through `IFileOperation`, so the
+   * progress dialog, the name-collision prompt and the undo stack are the ones
+   * the user already knows.
+   */
+  createEffect(() => {
+    const pending = [
+      listen("tauri://drag-enter", () => setDropping(true)),
+      listen("tauri://drag-leave", () => setDropping(false)),
+      listen<{ paths: string[] }>("tauri://drag-drop", async (event) => {
+        setDropping(false);
+        const paths = event.payload?.paths ?? [];
+        const into = current();
+        if (paths.length === 0) return;
+
+        // A folder dropped onto itself would be the shell asked to move files
+        // to where they already are.
+        const fromHere = paths.every(
+          (p) => p.toLowerCase().startsWith(into.toLowerCase() + "\\"),
+        );
+        if (fromHere) return;
+
+        try {
+          const effect = await dropEffect(paths, into);
+          await fileOpPaths(effect === "move" ? "move" : "copy", paths, into);
+          refetchListing();
+        } catch {
+          // The shell reports its own failures in its own dialog.
+        }
+      }),
+    ];
+
+    onCleanup(() => {
+      for (const p of pending) p.then((off) => off()).catch(() => {});
+    });
+  });
+
+  /** Deletes the selection to the recycle bin, through the shell. */
+  function deleteSelection() {
+    const ids = [...selection()];
+    if (ids.length === 0) return;
+    fileOp("delete", ids)
+      .then(() => refetchListing())
+      .catch(() => {});
+  }
+
   // The row menu, and where it was opened.
   const [menu, setMenu] = createSignal<{
     row: RowDisplay;
@@ -422,6 +476,12 @@ export default function App() {
       if (e.key === " " && !typing && !finding()) {
         e.preventDefault();
         transportCmd("toggle").then(setTransport).catch(() => {});
+      }
+
+      // Delete sends the selection to the recycle bin, as it does in Explorer.
+      if (e.key === "Delete" && !typing && !finding()) {
+        e.preventDefault();
+        deleteSelection();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -677,7 +737,7 @@ export default function App() {
 
   return (
     <div
-      class="app"
+      class={`app ${dropping() ? "dropping" : ""}`}
       style={{
         "--row-h": `${metrics(artSize()).row}px`,
         "--art": `${metrics(artSize()).art}px`,
@@ -936,6 +996,16 @@ export default function App() {
             }}
           >
             Copy path
+          </div>
+          <div class="ctxsep" />
+          <div
+            class="ctxitem danger"
+            onClick={() => {
+              deleteSelection();
+              setMenu(null);
+            }}
+          >
+            Delete
           </div>
         </div>
       </Show>
