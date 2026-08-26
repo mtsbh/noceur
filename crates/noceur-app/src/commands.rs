@@ -699,3 +699,62 @@ async fn shell_file_op(
 ) -> Result<(), String> {
     Err("shell file operations are only implemented on Windows".into())
 }
+
+/// Shows the shell's own context menu for the selected rows.
+///
+/// The same menu Explorer shows, built by the shell from the same items — which
+/// means every installed shell extension appears in it, and every verb does what
+/// it does in Explorer, because it is the same code running.
+#[tauri::command]
+pub async fn shell_menu(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    file_ids: Vec<i64>,
+) -> Result<(), String> {
+    let db = state.db.clone();
+    let paths = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        let mut out = Vec::new();
+        for id in file_ids {
+            if let Some(found) = noceur_index::thumb::locate(&db, id).map_err(|e| e.to_string())? {
+                out.push(found.path);
+            }
+        }
+        Ok::<_, String>(out)
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    show_shell_menu(app, paths)
+}
+
+#[cfg(windows)]
+fn show_shell_menu(app: tauri::AppHandle, paths: Vec<PathBuf>) -> Result<(), String> {
+    use tauri::{Emitter, Manager};
+
+    let hwnd = {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "no main window".to_string())?;
+        window.hwnd().map_err(|e| e.to_string())?.0 as isize
+    };
+
+    // Tracking a popup is modal and belongs to the thread owning the window.
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = crate::shellmenu::show(hwnd, &paths);
+        // Whatever the user picked may have renamed, deleted or moved something,
+        // and the shell does not tell us which — so the listing is re-read.
+        let _ = handle.emit("shell-menu-closed", ());
+    })
+    .map_err(|e| format!("cannot show the menu: {e}"))
+}
+
+#[cfg(not(windows))]
+fn show_shell_menu(_app: tauri::AppHandle, _paths: Vec<PathBuf>) -> Result<(), String> {
+    Err("the shell context menu is only implemented on Windows".into())
+}

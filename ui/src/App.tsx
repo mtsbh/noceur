@@ -24,6 +24,7 @@ import {
   fileOp,
   fileOpPaths,
   dropEffect,
+  shellMenu,
   type Transport as TransportState,
   type ArtSize,
   type Order,
@@ -420,9 +421,30 @@ export default function App() {
     y: number;
   } | null>(null);
 
+  /**
+   * Right-click shows the shell's own menu — the same one Explorer shows, with
+   * the same extensions in it.
+   *
+   * Falls back to the small built-in menu only if the shell refuses, which on a
+   * non-Windows build it always does.
+   */
   function openMenu(e: MouseEvent, row: RowDisplay) {
     e.preventDefault();
     e.stopPropagation();
+
+    // Right-clicking outside the selection replaces it, as Explorer does;
+    // right-clicking inside it keeps it, so a menu acts on what is selected.
+    if (!selection().has(row.fileId)) {
+      setSelection(new Set([row.fileId]));
+      setSelected(row.fileId);
+    }
+
+    shellMenu([...selection()])
+      .then(() => refetchListing())
+      .catch(() => openFallbackMenu(e, row));
+  }
+
+  function openFallbackMenu(e: MouseEvent, row: RowDisplay) {
     setSelected(row.fileId);
     // Kept inside the window: a row near the bottom or right edge would
     // otherwise open a menu half off-screen.

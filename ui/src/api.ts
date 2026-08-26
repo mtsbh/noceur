@@ -260,3 +260,14 @@ export function fileOpPaths(
 export function dropEffect(sources: string[], destination: string): Promise<string> {
   return invoke<string>("drop_effect", { sources, destination });
 }
+
+/**
+ * Shows the shell's own context menu for the given rows.
+ *
+ * The same menu Explorer shows, with the same shell extensions in it, because it
+ * is the shell building it. Returns once the menu is up; what the user picks
+ * happens inside the shell.
+ */
+export function shellMenu(fileIds: number[]): Promise<void> {
+  return invoke<void>("shell_menu", { fileIds });
+}

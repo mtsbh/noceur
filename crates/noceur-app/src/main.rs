@@ -11,6 +11,7 @@ mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod shellmenu;
 mod state;
 
 use state::AppState;
@@ -93,6 +94,7 @@ fn main() {
             commands::file_op,
             commands::file_op_paths,
             commands::drop_effect,
+            commands::shell_menu,
             commands::parent_of
         ])
         .run(tauri::generate_context!())
