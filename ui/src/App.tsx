@@ -42,6 +42,7 @@ import SettingsPanel from "./SettingsPanel";
 import TagEditor from "./TagEditor";
 import CoverPicker from "./CoverPicker";
 import MatchPicker from "./MatchPicker";
+import QuickTag from "./QuickTag";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -213,6 +214,7 @@ export default function App() {
   const [columns, setColumns] = createSignal<Column[]>(loadColumns());
   const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [quickOpen, setQuickOpen] = createSignal(false);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -681,6 +683,13 @@ export default function App() {
         deleteSelection();
       }
 
+      // T toggles quick tag. A single letter because the whole point is that a
+      // hand stays on the keyboard.
+      if (e.key.toLowerCase() === "t" && !typing && !finding()) {
+        e.preventDefault();
+        setQuickOpen((open) => !open);
+      }
+
       // F2 opens the tag editor. Explorer renames on F2, but this is a music
       // browser: the thing you want to change about a track is almost never the
       // name of the file it lives in.
@@ -995,6 +1004,13 @@ export default function App() {
           </For>
         </div>
         <button
+          class={`gearbtn wide ${quickOpen() ? "on" : ""}`}
+          title="Quick tag (T) — tag the playing track by keyboard"
+          onClick={() => setQuickOpen((open) => !open)}
+        >
+          TAG
+        </button>
+        <button
           class={`gearbtn ${settingsOpen() ? "on" : ""}`}
           title="Settings"
           onClick={() => setSettingsOpen((open) => !open)}
@@ -1238,6 +1254,15 @@ export default function App() {
           columns={columns()}
           onToggleColumn={(key: string) => toggleColumn(key as SortColumn)}
           onClose={() => setSettingsOpen(false)}
+        />
+      </Show>
+
+      <Show when={quickOpen()}>
+        <QuickTag
+          fileId={transport()?.fileId ?? 0}
+          groups={settings().quick}
+          onClose={() => setQuickOpen(false)}
+          onWritten={() => refetchListing()}
         />
       </Show>
 

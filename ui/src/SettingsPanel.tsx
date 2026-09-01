@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
 import { credentials, openUrl, setDiscogsToken } from "./api";
 import type { Column } from "./columns";
-import type { Settings as S } from "./settings";
+import { QUICK_KEYS, type QuickGroup, type Settings as S } from "./settings";
 
 export type ArtSize = "small" | "medium" | "large";
 
@@ -37,6 +37,15 @@ export default function Settings(props: {
   });
 
   const patch = (next: Partial<S>) => props.onSettings({ ...props.settings, ...next });
+
+  /** Replaces one quick-tag group, leaving the rest alone. */
+  function editGroup(index: number, change: Partial<QuickGroup>) {
+    patch({
+      quick: props.settings.quick.map((g, i) =>
+        i === index ? { ...g, ...change } : g,
+      ),
+    });
+  }
 
   const [token, setToken] = createSignal("");
   const [hasDiscogs, setHasDiscogs] = createSignal(false);
@@ -122,6 +131,77 @@ export default function Settings(props: {
               separate shapes — blue bass, orange body, pale highs — the way a
               CDJ does. <b>Blue</b> is a single colour that pales where the hats
               are. <b>Mono</b> uses the app's own accent.
+            </p>
+          </section>
+
+          <section class="setgroup">
+            <h3>Quick tag</h3>
+            <p class="sethint">
+              Rows of values you can apply to the playing track by keyboard.
+              Every library has its own vocabulary, so the field names are yours
+              too — <code>ENERGY</code> and <code>MOOD</code> are only defaults.
+            </p>
+            <For each={props.settings.quick}>
+              {(g, row) => (
+                <div class="setquick">
+                  <div class="setrow">
+                    <input
+                      type="text"
+                      class="setquickname"
+                      value={g.label}
+                      placeholder="Label"
+                      spellcheck={false}
+                      onChange={(e) =>
+                        editGroup(row(), { label: e.currentTarget.value })
+                      }
+                    />
+                    <input
+                      type="text"
+                      class="setquickfield mono"
+                      value={g.field}
+                      placeholder="FIELD"
+                      spellcheck={false}
+                      onChange={(e) =>
+                        editGroup(row(), { field: e.currentTarget.value })
+                      }
+                    />
+                    <label class="setcheck">
+                      <input
+                        type="checkbox"
+                        checked={g.multi}
+                        onChange={(e) =>
+                          editGroup(row(), { multi: e.currentTarget.checked })
+                        }
+                      />
+                      <span>many</span>
+                    </label>
+                  </div>
+                  <div class="setrow">
+                    <input
+                      type="text"
+                      value={g.values.join(", ")}
+                      placeholder="comma separated values"
+                      spellcheck={false}
+                      onChange={(e) =>
+                        editGroup(row(), {
+                          values: e.currentTarget.value
+                            .split(",")
+                            .map((v) => v.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                    />
+                  </div>
+                  <p class="sethint">
+                    Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}
+                  </p>
+                </div>
+              )}
+            </For>
+            <p class="sethint">
+              ID3 reads any four capitals as a frame identifier, so a field name
+              of exactly four — <code>VIBE</code> — is refused rather than
+              written as something no reader understands. Use a longer one.
             </p>
           </section>
 

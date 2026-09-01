@@ -1550,3 +1550,111 @@ body.resizing * {
 .sethint a:hover {
   text-decoration: underline;
 }
+
+/* ── Quick tag ─────────────────────────────────────────────────────────────
+   A strip directly above the player, because it is about the track that is
+   playing and belongs next to the thing playing it. */
+.quicktag {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--hair);
+  background: var(--panel);
+}
+.quickrows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.quickrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.quicklabel {
+  width: 52px;
+  flex: none;
+  color: var(--fg3);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.quickbtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 5px;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  background: none;
+  color: var(--fg2);
+  font: inherit;
+  cursor: pointer;
+}
+.quickbtn:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--fg);
+}
+.quickbtn.on {
+  border-color: var(--acc-line);
+  background: var(--acc-fill);
+  color: var(--acc);
+}
+.quickbtn:disabled {
+  color: var(--fg4);
+  cursor: default;
+}
+/* The key that does the same thing, shown on the button. Nobody memorises a
+   binding they cannot see, and the panel is only worth having if the keyboard
+   gets used instead of it. */
+.quickkey {
+  min-width: 13px;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--hair2);
+  color: var(--fg3);
+  font-size: 9px;
+  text-align: center;
+}
+.quickbtn.on .quickkey {
+  background: var(--acc-line);
+  color: var(--bg);
+}
+.quickstate {
+  flex: none;
+  width: 96px;
+  text-align: right;
+  color: var(--fg3);
+  font-size: 11px;
+}
+.gearbtn.wide {
+  width: auto;
+  padding: 0 7px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.setquick {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.setquick:last-of-type {
+  border-bottom: 0;
+}
+.setquick .sethint {
+  margin-top: 4px;
+  font-size: 10px;
+}
+.setquickname {
+  max-width: 110px;
+}
+.setquickfield {
+  max-width: 96px;
+}
+.sethint code {
+  color: var(--fg2);
+}

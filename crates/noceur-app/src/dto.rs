@@ -194,6 +194,10 @@ pub struct TagForm {
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TagEdit {
+    /// Named fields this app does not model — `ENERGY`, `MOOD`, whatever a
+    /// quick-tag group is pointed at. An empty value clears the field, matching
+    /// what an emptied box means everywhere else.
+    pub custom: std::collections::HashMap<String, String>,
     pub artist: Option<String>,
     pub title: Option<String>,
     pub album: Option<String>,

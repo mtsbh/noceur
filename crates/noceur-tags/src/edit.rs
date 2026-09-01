@@ -37,6 +37,10 @@ pub enum EditError {
     OutOfRange { field: &'static str, value: String },
     #[error("what came back for {path} is not an image this can embed")]
     NotAnImage { path: String },
+    #[error(
+        "{name:?} cannot be a field name: ID3 reads any four capitals as a frame          identifier. Use a longer name."
+    )]
+    BadFieldName { name: String },
 }
 
 /// What to do with one field.
@@ -72,6 +76,13 @@ impl Change {
 
 /// The edits to apply to a file.
 ///
+/// There is deliberately no star rating here. ID3 stores one in `POPM`, which is
+/// a binary frame — an email, a byte, and a play counter — that this path cannot
+/// construct, and the text alternatives disagree about their own scale: Vorbis
+/// `RATING` is 0-100 in some programs and 0-5 in others. A rating that half the
+/// world reads as one star out of five and the other half as four is worse than
+/// no rating, so it waits for a change that can write the real frame.
+///
 /// Every field defaults to [`Change::Keep`], so a caller constructs one with
 /// `..Default::default()` and names only what it means to change. Adding a field
 /// here cannot silently start clearing tags in files nobody meant to touch.
@@ -93,6 +104,11 @@ pub struct Edit {
     /// Musical key, as text. Stored verbatim — this crate normalises keys for
     /// display and sorting, but what goes in the file is what the user typed.
     pub key: Change,
+    /// Named fields this crate does not model: `ENERGY`, `MOOD`, whatever a
+    /// quick-tag group is pointed at. Written as a user-defined text frame in
+    /// ID3 and as a plain comment key elsewhere, which is where every other tag
+    /// editor looks for them.
+    pub custom: Vec<(String, Change)>,
 }
 
 impl Edit {
@@ -140,6 +156,23 @@ pub fn write(path: &Path, edit: &Edit) -> Result<(), EditError> {
     // foreign tag onto the file that half the world would then ignore.
     let tag_type = tagged.primary_tag_type();
 
+    // Checked before anything is written, like the numbers above: a field name
+    // ID3v2 cannot represent should be refused with a reason rather than
+    // failing halfway through the encoder.
+    if tag_type == lofty::tag::TagType::Id3v2 {
+        for (name, change) in &edit.custom {
+            let name = name.trim();
+            if matches!(change, Change::Set(_))
+                && looks_like_a_frame_id(name)
+                && matches!(custom_key(tag_type, name), ItemKey::Unknown(_))
+            {
+                return Err(EditError::BadFieldName {
+                    name: name.to_string(),
+                });
+            }
+        }
+    }
+
     if tagged.tag(tag_type).is_none() {
         tagged.insert_tag(Tag::new(tag_type));
     }
@@ -169,6 +202,33 @@ pub fn apply(
     track_no: Option<Option<u32>>,
     bpm: Option<Option<f64>>,
 ) {
+    for (name, change) in &edit.custom {
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let key = custom_key(tag.tag_type(), name);
+        match change {
+            Change::Keep => {}
+            Change::Clear => tag.remove_key(&key),
+            Change::Set(value) => {
+                let item = lofty::tag::TagItem::new(
+                    key.clone(),
+                    lofty::tag::ItemValue::Text(value.clone()),
+                );
+                if matches!(key, ItemKey::Unknown(_)) {
+                    // `insert` verifies the key maps to a frame the container
+                    // knows and silently refuses when it does not, which is
+                    // every genuinely custom field. The unchecked form is what
+                    // lofty documents for exactly this case.
+                    tag.insert_unchecked(item);
+                } else {
+                    tag.insert(item);
+                }
+            }
+        }
+    }
+
     text(
         tag,
         &edit.artist,
@@ -295,6 +355,39 @@ fn decimal(change: &Change, field: &'static str) -> Result<Option<Option<f64>>, 
             Ok(Some(Some(n)))
         }
     }
+}
+
+/// The key a named field should be written under.
+///
+/// Prefers a real mapping when one exists: `MOOD` belongs in ID3v2's `TMOO`
+/// frame and MP4's iTunes mood atom, not in a user-defined field that only this
+/// app would look in.
+///
+/// Looked up in the Vorbis namespace first, whatever is being written. Vorbis
+/// comments are the one format whose keys are the plain readable words people
+/// actually type — `MOOD`, `GENRE`, `LABEL` — where ID3 calls the same things
+/// `TMOO`, `TCON` and `TPUB`. So a name typed by a person is far more likely to
+/// be a Vorbis key than an ID3 frame identifier, and looking there first is what
+/// turns `MOOD` into the mood field rather than a field called MOOD.
+pub fn custom_key(tag_type: lofty::tag::TagType, name: &str) -> ItemKey {
+    let by_readable_name = ItemKey::from_key(lofty::tag::TagType::VorbisComments, name);
+    if !matches!(by_readable_name, ItemKey::Unknown(_)) {
+        return by_readable_name;
+    }
+    ItemKey::from_key(tag_type, name)
+}
+
+/// Whether ID3v2 would mistake a field name for a frame identifier.
+///
+/// ID3v2 frames are four characters. A user-defined field named `VIBE` is
+/// indistinguishable from a frame called `VIBE`, and since no such frame exists
+/// the write fails deep inside the encoder with `BadFrame`. Catching it here
+/// turns that into something a person can act on.
+fn looks_like_a_frame_id(name: &str) -> bool {
+    name.len() == 4
+        && name
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
 /// Formats a BPM without a trailing `.0`, so a whole number stays whole in the
@@ -701,6 +794,58 @@ mod tests {
             !crate::meta::read(&path).unwrap().has_artwork,
             "a refused cover must not have been written"
         );
+    }
+
+    /// Quick tag writes named fields this crate does not model. They have to
+    /// survive a round trip through whatever the container uses — a TXXX frame
+    /// in ID3, a plain key in Vorbis — or the values vanish the moment anything
+    /// reads the file back.
+    #[test]
+    fn a_custom_field_round_trips_in_every_tag_system() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments, TagType::Mp4Ilst] {
+            let mut t = Tag::new(kind);
+            round_trip(
+                &mut t,
+                &Edit {
+                    custom: vec![("ENERGY".into(), Change::Set("4".into()))],
+                    ..Default::default()
+                },
+            );
+            assert_eq!(
+                t.get_string(&ItemKey::Unknown("ENERGY".into())),
+                Some("4"),
+                "{kind:?} lost its custom field"
+            );
+        }
+    }
+
+    #[test]
+    fn a_custom_field_can_be_cleared() {
+        let mut t = tag();
+        t.insert_text(ItemKey::Unknown("MOOD".into()), "Dark".into());
+        round_trip(
+            &mut t,
+            &Edit {
+                custom: vec![("MOOD".into(), Change::Clear)],
+                ..Default::default()
+            },
+        );
+        assert_eq!(t.get_string(&ItemKey::Unknown("MOOD".into())), None);
+    }
+
+    /// A blank field name would write an unnamed frame that nothing can read
+    /// back, which is worse than doing nothing.
+    #[test]
+    fn a_custom_field_with_no_name_is_ignored() {
+        let mut t = tag();
+        round_trip(
+            &mut t,
+            &Edit {
+                custom: vec![("  ".into(), Change::Set("x".into()))],
+                ..Default::default()
+            },
+        );
+        assert_eq!(t.len(), 0);
     }
 
     /// What the editor's boxes mean: untouched is untouched, emptied is cleared.

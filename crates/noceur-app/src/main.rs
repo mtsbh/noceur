@@ -103,6 +103,7 @@ fn main() {
             commands::envelope,
             tagedit::read_tags,
             tagedit::write_tags,
+            tagedit::quick_fields,
             covers::find_covers,
             covers::apply_cover,
             autotag::match_track,

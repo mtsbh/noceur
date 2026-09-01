@@ -359,8 +359,9 @@ export function readTags(fileIds: number[]): Promise<TagForm> {
 export function writeTags(
   fileIds: number[],
   edit: Partial<Record<TagField, string>>,
+  custom: Record<string, string> = {},
 ): Promise<WriteReport> {
-  return invoke<WriteReport>("write_tags", { fileIds, edit });
+  return invoke<WriteReport>("write_tags", { fileIds, edit: { ...edit, custom } });
 }
 
 /** One sleeve a source found. */
@@ -440,4 +441,12 @@ export function credentials(): Promise<Credentials> {
  */
 export function setDiscogsToken(token: string): Promise<Credentials> {
   return invoke<Credentials>("set_discogs_token", { token });
+}
+
+/** Reads the quick-tag fields currently set on one track. */
+export function quickFields(
+  fileId: number,
+  names: string[],
+): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("quick_fields", { fileId, names });
 }

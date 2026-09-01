@@ -6,4 +6,4 @@ pub mod meta;
 
 pub use edit::{Change, Edit, EditError};
 pub use key::{KeyNotation, MusicalKey};
-pub use meta::{artwork, read, Artwork, MetaError, TrackMeta};
+pub use meta::{artwork, read, read_fields, Artwork, Fields, MetaError, TrackMeta};

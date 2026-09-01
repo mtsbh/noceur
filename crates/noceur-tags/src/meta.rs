@@ -158,6 +158,56 @@ pub fn artwork(path: &Path) -> Result<Option<Artwork>, MetaError> {
     }))
 }
 
+/// Reads named fields and the rating out of a file.
+///
+/// For quick tagging, which needs to show what a track already carries before
+/// changing it. Kept apart from [`read`] because the names are the caller's
+/// choice — they come from the user's own quick-tag groups — and baking them
+/// into `TrackMeta` would mean this crate deciding what an energy field is
+/// called.
+///
+/// Missing fields are simply absent rather than empty, so the caller can tell
+/// "not set" from "set to nothing".
+pub fn read_fields(path: &Path, names: &[String]) -> Result<Fields, MetaError> {
+    let tagged = Probe::open(path)
+        .and_then(|p| p.read())
+        .map_err(|source| MetaError::Read {
+            path: path.display().to_string(),
+            source,
+        })?;
+
+    let mut out = Fields::default();
+    let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
+        return Ok(out);
+    };
+
+    for name in names {
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        // The same resolution the writer uses, so a mood written to `TMOO` is
+        // found again. Two different answers to "where does this field live"
+        // would mean quick tag showing a track as untagged the moment after it
+        // tagged it.
+        let key = crate::edit::custom_key(tag.tag_type(), name);
+        if let Some(value) = tag.get_string(&key) {
+            if !value.is_empty() {
+                out.values.push((name.to_string(), value.to_string()));
+            }
+        }
+    }
+
+    Ok(out)
+}
+
+/// What a file carries for the fields that were asked about.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Fields {
+    /// Only the fields that are actually set, in the order they were asked for.
+    pub values: Vec<(String, String)>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +518,49 @@ mod tests {
 
         let art = artwork(&p).unwrap().expect("a picture is present");
         assert_eq!(art.data, vec![0x44u8; 8]);
+    }
+
+    /// Quick tag has to show what a track already carries before changing it,
+    /// so what the editor writes must read back through this — including a name
+    /// like `MOOD`, which is written to ID3's real `TMOO` frame rather than to a
+    /// field literally called MOOD.
+    #[test]
+    fn custom_fields_read_back_after_being_written() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                custom: vec![
+                    ("ENERGY".into(), crate::Change::Set("5".into())),
+                    ("MOOD".into(), crate::Change::Set("Dark, Rolling".into())),
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let fields = read_fields(&path, &["ENERGY".into(), "MOOD".into()]).unwrap();
+        assert_eq!(
+            fields.values,
+            vec![
+                ("ENERGY".to_string(), "5".to_string()),
+                ("MOOD".to_string(), "Dark, Rolling".to_string()),
+            ]
+        );
+    }
+
+    /// A field that is not set must be absent rather than empty, so the caller
+    /// can tell "never tagged" from "tagged with nothing".
+    #[test]
+    fn fields_that_are_not_set_are_absent() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+
+        let fields = read_fields(&path, &["ENERGY".into()]).unwrap();
+        assert!(fields.values.is_empty());
     }
 }

@@ -91,6 +91,14 @@ pub async fn write_tags(
             track_no: noceur_tags::Change::from_input(edit.track_no),
             bpm: noceur_tags::Change::from_input(edit.bpm),
             key: noceur_tags::Change::from_input(edit.key),
+            // Quick tag sends only the fields it is changing, so every entry
+            // here is a deliberate set or clear — there is no "leave alone" to
+            // express, because leaving alone is not sending it.
+            custom: edit
+                .custom
+                .into_iter()
+                .map(|(name, value)| (name, noceur_tags::Change::from_input(Some(value))))
+                .collect(),
         };
         if change.is_empty() {
             return Ok(WriteReport::default());
@@ -305,4 +313,36 @@ mod tests {
         assert_eq!(format_bpm(128.0), "128");
         assert_eq!(format_bpm(127.5), "127.5");
     }
+}
+
+/// Reads the named fields a quick-tag panel shows for one track.
+///
+/// Reads the file rather than the index for the same reason the editor does:
+/// this is about to be written back, and showing a stale cache would mean
+/// writing one.
+#[tauri::command]
+pub async fn quick_fields(
+    state: State<'_, AppState>,
+    file_id: i64,
+    names: Vec<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let db = state.db.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())?
+        };
+        let Some(found) = found.filter(|f| f.kind == 1) else {
+            return Ok(Default::default());
+        };
+
+        // A file that will not parse has no fields to show; the panel simply
+        // starts empty rather than refusing to open.
+        Ok(noceur_tags::read_fields(&found.path, &names)
+            .map(|f| f.values.into_iter().collect())
+            .unwrap_or_default())
+    })
+    .await
+    .map_err(|e| format!("quick tag read failed: {e}"))?
 }
