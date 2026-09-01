@@ -5,11 +5,22 @@
 //! involved — this is the public read-only web service.
 
 use crate::sources::Candidate;
+use crate::tracks::TrackMatch;
 use crate::{agent, pace, CoverSize, OnlineError};
 use serde::Deserialize;
 
 const SERVICE: &str = "MusicBrainz";
-pub const NAME: &str = "Cover Art Archive";
+/// What the picker calls a cover from here.
+///
+/// The pictures come from the Cover Art Archive rather than MusicBrainz itself,
+/// and saying so is both accurate and more recognisable to anyone who has
+/// looked for a sleeve before.
+pub const COVER_NAME: &str = "Cover Art Archive";
+
+/// What the autotagger calls a match from here. The metadata really is
+/// MusicBrainz's, and it is the field data rather than the picture that is
+/// being credited.
+pub const NAME: &str = "MusicBrainz";
 const ENDPOINT: &str = "https://musicbrainz.org/ws/2/release";
 
 /// Results one search asks for.
@@ -189,7 +200,7 @@ struct LabelInfo {
     label: Option<Label>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Label {
     name: Option<String>,
 }
@@ -205,7 +216,7 @@ pub fn search_candidates(artist: &str, title: &str) -> Result<Vec<Candidate>, On
     Ok(search_releases(artist, title)?
         .into_iter()
         .map(|r| Candidate {
-            source: NAME,
+            source: COVER_NAME,
             thumbnail: crate::covers::front_url(&r.id, CoverSize::Thumbnail),
             full: crate::covers::front_url(&r.id, CoverSize::Embed),
             title: r.title,
@@ -222,6 +233,157 @@ pub fn search_candidates(artist: &str, title: &str) -> Result<Vec<Candidate>, On
             size: Some(500),
         })
         .collect())
+}
+
+/// Searches recordings, for the autotagger.
+///
+/// MusicBrainz is the only one of these sources that carries a label and a
+/// catalogue number, which for a record collection is often the field that
+/// identifies a pressing when nothing else does. It almost never has a BPM.
+///
+/// `inc=releases+artist-credits+isrcs` asks for the release each recording
+/// appeared on in the same round trip, because a recording without its release
+/// has no album, no label and no date — which is most of what makes it worth
+/// looking up.
+pub fn search_recordings(
+    artist: &str,
+    title: &str,
+    limit: usize,
+) -> Result<Vec<TrackMatch>, OnlineError> {
+    let artist = artist.trim();
+    let title = title.trim();
+    if artist.is_empty() && title.is_empty() {
+        return Err(OnlineError::NothingToSearch);
+    }
+
+    let mut terms = Vec::new();
+    if !artist.is_empty() {
+        terms.push(format!("artist:{}", lucene_escape(artist)));
+    }
+    if !title.is_empty() {
+        terms.push(format!("recording:{}", lucene_escape(title)));
+    }
+
+    pace();
+    let response = agent()
+        .get("https://musicbrainz.org/ws/2/recording")
+        .query("query", terms.join(" AND "))
+        .query("fmt", "json")
+        .query("limit", limit.max(1).to_string())
+        .call();
+
+    let body = match response {
+        Ok(mut r) if r.status().is_success() => {
+            r.body_mut()
+                .read_to_string()
+                .map_err(|e| OnlineError::Malformed {
+                    service: SERVICE,
+                    reason: e.to_string(),
+                })?
+        }
+        Ok(r) => {
+            return Err(OnlineError::Status {
+                service: SERVICE,
+                status: r.status().as_u16(),
+            })
+        }
+        Err(e) => {
+            return Err(OnlineError::Unreachable {
+                service: SERVICE,
+                reason: e.to_string(),
+            })
+        }
+    };
+
+    parse_recordings(&body)
+}
+
+/// Turns a recording search response into matches.
+pub fn parse_recordings(body: &str) -> Result<Vec<TrackMatch>, OnlineError> {
+    let parsed: RecordingResponse =
+        serde_json::from_str(body).map_err(|e| OnlineError::Malformed {
+            service: SERVICE,
+            reason: e.to_string(),
+        })?;
+
+    Ok(parsed
+        .recordings
+        .into_iter()
+        .map(|r| {
+            // The first release is the one the search ranked highest; a
+            // recording can appear on dozens and they mostly agree on the
+            // fields taken here.
+            let release = r.releases.unwrap_or_default().into_iter().next();
+            let label_info = release
+                .as_ref()
+                .and_then(|rel| rel.label_info.clone())
+                .unwrap_or_default();
+
+            TrackMatch {
+                source: NAME,
+                title: r.title.unwrap_or_default(),
+                artists: r
+                    .artist_credit
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|c| c.name)
+                    .collect(),
+                album: release.as_ref().and_then(|rel| rel.title.clone()),
+                label: label_info
+                    .iter()
+                    .filter_map(|l| l.label.as_ref().and_then(|l| l.name.clone()))
+                    .next(),
+                catalog_number: label_info
+                    .iter()
+                    .filter_map(|l| l.catalog_number.clone())
+                    .next(),
+                release_date: release
+                    .as_ref()
+                    .and_then(|rel| rel.date.clone())
+                    .filter(|d| !d.is_empty()),
+                isrc: r.isrcs.unwrap_or_default().into_iter().next(),
+                duration_ms: r.length,
+                url: Some(format!("https://musicbrainz.org/recording/{}", r.id)),
+                art: release
+                    .as_ref()
+                    .map(|rel| crate::covers::front_url(&rel.id, CoverSize::Embed)),
+                ..Default::default()
+            }
+        })
+        .collect())
+}
+
+#[derive(Deserialize)]
+struct RecordingResponse {
+    #[serde(default)]
+    recordings: Vec<RawRecording>,
+}
+
+#[derive(Deserialize)]
+struct RawRecording {
+    id: String,
+    title: Option<String>,
+    length: Option<u64>,
+    isrcs: Option<Vec<String>>,
+    #[serde(rename = "artist-credit")]
+    artist_credit: Option<Vec<ArtistCredit>>,
+    releases: Option<Vec<RawReleaseRef>>,
+}
+
+#[derive(Deserialize, Clone)]
+struct RawReleaseRef {
+    id: String,
+    title: Option<String>,
+    date: Option<String>,
+    #[serde(rename = "label-info")]
+    label_info: Option<Vec<LabelInfoFull>>,
+}
+
+#[derive(Deserialize, Clone)]
+struct LabelInfoFull {
+    label: Option<Label>,
+    #[serde(rename = "catalog-number")]
+    catalog_number: Option<String>,
 }
 
 #[cfg(test)]

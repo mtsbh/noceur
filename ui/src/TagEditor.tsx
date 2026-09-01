@@ -27,9 +27,19 @@ export default function TagEditor(props: {
   onClose: () => void;
   /** Called after a successful write, so the listing can re-read the rows. */
   onWritten: () => void;
+  /**
+   * Fields to start with already filled in, from a matched release.
+   *
+   * They arrive marked as edits rather than as loaded values, which is the
+   * point: every one is outlined, and the Save button is live, so what an
+   * autotagger proposes is visible as a proposal before it is written.
+   */
+  initial?: Partial<Record<TagField, string>>;
 }) {
   const [form, setForm] = createSignal<TagForm | null>(null);
-  const [edits, setEdits] = createSignal<Partial<Record<TagField, string>>>({});
+  const [edits, setEdits] = createSignal<Partial<Record<TagField, string>>>(
+    props.initial ?? {},
+  );
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
   const [report, setReport] = createSignal<WriteReport | null>(null);

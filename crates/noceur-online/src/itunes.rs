@@ -7,6 +7,7 @@
 //! distributor.
 
 use crate::sources::Candidate;
+use crate::tracks::TrackMatch;
 use crate::{agent, OnlineError};
 use serde::Deserialize;
 
@@ -234,4 +235,112 @@ mod tests {
             OnlineError::Malformed { .. }
         ));
     }
+}
+
+/// Searches recordings, for the autotagger.
+///
+/// Apple carries a genre and a release date for essentially everything with a
+/// distributor, which is the gap MusicBrainz leaves. No BPM and no key — that is
+/// what Deezer and analysis are for.
+pub fn search_tracks(
+    artist: &str,
+    title: &str,
+    limit: usize,
+) -> Result<Vec<TrackMatch>, OnlineError> {
+    let term = format!("{artist} {title}");
+    let term = term.trim();
+    if term.is_empty() {
+        return Err(OnlineError::NothingToSearch);
+    }
+
+    let response = agent()
+        .get(ENDPOINT)
+        .query("term", term)
+        .query("entity", "song")
+        .query("limit", limit.max(1).to_string())
+        .call();
+
+    let body = match response {
+        Ok(mut r) if r.status().is_success() => {
+            r.body_mut()
+                .read_to_string()
+                .map_err(|e| OnlineError::Malformed {
+                    service: SERVICE,
+                    reason: e.to_string(),
+                })?
+        }
+        Ok(r) => {
+            return Err(OnlineError::Status {
+                service: SERVICE,
+                status: r.status().as_u16(),
+            })
+        }
+        Err(e) => {
+            return Err(OnlineError::Unreachable {
+                service: SERVICE,
+                reason: e.to_string(),
+            })
+        }
+    };
+
+    parse_tracks(&body)
+}
+
+/// Turns a song search response into matches.
+pub fn parse_tracks(body: &str) -> Result<Vec<TrackMatch>, OnlineError> {
+    let parsed: SongResponse = serde_json::from_str(body).map_err(|e| OnlineError::Malformed {
+        service: SERVICE,
+        reason: e.to_string(),
+    })?;
+
+    Ok(parsed
+        .results
+        .into_iter()
+        .map(|s| TrackMatch {
+            source: NAME,
+            title: s.track_name.unwrap_or_default(),
+            artists: s.artist_name.into_iter().collect(),
+            album: s.collection_name,
+            album_artist: s.collection_artist_name,
+            release_date: s
+                .release_date
+                .map(|d| d.split('T').next().unwrap_or("").to_string()),
+            genres: s.primary_genre_name.into_iter().collect(),
+            duration_ms: s.track_time_millis,
+            track_no: s.track_number,
+            url: s.track_view_url,
+            art: s.artwork_url100.as_deref().map(|u| resize(u, 600)),
+            ..Default::default()
+        })
+        .collect())
+}
+
+#[derive(Deserialize)]
+struct SongResponse {
+    #[serde(default)]
+    results: Vec<RawSong>,
+}
+
+#[derive(Deserialize)]
+struct RawSong {
+    #[serde(rename = "trackName")]
+    track_name: Option<String>,
+    #[serde(rename = "artistName")]
+    artist_name: Option<String>,
+    #[serde(rename = "collectionName")]
+    collection_name: Option<String>,
+    #[serde(rename = "collectionArtistName")]
+    collection_artist_name: Option<String>,
+    #[serde(rename = "releaseDate")]
+    release_date: Option<String>,
+    #[serde(rename = "primaryGenreName")]
+    primary_genre_name: Option<String>,
+    #[serde(rename = "trackTimeMillis")]
+    track_time_millis: Option<u64>,
+    #[serde(rename = "trackNumber")]
+    track_number: Option<u32>,
+    #[serde(rename = "trackViewUrl")]
+    track_view_url: Option<String>,
+    #[serde(rename = "artworkUrl100")]
+    artwork_url100: Option<String>,
 }

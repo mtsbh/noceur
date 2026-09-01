@@ -392,3 +392,35 @@ export function findCovers(fileId: number): Promise<CoverCandidate[]> {
 export function applyCover(fileIds: number[], url: string): Promise<WriteReport> {
   return invoke<WriteReport>("apply_cover", { fileIds, url });
 }
+
+/** One candidate match for a track, from any source. */
+export type TrackMatch = {
+  source: string;
+  title: string;
+  artists: string[];
+  album: string | null;
+  albumArtist: string | null;
+  label: string | null;
+  catalogNumber: string | null;
+  releaseDate: string | null;
+  genres: string[];
+  bpm: number | null;
+  key: string | null;
+  isrc: string | null;
+  durationMs: number | null;
+  trackNo: number | null;
+  url: string | null;
+  art: string | null;
+  /** How well it matched what was searched for, 0..1. */
+  score: number;
+};
+
+/**
+ * Searches every source for what this file might be.
+ *
+ * Uses the file's tags, falling back to its name — the files that most need
+ * this are the ones with no tags to search by.
+ */
+export function matchTrack(fileId: number): Promise<TrackMatch[]> {
+  return invoke<TrackMatch[]>("match_track", { fileId });
+}

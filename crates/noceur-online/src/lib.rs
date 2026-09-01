@@ -13,8 +13,10 @@
 pub mod covers;
 pub mod deezer;
 pub mod itunes;
+pub mod matching;
 pub mod musicbrainz;
 pub mod sources;
+pub mod tracks;
 
 pub use covers::{fetch_front, CoverSize};
 pub use musicbrainz::{search_releases, Release};
@@ -150,4 +152,73 @@ pub fn search_all(artist: &str, album: &str) -> Result<Vec<Candidate>, OnlineErr
         }
     }
     Ok(merged)
+}
+
+/// Results asked of each source when matching a track.
+pub const MATCH_LIMIT: usize = 8;
+
+/// Matches above this are worth showing at all.
+///
+/// Below it the results are other records by the same artist, or tracks that
+/// share a common word. Showing them would bury the real answer in a list
+/// nobody reads to the bottom of.
+pub const MIN_SCORE: f32 = 0.45;
+
+/// Searches every source for a track and ranks what comes back.
+///
+/// Ranked, not chosen. The sources disagree constantly — a different release
+/// date, a genre one calls Techno and another calls Electronic, a title with
+/// and without its remix credit — and which of those is right for a particular
+/// file is a judgement the person who owns it makes. This returns the ordered
+/// evidence.
+///
+/// `duration_ms` is what the file itself decodes to, used only as a tiebreak.
+/// A source failing costs its own results and nothing else.
+pub fn match_track(
+    artist: &str,
+    title: &str,
+    duration_ms: Option<u64>,
+) -> Result<Vec<tracks::TrackMatch>, OnlineError> {
+    let clean = matching::clean_title(title);
+    let mut found = Vec::new();
+    let mut last_error = None;
+    let mut any_source_answered = false;
+
+    for result in [
+        deezer::search_tracks(artist, &clean, MATCH_LIMIT),
+        itunes::search_tracks(artist, &clean, MATCH_LIMIT),
+        musicbrainz::search_recordings(artist, &clean, MATCH_LIMIT),
+    ] {
+        match result {
+            Ok(list) => {
+                any_source_answered = true;
+                found.extend(list);
+            }
+            Err(e) => last_error = Some(e),
+        }
+    }
+
+    if !any_source_answered {
+        return Err(last_error.unwrap_or(OnlineError::NothingToSearch));
+    }
+
+    for m in &mut found {
+        m.score = matching::score(
+            artist,
+            title,
+            &m.artist(),
+            &m.title,
+            duration_ms,
+            m.duration_ms,
+        );
+    }
+
+    found.retain(|m| m.score >= MIN_SCORE);
+    // Best first; among equal scores, the result that carries more fields.
+    found.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| b.is_useful().cmp(&a.is_useful()))
+    });
+    Ok(found)
 }

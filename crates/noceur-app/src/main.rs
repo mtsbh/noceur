@@ -6,6 +6,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod art;
+mod autotag;
 mod commands;
 mod covers;
 mod dragdrop;
@@ -103,6 +104,7 @@ fn main() {
             tagedit::write_tags,
             covers::find_covers,
             covers::apply_cover,
+            autotag::match_track,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

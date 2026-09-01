@@ -1431,3 +1431,100 @@ body.resizing * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Metadata matches ──────────────────────────────────────────────────────
+   A list rather than a grid: what distinguishes two matches here is text —
+   label, catalogue number, which fields each one would actually add — and
+   text wants a row. */
+.matches {
+  position: fixed;
+  z-index: 14;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 620px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.matchbody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px 12px;
+}
+.matchrow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.matchrow:hover {
+  background: var(--raise);
+  border-color: var(--acc-line);
+}
+.matchart {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--hair);
+}
+.matchart img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.matchmain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.matchtitle {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.matchmeta {
+  color: var(--fg2);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Which source, and what it would actually contribute. The second half is the
+   useful part: three results that all say the same thing as the file are worth
+   less than one that knows the label. */
+.matchcarries {
+  color: var(--fg4);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.matchscore {
+  flex: none;
+  width: 26px;
+  text-align: right;
+  color: var(--fg3);
+}
+.matchbody code {
+  color: var(--fg2);
+}

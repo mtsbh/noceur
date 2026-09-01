@@ -127,3 +127,75 @@ fn a_candidate_from_any_source_downloads_as_an_image() {
     }
     panic!("no candidate produced a downloadable image");
 }
+
+#[test]
+#[ignore = "reaches the network"]
+fn matching_a_real_track_ranks_the_right_answer_first() {
+    let found = noceur_online::match_track("Skee Mask", "Rev8617", Some(6 * 60 * 1000))
+        .expect("some source should answer");
+    assert!(!found.is_empty(), "a released record should be matched");
+
+    for m in found.iter().take(8) {
+        println!(
+            "{:>5.2}  {:<20} {:<28} {:<24} {:<26} {:<6} {}",
+            m.score,
+            m.source,
+            m.title,
+            m.artist(),
+            m.album.clone().unwrap_or_default(),
+            m.bpm.map(|b| b.to_string()).unwrap_or_default(),
+            m.label.clone().unwrap_or_default()
+        );
+    }
+
+    let best = &found[0];
+    assert!(
+        best.title.to_lowercase().contains("rev8617"),
+        "the best match should be the track asked for, got {:?}",
+        best.title
+    );
+}
+
+/// The fields that make the feature worth having: a DJ library is missing
+/// labels, dates and BPMs, and no single source has all three.
+#[test]
+#[ignore = "reaches the network"]
+fn between_them_the_sources_supply_the_fields_a_dj_library_lacks() {
+    // A record that is definitely in every catalogue. An obscure promo would be
+    // testing the databases' coverage rather than this code.
+    let mut found = noceur_online::match_track("Skee Mask", "Rev8617", None).unwrap();
+    assert!(!found.is_empty());
+
+    for m in found.iter_mut().take(4) {
+        if m.source == noceur_online::deezer::NAME {
+            noceur_online::deezer::enrich(m).ok();
+        }
+    }
+
+    let has = |f: fn(&noceur_online::tracks::TrackMatch) -> bool| found.iter().any(f);
+    println!(
+        "album={} label={} date={} bpm={} genre={}",
+        has(|m| m.album.is_some()),
+        has(|m| m.label.is_some()),
+        has(|m| m.release_date.is_some()),
+        has(|m| m.bpm.is_some()),
+        has(|m| !m.genres.is_empty()),
+    );
+    assert!(has(|m| m.album.is_some()), "somebody should know the album");
+    assert!(
+        has(|m| m.release_date.is_some()),
+        "somebody should know when it came out"
+    );
+}
+
+/// The autotagger's real job: a file with no tags at all, matched from its name.
+#[test]
+#[ignore = "reaches the network"]
+fn an_untagged_file_can_be_matched_from_its_name_alone() {
+    let guess = noceur_online::matching::from_file_name("01 - Skee Mask - Rev8617.flac");
+    assert_eq!(guess.artist, "Skee Mask");
+
+    let found = noceur_online::match_track(&guess.artist, &guess.title, None).unwrap();
+    assert!(!found.is_empty(), "a name alone should be enough to match");
+    println!("from name: {} — {}", found[0].artist(), found[0].title);
+}

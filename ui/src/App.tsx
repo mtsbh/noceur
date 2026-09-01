@@ -25,6 +25,7 @@ import {
   fileOpPaths,
   dropEffect,
   shellMenu,
+  type TagField,
   openUrl,
   type Transport as TransportState,
   type ArtSize,
@@ -40,6 +41,7 @@ import Menu, { type MenuItem } from "./Menu";
 import SettingsPanel from "./SettingsPanel";
 import TagEditor from "./TagEditor";
 import CoverPicker from "./CoverPicker";
+import MatchPicker from "./MatchPicker";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -217,6 +219,12 @@ export default function App() {
   const [covering, setCovering] = createSignal<{ fileId: number; fileIds: number[] } | null>(
     null,
   );
+  /** The row being matched online, and the files a chosen match would edit. */
+  const [matching, setMatching] = createSignal<{ fileId: number; fileIds: number[] } | null>(
+    null,
+  );
+  /** Fields a match pre-filled the editor with, cleared when it closes. */
+  const [prefill, setPrefill] = createSignal<Partial<Record<TagField, string>>>({});
 
   /** Every settings change is written straight through — there is no Save. */
   function commitSettings(next: SettingsState) {
@@ -565,6 +573,14 @@ export default function App() {
         hint: "f2",
         disabled: row.kind !== 1,
         run: () => setEditing([...selection()]),
+      },
+      {
+        kind: "item",
+        label: "Find metadata online…",
+        disabled: row.kind !== 1,
+        // Matched on the row that was right-clicked, applied to whatever is
+        // selected — the same rule the rest of the menu follows.
+        run: () => setMatching({ fileId: row.fileId, fileIds: [...selection()] }),
       },
       {
         kind: "item",
@@ -1172,11 +1188,31 @@ export default function App() {
         />
       </Show>
 
+      <Show when={matching()}>
+        {(target) => (
+          <MatchPicker
+            fileId={target().fileId}
+            onClose={() => setMatching(null)}
+            onChoose={(fields) => {
+              // Straight into the editor, pre-filled: the fields are visible as
+              // proposed edits before anything is written.
+              setPrefill(fields);
+              setEditing(target().fileIds);
+              setMatching(null);
+            }}
+          />
+        )}
+      </Show>
+
       <Show when={editing()}>
         {(ids) => (
           <TagEditor
             fileIds={ids()}
-            onClose={() => setEditing(null)}
+            initial={prefill()}
+            onClose={() => {
+              setEditing(null);
+              setPrefill({});
+            }}
             onWritten={() => refetchListing()}
           />
         )}

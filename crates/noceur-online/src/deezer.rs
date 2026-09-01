@@ -6,6 +6,7 @@
 //! carried and nobody got round to adding to MusicBrainz.
 
 use crate::sources::Candidate;
+use crate::tracks::TrackMatch;
 use crate::{agent, OnlineError};
 use serde::Deserialize;
 
@@ -166,4 +167,148 @@ mod tests {
             OnlineError::Malformed { .. }
         ));
     }
+}
+
+/// Searches recordings, for the autotagger.
+///
+/// Deezer is the most useful of the keyless sources here because it publishes a
+/// BPM and a release date per track, which is exactly what a DJ library is
+/// missing. The search endpoint returns neither, so the top matches are looked
+/// up individually — a handful of extra requests for the fields that are the
+/// whole reason to ask.
+pub fn search_tracks(
+    artist: &str,
+    title: &str,
+    limit: usize,
+) -> Result<Vec<TrackMatch>, OnlineError> {
+    let query = format!("{artist} {title}");
+    let query = query.trim();
+    if query.is_empty() {
+        return Err(OnlineError::NothingToSearch);
+    }
+
+    let body = get_json(
+        "https://api.deezer.com/search",
+        &[("q", query), ("limit", &limit.max(1).to_string())],
+    )?;
+    parse_tracks(&body)
+}
+
+/// Fills in what the search endpoint leaves out.
+///
+/// Only worth calling for candidates the user might actually take, which is why
+/// it is separate: enriching twenty results to show five would be fifteen
+/// pointless requests.
+pub fn enrich(track: &mut TrackMatch) -> Result<(), OnlineError> {
+    let Some(id) = track.url.as_deref().and_then(|u| u.rsplit('/').next()) else {
+        return Ok(());
+    };
+    let body = get_json(&format!("https://api.deezer.com/track/{id}"), &[])?;
+    let detail: RawTrackDetail =
+        serde_json::from_str(&body).map_err(|e| OnlineError::Malformed {
+            service: SERVICE,
+            reason: e.to_string(),
+        })?;
+
+    if track.bpm.is_none() {
+        // Deezer reports a float; a BPM is written as a whole number here
+        // because that is what it means as a tag.
+        track.bpm = detail.bpm.filter(|b| *b > 0.0).map(|b| b.round() as u32);
+    }
+    if track.release_date.is_none() {
+        track.release_date = detail.release_date.filter(|d| !d.is_empty());
+    }
+    if track.isrc.is_none() {
+        track.isrc = detail.isrc.filter(|s| !s.is_empty());
+    }
+    if track.track_no.is_none() {
+        track.track_no = detail.track_position;
+    }
+    Ok(())
+}
+
+/// One GET returning a body, with the service's errors mapped.
+fn get_json(url: &str, query: &[(&str, &str)]) -> Result<String, OnlineError> {
+    let mut request = agent().get(url);
+    for (k, v) in query {
+        request = request.query(*k, *v);
+    }
+
+    match request.call() {
+        Ok(mut r) if r.status().is_success() => {
+            r.body_mut()
+                .read_to_string()
+                .map_err(|e| OnlineError::Malformed {
+                    service: SERVICE,
+                    reason: e.to_string(),
+                })
+        }
+        Ok(r) => Err(OnlineError::Status {
+            service: SERVICE,
+            status: r.status().as_u16(),
+        }),
+        Err(e) => Err(OnlineError::Unreachable {
+            service: SERVICE,
+            reason: e.to_string(),
+        }),
+    }
+}
+
+/// Turns a track search response into matches.
+pub fn parse_tracks(body: &str) -> Result<Vec<TrackMatch>, OnlineError> {
+    let parsed: TrackSearchResponse =
+        serde_json::from_str(body).map_err(|e| OnlineError::Malformed {
+            service: SERVICE,
+            reason: e.to_string(),
+        })?;
+
+    Ok(parsed
+        .data
+        .into_iter()
+        .map(|t| TrackMatch {
+            source: NAME,
+            title: t.title.unwrap_or_default(),
+            artists: t.artist.and_then(|a| a.name).into_iter().collect(),
+            album: t.album.as_ref().and_then(|a| a.title.clone()),
+            art: t
+                .album
+                .as_ref()
+                .and_then(|a| a.cover_big.clone().or_else(|| a.cover.clone())),
+            // Deezer reports seconds; everything else in this app is
+            // milliseconds, and mixing the two is how durations end up 1000x out.
+            duration_ms: t.duration.map(|s| s * 1000),
+            url: t.link,
+            ..Default::default()
+        })
+        .collect())
+}
+
+#[derive(Deserialize)]
+struct TrackSearchResponse {
+    #[serde(default)]
+    data: Vec<RawTrack>,
+}
+
+#[derive(Deserialize)]
+struct RawTrack {
+    title: Option<String>,
+    duration: Option<u64>,
+    link: Option<String>,
+    artist: Option<RawArtist>,
+    album: Option<RawTrackAlbum>,
+}
+
+#[derive(Deserialize)]
+struct RawTrackAlbum {
+    title: Option<String>,
+    cover: Option<String>,
+    cover_big: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawTrackDetail {
+    bpm: Option<f64>,
+    release_date: Option<String>,
+    isrc: Option<String>,
+    track_position: Option<u32>,
 }
