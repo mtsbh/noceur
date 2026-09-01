@@ -456,7 +456,18 @@ pub async fn transport_cmd(
         "seek" => state
             .player
             .seek(std::time::Duration::from_millis(value.unwrap_or(0))),
-        "volume" => state.player.set_volume(value.unwrap_or(100) as f32 / 100.0),
+        "volume" => {
+            // Recorded here as well as sent to the player. The audio thread has
+            // no reason to report a level back, so this is the only copy the
+            // transport can read — and without it the slider is handed its old
+            // position on every reply and springs back under the pointer while
+            // the sound it is setting changes anyway.
+            let level = value.unwrap_or(100).min(100) as u32;
+            if let Ok(mut np) = state.now_playing.lock() {
+                np.volume = level;
+            }
+            state.player.set_volume(level as f32 / 100.0)
+        }
         other => return Err(format!("unknown transport action: {other}")),
     };
 
@@ -847,4 +858,98 @@ fn open_in_browser(url: &str) -> Result<(), String> {
 #[cfg(not(windows))]
 fn open_in_browser(_url: &str) -> Result<(), String> {
     Err("opening links is only implemented on Windows".into())
+}
+
+/// The amplitude envelope of one file, for the waveform.
+///
+/// Returned as raw bytes for the UI to draw rather than as a rendered image.
+/// Cover art goes over `thumb://` because it is tens of kilobytes apiece and a
+/// scrolling list wants hundreds of them; an envelope is two kilobytes and there
+/// is exactly one on screen. Drawing it in the client also means the played
+/// portion can be recoloured as the playhead moves, and the bar can be redrawn at
+/// a new width on resize, without asking the backend for anything.
+///
+/// Empty means "nothing to draw" — not audio, or audio that would not decode.
+/// The transport falls back to a plain progress bar, which is what it had before.
+#[tauri::command]
+pub async fn envelope(state: State<'_, AppState>, file_id: i64) -> Result<Vec<u8>, String> {
+    let db = state.db.clone();
+
+    // Deliberately three short holds of the lock rather than one long one:
+    // extracting an envelope decodes the entire track, which for a long lossless
+    // file is seconds. Holding the index across that would freeze every listing,
+    // every thumbnail and every search for the duration.
+    tauri::async_runtime::spawn_blocking(move || {
+        let buckets = noceur_audio::ENVELOPE_BUCKETS;
+        let bands = noceur_audio::ENVELOPE_BANDS;
+
+        let found = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())?
+        };
+        let Some(found) = found.filter(|f| f.kind == 1) else {
+            return Ok(Vec::new());
+        };
+
+        // Without a linked content there is nowhere to cache the result, so the
+        // envelope is computed and handed back uncached rather than refused: a
+        // freshly scanned folder should still draw a waveform.
+        let Some(content_id) = found.content_id else {
+            return Ok(noceur_audio::envelope(&found.path, buckets).unwrap_or_default());
+        };
+
+        {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            match noceur_index::envelope::get(&db, content_id, buckets, bands)
+                .map_err(|e| e.to_string())?
+            {
+                noceur_index::envelope::Cached::Envelope(data) => return Ok(data),
+                noceur_index::envelope::Cached::Miss => return Ok(Vec::new()),
+                noceur_index::envelope::Cached::Unknown => {}
+            }
+        }
+
+        let extracted = noceur_audio::envelope(&found.path, buckets).ok();
+
+        {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            noceur_index::envelope::put(&db, content_id, buckets, extracted.as_deref())
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(extracted.unwrap_or_default())
+    })
+    .await
+    .map_err(|e| format!("envelope task failed: {e}"))?
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::*;
+
+    fn state() -> (tempfile::TempDir, AppState) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let state = AppState::open(&dir.path().join("index.db")).unwrap();
+        (dir, state)
+    }
+
+    /// The transport bar's volume slider is a controlled input: it is redrawn
+    /// from whatever the last reply said, ten times a second while playing. A
+    /// report of zero on a fresh player would peg the slider to silence and hold
+    /// it there against every attempt to drag it.
+    #[test]
+    fn a_fresh_transport_reports_full_volume() {
+        let (_dir, state) = state();
+        assert_eq!(transport(&state).volume, 100);
+    }
+
+    /// The level lives here rather than in the audio thread, which has no reason
+    /// to report one back. If a change is not recorded, the slider is handed its
+    /// old position on the very next reply and springs back under the pointer.
+    #[test]
+    fn a_changed_volume_survives_into_the_next_report() {
+        let (_dir, state) = state();
+        state.now_playing.lock().unwrap().volume = 40;
+        assert_eq!(transport(&state).volume, 40);
+    }
 }

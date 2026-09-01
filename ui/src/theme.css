@@ -693,6 +693,7 @@ body.resizing * {
 /* Transport. Full width at the bottom of the window rather than inside a pane,
    because it survives split mode: one player, however many panes. */
 .transport {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
@@ -705,16 +706,38 @@ body.resizing * {
   color: var(--fg4);
 }
 .tbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: 1px solid var(--hair2);
   color: var(--fg2);
-  border-radius: 4px;
-  width: 26px;
-  height: 22px;
+  border-radius: 5px;
+  width: 28px;
+  height: 26px;
   padding: 0;
   cursor: pointer;
-  font-size: 10px;
-  line-height: 1;
+}
+.tbtn svg {
+  width: 14px;
+  height: 14px;
+}
+/* Play is the one button hit constantly, so it is the one given weight. */
+.tbtn.play {
+  width: 32px;
+  height: 30px;
+  border-color: var(--acc-line);
+  color: var(--acc);
+}
+.tbtn.play svg {
+  width: 16px;
+  height: 16px;
+}
+.tbtn.play:not(:disabled):hover {
+  background: var(--acc-fill);
+}
+.tbtn.play:disabled {
+  border-color: var(--hair2);
 }
 .tbtn:disabled {
   color: var(--fg4);
@@ -725,11 +748,10 @@ body.resizing * {
   color: var(--fg);
 }
 .tname {
-  min-width: 140px;
-  max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 15px;
   color: var(--fg);
 }
 .transport.idle .tname {
@@ -741,39 +763,20 @@ body.resizing * {
   text-align: right;
 }
 
-/* The seek surface. A waveform draws here next; the geometry and the drag are
-   the same either way, which is why the bar owns them and not the fill. */
+/* The seek surface. The waveform draws inside it on a canvas; this element owns
+   the geometry and the drag, so seeking behaves the same before the peaks have
+   arrived as after. */
 .tbar {
   position: relative;
   flex: 1;
-  height: 18px;
+  min-width: 120px;
+  height: 32px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
 }
-.tbar::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--hair2);
-}
-.tfill {
-  position: absolute;
-  left: 0;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--acc);
-}
-.thead {
-  position: absolute;
-  width: 2px;
-  height: 12px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--fg);
+.twave {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .terror {
   color: var(--acc);
@@ -867,14 +870,17 @@ body.resizing * {
   visibility: hidden;
 }
 
-/* Name above, tags below — two lines in the height the buttons already need. */
+/* Name above, tags below.
+   The line heights are stated rather than inherited: the two lines have to fit
+   the cover beside them exactly, and a font whose default leading differs by a
+   pixel would clip the second line rather than shrink the first. */
 .tmeta {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 1px;
-  min-width: 150px;
-  max-width: 280px;
+  width: 200px;
+  flex: none;
   overflow: hidden;
 }
 .ttags {
@@ -882,6 +888,8 @@ body.resizing * {
   gap: 8px;
   color: var(--fg3);
   font-size: 10px;
+  line-height: 13px;
+  min-height: 13px;
 }
 
 .tbtns {
@@ -889,11 +897,6 @@ body.resizing * {
   gap: 2px;
   flex: none;
 }
-.tbtn.play {
-  width: 30px;
-  color: var(--fg);
-}
-
 /* Volume. Drawn in the theme's greys rather than the platform's blue. */
 .tvol {
   display: flex;
@@ -902,20 +905,31 @@ body.resizing * {
   flex: none;
 }
 .tvolicon {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
   color: var(--fg3);
 }
-.tvol input[type="range"] {
+.tvolicon svg {
+  width: 13px;
+  height: 13px;
+}
+/* One slider style for the whole app. The platform's own is a blue that exists
+   nowhere else in this window. */
+.tvol input[type="range"],
+.setrow input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  width: 76px;
   height: 3px;
   border-radius: 2px;
   background: var(--hair2);
   outline: none;
   cursor: pointer;
 }
-.tvol input[type="range"]::-webkit-slider-thumb {
+.tvol input[type="range"] {
+  width: 76px;
+}
+.tvol input[type="range"]::-webkit-slider-thumb,
+.setrow input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 10px;
@@ -924,7 +938,8 @@ body.resizing * {
   background: var(--fg2);
   cursor: pointer;
 }
-.tvol input[type="range"]:hover::-webkit-slider-thumb {
+.tvol input[type="range"]:hover::-webkit-slider-thumb,
+.setrow input[type="range"]:hover::-webkit-slider-thumb {
   background: var(--fg);
 }
 
@@ -938,4 +953,247 @@ body.resizing * {
 }
 .ctxtick.on {
   color: var(--acc);
+}
+
+/* ── Title bar ─────────────────────────────────────────────────────────────
+   Windows' own bar is a strip of someone else's design across the top of a
+   dark monochrome window, so the app draws its own. `-webkit-app-region` is
+   not used: Tauri's drag region attribute does the same job and also survives
+   a double-click to maximise, which the CSS property does not. */
+.titlebar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hair);
+  user-select: none;
+}
+.tbmark {
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 11px;
+}
+.tbname {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.tbdrag {
+  flex: 1;
+}
+.tbbtns {
+  display: flex;
+}
+.tbbtn {
+  width: 44px;
+  border: 0;
+  background: none;
+  color: var(--fg2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tbbtn:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+/* The close button keeps the system's red. It is the one control people hit
+   without looking, and making it match its neighbours makes it easier to hit
+   by accident. */
+.tbbtn.close:hover {
+  background: #c4342c;
+  color: #fff;
+}
+
+/* ── Settings ──────────────────────────────────────────────────────────────
+   A panel down the right rather than a centred modal: most of what it changes
+   — waveform, cover size, columns — is visible in the window behind it, and a
+   dialog in the middle would cover the thing you are adjusting. */
+.settings {
+  position: fixed;
+  z-index: 14;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--hair2);
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.45);
+}
+.sethead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 10px 12px 16px;
+  border-bottom: 1px solid var(--hair);
+}
+.settitle {
+  flex: 1;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg2);
+}
+.setclose {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.setclose:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.setbody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px 20px;
+}
+.setgroup {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.setgroup:last-child {
+  border-bottom: 0;
+}
+.setgroup h3 {
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--acc);
+}
+.setrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.setlabel {
+  flex: none;
+  width: 74px;
+  color: var(--fg2);
+}
+.setrow input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.setvalue {
+  flex: none;
+  width: 44px;
+  text-align: right;
+  color: var(--fg3);
+}
+.sethint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--fg3);
+}
+
+/* A segmented control: the options are few, mutually exclusive, and worth
+   seeing all of at once, which a dropdown would hide. */
+.setseg {
+  display: flex;
+  flex: 1;
+  border: 1px solid var(--hair2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.segbtn {
+  flex: 1;
+  padding: 5px 4px;
+  border: 0;
+  border-right: 1px solid var(--hair2);
+  background: none;
+  color: var(--fg2);
+  font: inherit;
+  cursor: pointer;
+}
+.segbtn:last-child {
+  border-right: 0;
+}
+.segbtn:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.segbtn.on {
+  background: var(--acc-fill);
+  color: var(--acc);
+}
+.setcols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+.setcheck {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg2);
+  cursor: pointer;
+}
+.setcheck.off {
+  color: var(--fg4);
+  cursor: default;
+}
+.setcheck input {
+  accent-color: var(--acc);
+}
+
+.gearbtn {
+  margin-left: 8px;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  background: none;
+  color: var(--fg2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gearbtn:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.gearbtn.on {
+  border-color: var(--acc-line);
+  color: var(--acc);
+}
+
+
+/* A segmented control with more options than fit one line. */
+.setseg.wrap {
+  flex-wrap: wrap;
+}
+.setseg.wrap .segbtn {
+  flex: 1 0 42%;
+  border-bottom: 1px solid var(--hair2);
+}
+.sethint b {
+  font-weight: 600;
+  color: var(--fg2);
+}
+.tvolpct {
+  width: 22px;
+  text-align: right;
+  color: var(--fg3);
 }

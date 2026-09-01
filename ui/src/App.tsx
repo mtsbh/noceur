@@ -37,6 +37,10 @@ import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
 import Transport from "./Transport";
 import Menu, { type MenuItem } from "./Menu";
+import SettingsPanel from "./SettingsPanel";
+import Titlebar from "./Titlebar";
+import { SettingsIcon } from "./icons";
+import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import {
   DEFAULT_COLUMNS,
   cellText,
@@ -203,6 +207,14 @@ export default function App() {
   const [treeWidth, setTreeWidth] = createSignal(storedTreeWidth());
   const [order, setOrder] = createSignal<Order>(storedOrder());
   const [columns, setColumns] = createSignal<Column[]>(loadColumns());
+  const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
+
+  /** Every settings change is written straight through — there is no Save. */
+  function commitSettings(next: SettingsState) {
+    setSettings(next);
+    saveSettings(next);
+  }
 
   const shownColumns = () => columns().filter((c) => c.visible);
 
@@ -890,6 +902,8 @@ export default function App() {
         "--cols": gridTemplate(columns()),
       }}
     >
+      <Titlebar />
+
       <div class="crumbs">
         <button class="navbtn" onClick={back} disabled={!canBack()}>
           ←
@@ -932,6 +946,13 @@ export default function App() {
             )}
           </For>
         </div>
+        <button
+          class={`gearbtn ${settingsOpen() ? "on" : ""}`}
+          title="Settings"
+          onClick={() => setSettingsOpen((open) => !open)}
+        >
+          <SettingsIcon />
+        </button>
       </div>
 
       <div class="body">
@@ -1119,11 +1140,24 @@ export default function App() {
         />
       </Show>
 
+      <Show when={settingsOpen()}>
+        <SettingsPanel
+          settings={settings()}
+          onSettings={commitSettings}
+          artSize={artSize()}
+          onArtSize={chooseArtSize}
+          columns={columns()}
+          onToggleColumn={(key: string) => toggleColumn(key as SortColumn)}
+          onClose={() => setSettingsOpen(false)}
+        />
+      </Show>
+
       <Transport
         state={transport()}
         onState={setTransport}
         onPrev={() => step(-1)}
         onNext={() => step(1)}
+        settings={settings()}
       />
 
       <div class="status">

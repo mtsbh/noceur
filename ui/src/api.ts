@@ -285,3 +285,15 @@ export function shellMenu(fileIds: number[]): Promise<void> {
 export function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }
+
+/**
+ * The amplitude envelope of one file: interleaved [rms, peak] per bucket.
+ *
+ * Empty when the row is not audio or will not decode; the transport falls back
+ * to a plain progress bar. The first call for a track pays for a full decode, so
+ * this is deliberately fired without blocking anything else the UI is doing.
+ */
+export async function envelope(fileId: number): Promise<Uint8Array> {
+  const data = await invoke<number[]>("envelope", { fileId });
+  return Uint8Array.from(data);
+}

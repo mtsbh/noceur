@@ -1,6 +1,18 @@
 import { createSignal, createEffect, onCleanup, Show } from "solid-js";
-import { transportCmd, transportState, thumbUrl, type Transport as T } from "./api";
+import { transportCmd, transportState, thumbUrl, envelope, type Transport as T } from "./api";
+import Waveform from "./Waveform";
 import { keyColour } from "./columns";
+import {
+  BackIcon,
+  ForwardIcon,
+  NextIcon,
+  PauseIcon,
+  PlayIcon,
+  PrevIcon,
+  StopIcon,
+  VolumeIcon,
+} from "./icons";
+import { type Settings } from "./settings";
 
 /**
  * How often the position is re-read while playing.
@@ -25,8 +37,10 @@ export default function Transport(props: {
   onState: (t: T) => void;
   onPrev: () => void;
   onNext: () => void;
+  settings: Settings;
 }) {
   const [scrubbing, setScrubbing] = createSignal<number | null>(null);
+  const [wave, setWave] = createSignal<Uint8Array>(new Uint8Array());
   let bar: HTMLDivElement | undefined;
 
   // Poll only while something is actually playing. A paused or empty transport
@@ -38,6 +52,25 @@ export default function Transport(props: {
     }, TICK_MS);
     onCleanup(() => window.clearInterval(timer));
   });
+
+  // Fetch the envelope when the loaded track changes, keyed on the file rather
+  // than on the transport object: the state is replaced ten times a second while
+  // playing, and re-decoding on each of those would be unthinkable.
+  createEffect<number>((previous) => {
+    const id = props.state?.fileId ?? 0;
+    if (id === previous) return id;
+    setWave(new Uint8Array());
+    if (id > 0) {
+      // Extraction decodes the whole track, so a stale reply is possible if the
+      // user loads another one first; the id check drops it.
+      envelope(id)
+        .then((data) => {
+          if ((props.state?.fileId ?? 0) === id) setWave(data);
+        })
+        .catch(() => {});
+    }
+    return id;
+  }, 0);
 
   const loaded = () => Boolean(props.state?.path);
   const duration = () => props.state?.durationMs ?? 0;
@@ -137,9 +170,11 @@ export default function Transport(props: {
         </span>
       </div>
 
+      {/* Play is the one button hit constantly and the one that must be found
+          without looking, so it is the only one given a filled shape. */}
       <div class="tbtns">
         <button class="tbtn" onClick={props.onPrev} disabled={!loaded()} title="Previous track">
-          ⏮
+          <PrevIcon />
         </button>
         <button
           class="tbtn"
@@ -147,7 +182,7 @@ export default function Transport(props: {
           disabled={!loaded()}
           title="Back 10 seconds"
         >
-          ⏪
+          <BackIcon />
         </button>
         <button
           class="tbtn play"
@@ -155,7 +190,7 @@ export default function Transport(props: {
           disabled={!loaded()}
           title={props.state?.playing ? "Pause (space)" : "Play (space)"}
         >
-          {props.state?.playing ? "❚❚" : "▶"}
+          {props.state?.playing ? <PauseIcon /> : <PlayIcon />}
         </button>
         <button
           class="tbtn"
@@ -163,38 +198,36 @@ export default function Transport(props: {
           disabled={!loaded()}
           title="Forward 10 seconds"
         >
-          ⏩
+          <ForwardIcon />
         </button>
         <button class="tbtn" onClick={props.onNext} disabled={!loaded()} title="Next track">
-          ⏭
+          <NextIcon />
         </button>
         <button class="tbtn" onClick={act("stop")} disabled={!loaded()} title="Stop">
-          ■
+          <StopIcon />
         </button>
       </div>
 
       <span class="ttime mono">{props.state?.position ?? "0:00"}</span>
 
-      {/* The seek surface. A waveform draws here next; the geometry and the drag
-          behaviour are the same either way, which is why the bar owns them. */}
+      {/* The seek surface, inline with the controls. The waveform draws inside
+          it rather than replacing it, so the click and drag geometry stays on
+          one element whether or not there is an envelope to show. */}
       <div
         class="tbar"
         ref={(el) => (bar = el)}
         onPointerDown={startScrub}
         title={duration() > 0 ? "Click or drag to seek" : ""}
       >
-        <div class="tfill" style={{ width: `${progress() * 100}%` }} />
-        <Show when={duration() > 0}>
-          <div class="thead" style={{ left: `${progress() * 100}%` }} />
-        </Show>
+        <Waveform envelope={wave()} progress={progress()} style={props.settings.wave} />
       </div>
 
       <span class="ttime mono">{props.state?.duration ?? "—"}</span>
 
-      {/* Volume. A slider rather than buttons: setting a level is one gesture,
-          and stepping to it is several. */}
       <div class="tvol" title={`Volume ${props.state?.volume ?? 100}%`}>
-        <span class="tvolicon">🔈</span>
+        <span class="tvolicon">
+          <VolumeIcon />
+        </span>
         <input
           type="range"
           min="0"
@@ -205,6 +238,7 @@ export default function Transport(props: {
             transportCmd("volume", level).then(props.onState).catch(() => {});
           }}
         />
+        <span class="tvolpct mono">{props.state?.volume ?? 100}</span>
       </div>
 
       <Show when={props.state?.error}>

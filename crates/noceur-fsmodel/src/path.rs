@@ -15,18 +15,28 @@ const EXT_PREFIX: &str = r"\\?\";
 /// # Precondition: the input must already be normalised
 ///
 /// Verbatim `\\?\` paths bypass the OS's usual path normalisation. `.` and
-/// `..` segments, forward slashes, and trailing dots or spaces are NOT
-/// resolved once the prefix is present, and will fail to open even where the
-/// unprefixed path would have worked. Callers must pass an already-normalised,
-/// fully-qualified path — do not feed this function a path fragment that still
-/// contains `.`/`..` components, `/` separators, or a trailing dot/space.
+/// `..` segments and trailing dots or spaces are NOT resolved once the prefix
+/// is present, and will fail to open even where the unprefixed path would have
+/// worked. Callers must pass an already-normalised, fully-qualified path — do
+/// not feed this function a path fragment that still contains `.`/`..`
+/// components or a trailing dot/space.
+///
+/// Separators are the exception: they are rewritten here rather than demanded of
+/// the caller. Forward slashes work in every other Windows path API, so a path
+/// that opens fine everywhere else would otherwise fail only once it passed
+/// through this function, with nothing in the path itself to suggest why.
+/// Resolving `.`/`..` needs to know what is on disk; swapping a separator does
+/// not.
 #[cfg(windows)]
 pub fn extended(path: &Path) -> PathBuf {
-    let s = path.as_os_str().to_string_lossy();
-
-    if s.starts_with(EXT_PREFIX) {
+    // An already-verbatim path is the caller's exact intent and is returned
+    // untouched. Tested before the rewrite, so a path that only looks verbatim
+    // once its slashes are swapped is still treated as an ordinary one.
+    if path.as_os_str().to_string_lossy().starts_with(EXT_PREFIX) {
         return path.to_path_buf();
     }
+    let s = path.as_os_str().to_string_lossy().replace('/', r"\");
+
     if let Some(rest) = s.strip_prefix(r"\\") {
         // Assumes a drive- or UNC-share input (`\\server\share\...`). Windows
         // local-device paths such as `\\.\pipe\...` or `\\.\COM1` also start
@@ -99,6 +109,23 @@ mod tests {
     #[test]
     fn rewrites_unc_paths() {
         let p = extended(Path::new(r"\\nas\sets\friday"));
+        assert_eq!(p, PathBuf::from(r"\\?\UNC\nas\sets\friday"));
+    }
+
+    /// A verbatim path gets no separator translation from Windows, so a forward
+    /// slash that survived the prefix would make the path fail to open while
+    /// looking perfectly ordinary in every error message that printed it.
+    #[cfg(windows)]
+    #[test]
+    fn forward_slashes_become_backslashes() {
+        let p = extended(Path::new("C:/Music/track.wav"));
+        assert_eq!(p, PathBuf::from(r"\\?\C:\Music\track.wav"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn forward_slashes_in_unc_paths_are_rewritten_too() {
+        let p = extended(Path::new("//nas/sets/friday"));
         assert_eq!(p, PathBuf::from(r"\\?\UNC\nas\sets\friday"));
     }
 

@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 4;
+pub const SCHEMA_VERSION: i32 = 5;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -137,4 +137,31 @@ FROM file f
 JOIN dir d ON d.id = f.dir_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
 WHERE f.id NOT IN (SELECT rowid FROM file_fts);
+"#;
+
+/// Waveform envelope cache.
+///
+/// Keyed by content for the same reason as [`thumb`]: an envelope costs a full
+/// decode of the track, which is by far the most expensive thing this app does to
+/// a file, and the same audio in three folders should pay for it once.
+///
+/// `data` holds the bands interleaved, bucket by bucket, at true linear scale.
+/// Normalising to the loudest moment is left to whatever draws it: a master that
+/// never exceeds a third of full scale should still fill the bar, but the stored
+/// numbers are the ones an analysis pass would want later.
+///
+/// `buckets` is stored beside the blob so a later change to the resolution
+/// invalidates old rows by simply missing them, rather than drawing a waveform at
+/// the wrong scale. The reader checks the blob's length too, which catches a
+/// change in the number of bands.
+///
+/// `miss` mirrors the thumbnail cache: a file the decoder cannot read is the
+/// slowest case to discover, so discovering it twice would be the worst of both.
+const V5: &str = r#"
+CREATE TABLE envelope (
+    content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    buckets    INTEGER NOT NULL,
+    data       BLOB,                         -- NULL when miss = 1
+    miss       INTEGER NOT NULL DEFAULT 0
+);
 "#;
