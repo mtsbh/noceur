@@ -42,6 +42,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "mzstatic.com",
     // Deezer's image CDN.
     "dzcdn.net",
+    // Discogs' image CDN.
+    "discogs.com",
 ];
 
 /// Whether an image URL may be fetched.
@@ -132,6 +134,7 @@ mod tests {
         assert!(is_allowed(
             "https://e-cdns-images.dzcdn.net/images/cover/x/500x500.jpg"
         ));
+        assert!(is_allowed("https://i.discogs.com/x/rx-600.jpeg"));
     }
 
     #[test]

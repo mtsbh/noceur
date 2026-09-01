@@ -1,5 +1,6 @@
-import { For, Show, createEffect, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
+import { credentials, openUrl, setDiscogsToken } from "./api";
 import type { Column } from "./columns";
 import type { Settings as S } from "./settings";
 
@@ -36,6 +37,16 @@ export default function Settings(props: {
   });
 
   const patch = (next: Partial<S>) => props.onSettings({ ...props.settings, ...next });
+
+  const [token, setToken] = createSignal("");
+  const [hasDiscogs, setHasDiscogs] = createSignal(false);
+  const [saving, setSaving] = createSignal(false);
+
+  createEffect(() => {
+    credentials()
+      .then((c) => setHasDiscogs(c.discogs))
+      .catch(() => {});
+  });
 
   return (
     <>
@@ -111,6 +122,59 @@ export default function Settings(props: {
               separate shapes — blue bass, orange body, pale highs — the way a
               CDJ does. <b>Blue</b> is a single colour that pales where the hats
               are. <b>Mono</b> uses the app's own accent.
+            </p>
+          </section>
+
+          <section class="setgroup">
+            <h3>Metadata sources</h3>
+            <p class="sethint">
+              Deezer, iTunes and MusicBrainz need nothing. Discogs needs a
+              personal access token from your own account — it is the only
+              source here that reliably knows a record's label and catalogue
+              number.
+            </p>
+            <div class="setrow">
+              <span class="setlabel">Discogs</span>
+              <input
+                type="password"
+                placeholder={hasDiscogs() ? "— token saved —" : "paste token"}
+                value={token()}
+                spellcheck={false}
+                onInput={(e) => setToken(e.currentTarget.value)}
+              />
+              <button
+                class="btn"
+                disabled={saving()}
+                onClick={() => {
+                  setSaving(true);
+                  setDiscogsToken(token())
+                    .then((c) => {
+                      setHasDiscogs(c.discogs);
+                      // Cleared from the box once stored: it is never read back,
+                      // so leaving it on screen serves nothing but shoulders.
+                      setToken("");
+                      setSaving(false);
+                    })
+                    .catch(() => setSaving(false));
+                }}
+              >
+                {token().trim() ? "Save" : hasDiscogs() ? "Clear" : "Save"}
+              </button>
+            </div>
+            <p class="sethint">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openUrl("https://www.discogs.com/settings/developers").catch(
+                    () => {},
+                  );
+                }}
+              >
+                Generate one on Discogs
+              </a>
+              , then paste it here. It is stored in plain text beside the app, and
+              is only ever sent to Discogs.
             </p>
           </section>
 

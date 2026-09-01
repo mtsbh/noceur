@@ -8,6 +8,7 @@
 mod art;
 mod autotag;
 mod commands;
+mod config;
 mod covers;
 mod dragdrop;
 mod dto;
@@ -105,6 +106,8 @@ fn main() {
             covers::find_covers,
             covers::apply_cover,
             autotag::match_track,
+            autotag::credentials,
+            autotag::set_discogs_token,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

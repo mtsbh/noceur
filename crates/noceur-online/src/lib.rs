@@ -12,6 +12,7 @@
 
 pub mod covers;
 pub mod deezer;
+pub mod discogs;
 pub mod itunes;
 pub mod matching;
 pub mod musicbrainz;
@@ -44,6 +45,10 @@ pub enum OnlineError {
     Refused { url: String },
     #[error("what came back from {url} is not an image")]
     NotAnImage { url: String },
+    #[error("{service} needs a personal access token; add one in Settings")]
+    NeedsToken { service: &'static str },
+    #[error("{service} did not accept that token")]
+    BadToken { service: &'static str },
 }
 
 /// How this app identifies itself.
@@ -72,40 +77,47 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
-/// Minimum gap between requests to MusicBrainz.
+/// Paces requests to one service, so this app stays inside its published limit.
 ///
-/// Their published limit is one request per second per client, enforced by
-/// throttling and eventually by blocking. A batch that retagged two hundred
-/// tracks without pacing itself would be indistinguishable from abuse, and
-/// would earn the block it deserved.
-pub const MIN_GAP: std::time::Duration = std::time::Duration::from_millis(1100);
+/// Per service rather than global: MusicBrainz asks for one request a second and
+/// Discogs for sixty a minute, and making them share a budget would halve both
+/// for no reason. A client that ignored either would be indistinguishable from
+/// abuse and would earn the block it deserved.
+pub struct RateLimit {
+    gap: std::time::Duration,
+    last: std::sync::Mutex<Option<std::time::Instant>>,
+}
 
-/// When the last rate-limited request went out.
-static LAST_REQUEST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+impl RateLimit {
+    pub const fn new(gap_ms: u64) -> RateLimit {
+        RateLimit {
+            gap: std::time::Duration::from_millis(gap_ms),
+            last: std::sync::Mutex::new(None),
+        }
+    }
 
-/// Blocks until enough time has passed since the previous request.
-///
-/// Process-wide rather than per-caller, because the limit is per client and the
-/// service has no idea how many parts of this app decided to ask it something.
-/// Called on the blocking pool, where sleeping is what that pool is for.
-pub fn pace() {
-    let wait = {
-        let mut last = match LAST_REQUEST.lock() {
-            Ok(l) => l,
-            // A poisoned lock means some other thread panicked mid-request.
-            // Pacing is a courtesy, not a correctness property, so recover
-            // rather than propagate.
-            Err(e) => e.into_inner(),
+    /// Blocks until enough time has passed since the previous request.
+    ///
+    /// Called on the blocking pool, where sleeping is what that pool is for.
+    pub fn wait(&self) {
+        let pause = {
+            let mut last = match self.last.lock() {
+                Ok(l) => l,
+                // A poisoned lock means another thread panicked mid-request.
+                // Pacing is a courtesy, not a correctness property, so recover
+                // rather than propagate.
+                Err(e) => e.into_inner(),
+            };
+            let now = std::time::Instant::now();
+            let pause = last
+                .map(|t| self.gap.saturating_sub(now.duration_since(t)))
+                .unwrap_or_default();
+            *last = Some(now + pause);
+            pause
         };
-        let now = std::time::Instant::now();
-        let wait = last
-            .map(|t| MIN_GAP.saturating_sub(now.duration_since(t)))
-            .unwrap_or_default();
-        *last = Some(now + wait);
-        wait
-    };
-    if !wait.is_zero() {
-        std::thread::sleep(wait);
+        if !pause.is_zero() {
+            std::thread::sleep(pause);
+        }
     }
 }
 
@@ -178,17 +190,30 @@ pub fn match_track(
     artist: &str,
     title: &str,
     duration_ms: Option<u64>,
+    discogs_token: &str,
 ) -> Result<Vec<tracks::TrackMatch>, OnlineError> {
     let clean = matching::clean_title(title);
     let mut found = Vec::new();
     let mut last_error = None;
     let mut any_source_answered = false;
 
-    for result in [
+    let mut results = vec![
         deezer::search_tracks(artist, &clean, MATCH_LIMIT),
         itunes::search_tracks(artist, &clean, MATCH_LIMIT),
         musicbrainz::search_recordings(artist, &clean, MATCH_LIMIT),
-    ] {
+    ];
+    // Only asked when there is a token to ask with. Without one it would fail
+    // every time and its error would masquerade as the last word on the search.
+    if !discogs_token.trim().is_empty() {
+        results.push(discogs::search_tracks(
+            artist,
+            &clean,
+            MATCH_LIMIT,
+            discogs_token,
+        ));
+    }
+
+    for result in results {
         match result {
             Ok(list) => {
                 any_source_answered = true;

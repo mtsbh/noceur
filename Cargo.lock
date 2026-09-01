@@ -2160,6 +2160,7 @@ dependencies = [
  "noceur-online",
  "noceur-tags",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tempfile",

@@ -424,3 +424,20 @@ export type TrackMatch = {
 export function matchTrack(fileId: number): Promise<TrackMatch[]> {
   return invoke<TrackMatch[]>("match_track", { fileId });
 }
+
+/** Which optional credentials are set. Never carries the values themselves. */
+export type Credentials = { discogs: boolean };
+
+export function credentials(): Promise<Credentials> {
+  return invoke<Credentials>("credentials");
+}
+
+/**
+ * Stores or clears the Discogs personal access token.
+ *
+ * An empty string clears it. The token is never read back out — the UI can ask
+ * whether one is set, not what it is.
+ */
+export function setDiscogsToken(token: string): Promise<Credentials> {
+  return invoke<Credentials>("set_discogs_token", { token });
+}

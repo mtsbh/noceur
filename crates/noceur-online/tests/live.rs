@@ -131,7 +131,7 @@ fn a_candidate_from_any_source_downloads_as_an_image() {
 #[test]
 #[ignore = "reaches the network"]
 fn matching_a_real_track_ranks_the_right_answer_first() {
-    let found = noceur_online::match_track("Skee Mask", "Rev8617", Some(6 * 60 * 1000))
+    let found = noceur_online::match_track("Skee Mask", "Rev8617", Some(6 * 60 * 1000), "")
         .expect("some source should answer");
     assert!(!found.is_empty(), "a released record should be matched");
 
@@ -163,7 +163,7 @@ fn matching_a_real_track_ranks_the_right_answer_first() {
 fn between_them_the_sources_supply_the_fields_a_dj_library_lacks() {
     // A record that is definitely in every catalogue. An obscure promo would be
     // testing the databases' coverage rather than this code.
-    let mut found = noceur_online::match_track("Skee Mask", "Rev8617", None).unwrap();
+    let mut found = noceur_online::match_track("Skee Mask", "Rev8617", None, "").unwrap();
     assert!(!found.is_empty());
 
     for m in found.iter_mut().take(4) {
@@ -195,7 +195,52 @@ fn an_untagged_file_can_be_matched_from_its_name_alone() {
     let guess = noceur_online::matching::from_file_name("01 - Skee Mask - Rev8617.flac");
     assert_eq!(guess.artist, "Skee Mask");
 
-    let found = noceur_online::match_track(&guess.artist, &guess.title, None).unwrap();
+    let found = noceur_online::match_track(&guess.artist, &guess.title, None, "").unwrap();
     assert!(!found.is_empty(), "a name alone should be enough to match");
     println!("from name: {} — {}", found[0].artist(), found[0].title);
+}
+
+/// Discogs needs a token, so this only runs when one is in the environment:
+///
+/// ```text
+/// DISCOGS_TOKEN=... cargo test -p noceur-online -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "reaches the network and needs a token"]
+fn discogs_supplies_the_label_and_catalogue_number() {
+    let Ok(token) = std::env::var("DISCOGS_TOKEN") else {
+        println!("DISCOGS_TOKEN not set — skipping");
+        return;
+    };
+
+    let found = noceur_online::discogs::search_tracks("Skee Mask", "Rev8617", 5, &token)
+        .expect("Discogs should answer");
+    assert!(!found.is_empty(), "a released record should be found");
+
+    for m in found.iter().take(5) {
+        println!(
+            "  {:<28} {:<18} {:<10} {}",
+            m.album.clone().unwrap_or_default(),
+            m.label.clone().unwrap_or_default(),
+            m.catalog_number.clone().unwrap_or_default(),
+            m.genres.join(", ")
+        );
+    }
+    assert!(
+        found.iter().any(|m| m.label.is_some()),
+        "the label is the reason to ask Discogs at all"
+    );
+}
+
+/// A token that is not a token must say so, rather than looking like an outage.
+#[test]
+#[ignore = "reaches the network"]
+fn a_rejected_token_is_reported_as_a_token_problem() {
+    let err =
+        noceur_online::discogs::search_tracks("Skee Mask", "Rev8617", 5, "notatoken").unwrap_err();
+    println!("{err}");
+    assert!(
+        matches!(err, noceur_online::OnlineError::BadToken { .. }),
+        "got {err:?}"
+    );
 }

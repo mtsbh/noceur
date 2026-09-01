@@ -6,7 +6,7 @@
 
 use crate::sources::Candidate;
 use crate::tracks::TrackMatch;
-use crate::{agent, pace, CoverSize, OnlineError};
+use crate::{agent, CoverSize, OnlineError, RateLimit};
 use serde::Deserialize;
 
 const SERVICE: &str = "MusicBrainz";
@@ -22,6 +22,9 @@ pub const COVER_NAME: &str = "Cover Art Archive";
 /// being credited.
 pub const NAME: &str = "MusicBrainz";
 const ENDPOINT: &str = "https://musicbrainz.org/ws/2/release";
+
+/// Their published limit is one request per second per client.
+static RATE: RateLimit = RateLimit::new(1100);
 
 /// Results one search asks for.
 ///
@@ -78,7 +81,7 @@ pub fn search_releases(artist: &str, title: &str) -> Result<Vec<Release>, Online
     let query = terms.join(" AND ");
 
     // Paced here rather than at the call sites, so no caller can forget.
-    pace();
+    RATE.wait();
 
     let response = agent()
         .get(ENDPOINT)
@@ -264,7 +267,7 @@ pub fn search_recordings(
         terms.push(format!("recording:{}", lucene_escape(title)));
     }
 
-    pace();
+    RATE.wait();
     let response = agent()
         .get("https://musicbrainz.org/ws/2/recording")
         .query("query", terms.join(" AND "))

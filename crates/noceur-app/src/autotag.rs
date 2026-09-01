@@ -58,7 +58,12 @@ pub async fn match_track(
             tagged_title
         };
 
-        let mut matches = noceur_online::match_track(&artist, &title, meta.duration_ms)
+        // Discogs is only asked when the user has given it a token. Its label
+        // and catalogue number are the fields nothing else here reliably has.
+        let token =
+            crate::config::Config::load(&crate::config::Config::default_path()).discogs_token;
+
+        let mut matches = noceur_online::match_track(&artist, &title, meta.duration_ms, &token)
             .map_err(|e| e.to_string())?;
 
         // The fields the search endpoint leaves out are the ones worth having,
@@ -73,4 +78,36 @@ pub async fn match_track(
     })
     .await
     .map_err(|e| format!("match task failed: {e}"))?
+}
+
+/// Whether the optional credentials are set, without revealing them.
+///
+/// The front end needs to know whether to offer Discogs and whether to prompt
+/// for a token; it does not need the token, and never gets it back.
+#[tauri::command]
+pub fn credentials() -> Credentials {
+    let config = crate::config::Config::load(&crate::config::Config::default_path());
+    Credentials {
+        discogs: !config.discogs_token.trim().is_empty(),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Credentials {
+    /// True when a Discogs token is stored.
+    pub discogs: bool,
+}
+
+/// Stores or clears the Discogs token.
+///
+/// An empty string clears it, which is the only way to remove one — there is no
+/// separate delete, because "empty the box and save" is what anyone would try.
+#[tauri::command]
+pub fn set_discogs_token(token: String) -> Result<Credentials, String> {
+    let path = crate::config::Config::default_path();
+    let mut config = crate::config::Config::load(&path);
+    config.discogs_token = token.trim().to_string();
+    config.save(&path)?;
+    Ok(credentials())
 }
