@@ -147,4 +147,13 @@ pub struct Transport {
     pub duration: String,
     /// Why the last command did nothing, if it did nothing.
     pub error: String,
+    /// The row being played, so the bar can show its art and tags.
+    pub file_id: i64,
+    pub artist: String,
+    pub title: String,
+    pub bpm: String,
+    pub key: String,
+    pub key_norm: Option<i64>,
+    /// 0..100.
+    pub volume: u32,
 }

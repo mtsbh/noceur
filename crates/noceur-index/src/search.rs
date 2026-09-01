@@ -213,3 +213,43 @@ mod tests {
         assert_eq!(like_prefix("E:\\100%_mix\\"), "e:\\\\100\\%\\_mix");
     }
 }
+
+/// Tags of one file, for the transport bar.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Tags {
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub bpm: Option<f64>,
+    pub key_norm: Option<i64>,
+    pub key_tag: Option<String>,
+}
+
+/// Reads the tags of one file.
+///
+/// The transport shows artist, BPM and key beside what is playing, and reading
+/// them once when a track is loaded is the alternative to re-querying them on
+/// every position poll.
+pub fn tags_of(db: &Db, file_id: i64) -> Result<Tags, IndexError> {
+    use rusqlite::OptionalExtension;
+
+    Ok(db
+        .conn()
+        .query_row(
+            "SELECT ct.artist, ct.title, ct.bpm_tag, ct.key_norm, ct.key_tag
+             FROM file f
+             LEFT JOIN content_tag ct ON ct.content_id = f.content_id
+             WHERE f.id = ?1",
+            params![file_id],
+            |r| {
+                Ok(Tags {
+                    artist: r.get(0)?,
+                    title: r.get(1)?,
+                    bpm: r.get(2)?,
+                    key_norm: r.get(3)?,
+                    key_tag: r.get(4)?,
+                })
+            },
+        )
+        .optional()?
+        .unwrap_or_default())
+}

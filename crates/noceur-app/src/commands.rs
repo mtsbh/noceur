@@ -404,13 +404,20 @@ mod tests {
 #[tauri::command]
 pub async fn play(state: State<'_, AppState>, file_id: i64) -> Result<Transport, String> {
     let db = state.db.clone();
-    let found = tauri::async_runtime::spawn_blocking(move || {
+
+    // The path and the tags in one trip: the bar shows artist, BPM and key
+    // beside the transport, and re-reading them on every position poll would be
+    // a query ten times a second for values that cannot change.
+    let loaded = tauri::async_runtime::spawn_blocking(move || {
         let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
-        noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())
+        let found = noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())?;
+        let tags = noceur_index::search::tags_of(&db, file_id).map_err(|e| e.to_string())?;
+        Ok::<_, String>((found, tags))
     })
     .await
     .map_err(|e| format!("lookup task failed: {e}"))??;
 
+    let (found, tags) = loaded;
     let Some(found) = found.filter(|f| f.kind == 1) else {
         return Err("that row is not an audio file".into());
     };
@@ -419,6 +426,16 @@ pub async fn play(state: State<'_, AppState>, file_id: i64) -> Result<Transport,
         .player
         .load(&found.path, true)
         .map_err(|e| e.to_string())?;
+
+    if let Ok(mut np) = state.now_playing.lock() {
+        np.file_id = file_id;
+        np.artist = tags.artist.unwrap_or_default();
+        np.title = tags.title.unwrap_or_default();
+        np.bpm = format::bpm(tags.bpm, format::BpmSource::Tag);
+        np.key = format::key(tags.key_norm, tags.key_tag.as_deref(), KeyNotation::Camelot);
+        np.key_norm = tags.key_norm;
+    }
+
     Ok(transport(&state))
 }
 
@@ -461,6 +478,14 @@ fn transport(state: &AppState) -> Transport {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let duration_ms = p.duration_ms.unwrap_or(0);
+    let np = state
+        .now_playing
+        .lock()
+        .map(|n| n.clone())
+        .unwrap_or_default();
+
+    // Nothing loaded means nothing to say about a track, whatever was last read.
+    let loaded = !path.is_empty();
 
     Transport {
         path,
@@ -475,6 +500,13 @@ fn transport(state: &AppState) -> Transport {
             format::ABSENT.to_string()
         },
         error: p.error.unwrap_or_default(),
+        file_id: if loaded { np.file_id } else { 0 },
+        artist: if loaded { np.artist } else { String::new() },
+        title: if loaded { np.title } else { String::new() },
+        bpm: if loaded { np.bpm } else { String::new() },
+        key: if loaded { np.key } else { String::new() },
+        key_norm: if loaded { np.key_norm } else { None },
+        volume: np.volume,
     }
 }
 

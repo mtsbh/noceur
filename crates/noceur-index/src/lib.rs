@@ -12,6 +12,6 @@ pub mod volume;
 pub use db::{Db, IndexError};
 pub use query::{count, list, ListOptions, ListRow, SortColumn};
 pub use scan::{probe_batch, probe_dir, scan_dir, PROBE_BATCH};
-pub use search::{search, Hit};
+pub use search::{search, Hit, Tags};
 pub use thumb::{Cached, Located};
 pub use volume::{for_path, Volume, VolumeKind};

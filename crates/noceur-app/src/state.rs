@@ -14,6 +14,26 @@ pub struct AppState {
     /// The audio thread. Started once and shared: playback outlives any one
     /// listing, and the output device cannot be opened per command.
     pub player: Arc<noceur_audio::Player>,
+    /// What the transport is showing beyond the audio itself.
+    ///
+    /// The player knows a path and a position; the bar wants the artist, the
+    /// BPM, the key and the cover. Those come from the index at the moment a
+    /// track is loaded and would otherwise be re-queried on every poll.
+    pub now_playing: Arc<Mutex<NowPlaying>>,
+}
+
+/// Tags of the loaded track, read once when it is loaded.
+#[derive(Debug, Clone, Default)]
+pub struct NowPlaying {
+    pub file_id: i64,
+    pub artist: String,
+    pub title: String,
+    pub bpm: String,
+    pub key: String,
+    pub key_norm: Option<i64>,
+    /// 0..100. Held here because the audio thread has no reason to report it
+    /// back and the UI needs the slider to survive a reload.
+    pub volume: u32,
 }
 
 impl AppState {
@@ -25,6 +45,10 @@ impl AppState {
         Ok(AppState {
             db: Arc::new(Mutex::new(Db::open(path)?)),
             player: Arc::new(noceur_audio::Player::start()),
+            now_playing: Arc::new(Mutex::new(NowPlaying {
+                volume: 100,
+                ..Default::default()
+            })),
         })
     }
 

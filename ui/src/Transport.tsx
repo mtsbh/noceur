@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onCleanup, Show } from "solid-js";
-import { transportCmd, transportState, type Transport as T } from "./api";
+import { transportCmd, transportState, thumbUrl, type Transport as T } from "./api";
+import { keyColour } from "./columns";
 
 /**
  * How often the position is re-read while playing.
@@ -10,16 +11,20 @@ import { transportCmd, transportState, type Transport as T } from "./api";
  */
 const TICK_MS = 100;
 
+/** Seconds a nudge moves the playhead — enough to skip an intro, not a section. */
+const NUDGE_MS = 10_000;
+
 /**
  * The transport bar.
  *
  * Full width at the bottom of the window, per the spec — it survives split mode,
- * so it belongs to the window rather than to a pane. This is the seek surface
- * until the waveform replaces it.
+ * so it belongs to the window rather than to a pane.
  */
 export default function Transport(props: {
   state: T | null;
   onState: (t: T) => void;
+  onPrev: () => void;
+  onNext: () => void;
 }) {
   const [scrubbing, setScrubbing] = createSignal<number | null>(null);
   let bar: HTMLDivElement | undefined;
@@ -34,6 +39,7 @@ export default function Transport(props: {
     onCleanup(() => window.clearInterval(timer));
   });
 
+  const loaded = () => Boolean(props.state?.path);
   const duration = () => props.state?.durationMs ?? 0;
 
   /** Fraction played, 0..1. Uses the scrub position while a drag is in progress. */
@@ -76,36 +82,101 @@ export default function Transport(props: {
     window.addEventListener("pointerup", stop);
   }
 
-  const act = (action: Parameters<typeof transportCmd>[0]) => () =>
-    transportCmd(action).then(props.onState).catch(() => {});
+  const act = (action: Parameters<typeof transportCmd>[0], value?: number) => () =>
+    transportCmd(action, value).then(props.onState).catch(() => {});
+
+  /** Moves the playhead by a fixed step, clamped to the track. */
+  function nudge(by: number) {
+    const at = props.state?.positionMs ?? 0;
+    const target = Math.min(Math.max(0, at + by), Math.max(0, duration()));
+    transportCmd("seek", target).then(props.onState).catch(() => {});
+  }
+
+  /** Artist and title if the tags have them, else the file name. */
+  const label = () => {
+    const s = props.state;
+    if (!s) return "";
+    const artist = s.artist.trim();
+    const title = s.title.trim();
+    if (artist && title) return `${artist} — ${title}`;
+    return title || s.name;
+  };
 
   return (
-    <div class={`transport ${props.state?.path ? "" : "idle"}`}>
-      <button
-        class="tbtn"
-        onClick={act("toggle")}
-        disabled={!props.state?.path}
-        title={props.state?.playing ? "Pause (space)" : "Play (space)"}
-      >
-        {props.state?.playing ? "❚❚" : "▶"}
-      </button>
-      <button
-        class="tbtn"
-        onClick={act("stop")}
-        disabled={!props.state?.path}
-        title="Stop"
-      >
-        ■
-      </button>
-
-      <span class="tname" title={props.state?.path || ""}>
-        {props.state?.name || "Nothing loaded"}
+    <div class={`transport ${loaded() ? "" : "idle"}`}>
+      {/* Cover of what is playing, at the size the row list already caches. */}
+      <span class="tart">
+        <Show when={loaded() && props.state!.fileId > 0}>
+          <img
+            src={thumbUrl(props.state!.fileId, "medium")}
+            alt=""
+            decoding="async"
+            draggable={false}
+            onError={(e) => e.currentTarget.classList.add("blank")}
+            onLoad={(e) => e.currentTarget.classList.remove("blank")}
+          />
+        </Show>
       </span>
+
+      <div class="tmeta">
+        <span class="tname" title={props.state?.path || ""}>
+          {label() || "Nothing loaded"}
+        </span>
+        <span class="ttags">
+          <Show when={props.state?.bpm}>
+            <span class="mono">{props.state!.bpm}</span>
+          </Show>
+          <Show when={props.state?.key}>
+            <span
+              class="mono"
+              style={{ color: keyColour(props.state!.keyNorm ?? null) }}
+            >
+              {props.state!.key}
+            </span>
+          </Show>
+        </span>
+      </div>
+
+      <div class="tbtns">
+        <button class="tbtn" onClick={props.onPrev} disabled={!loaded()} title="Previous track">
+          ⏮
+        </button>
+        <button
+          class="tbtn"
+          onClick={() => nudge(-NUDGE_MS)}
+          disabled={!loaded()}
+          title="Back 10 seconds"
+        >
+          ⏪
+        </button>
+        <button
+          class="tbtn play"
+          onClick={act("toggle")}
+          disabled={!loaded()}
+          title={props.state?.playing ? "Pause (space)" : "Play (space)"}
+        >
+          {props.state?.playing ? "❚❚" : "▶"}
+        </button>
+        <button
+          class="tbtn"
+          onClick={() => nudge(NUDGE_MS)}
+          disabled={!loaded()}
+          title="Forward 10 seconds"
+        >
+          ⏩
+        </button>
+        <button class="tbtn" onClick={props.onNext} disabled={!loaded()} title="Next track">
+          ⏭
+        </button>
+        <button class="tbtn" onClick={act("stop")} disabled={!loaded()} title="Stop">
+          ■
+        </button>
+      </div>
 
       <span class="ttime mono">{props.state?.position ?? "0:00"}</span>
 
-      {/* The seek surface. A waveform draws here in the next milestone; the
-          geometry and the drag behaviour are the same either way. */}
+      {/* The seek surface. A waveform draws here next; the geometry and the drag
+          behaviour are the same either way, which is why the bar owns them. */}
       <div
         class="tbar"
         ref={(el) => (bar = el)}
@@ -119,6 +190,22 @@ export default function Transport(props: {
       </div>
 
       <span class="ttime mono">{props.state?.duration ?? "—"}</span>
+
+      {/* Volume. A slider rather than buttons: setting a level is one gesture,
+          and stepping to it is several. */}
+      <div class="tvol" title={`Volume ${props.state?.volume ?? 100}%`}>
+        <span class="tvolicon">🔈</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={props.state?.volume ?? 100}
+          onInput={(e) => {
+            const level = Number(e.currentTarget.value);
+            transportCmd("volume", level).then(props.onState).catch(() => {});
+          }}
+        />
+      </div>
 
       <Show when={props.state?.error}>
         <span class="terror" title={props.state!.error}>

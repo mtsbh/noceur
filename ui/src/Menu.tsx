@@ -11,6 +11,8 @@ export type MenuItem =
       /** Rendered in the accent, for anything that destroys or leaves the app. */
       danger?: boolean;
       disabled?: boolean;
+      /** Draws a tick, for entries that toggle something on and off. */
+      checked?: boolean;
       run: () => void;
     };
 
@@ -88,6 +90,9 @@ export default function Menu(props: {
                     props.onClose();
                   }}
                 >
+                  <Show when={entry().checked !== undefined}>
+                    <span class={`ctxtick ${entry().checked ? "on" : ""}`}>✓</span>
+                  </Show>
                   <span class="ctxlabel">{entry().label}</span>
                   <Show when={entry().hint}>
                     <span class="ctxhint">{entry().hint}</span>

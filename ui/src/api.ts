@@ -190,6 +190,15 @@ export type Transport = {
   position: string;
   duration: string;
   error: string;
+  /** The row being played, so the bar can show its art. 0 when nothing is loaded. */
+  fileId: number;
+  artist: string;
+  title: string;
+  bpm: string;
+  key: string;
+  keyNorm: number | null;
+  /** 0..100. */
+  volume: number;
 };
 
 /** Loads a row into the player and starts it. */

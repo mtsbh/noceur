@@ -25,7 +25,7 @@ impl ThumbSize {
     /// Edge length in pixels of the square the thumbnail is drawn into.
     pub fn px(self) -> u32 {
         match self {
-            ThumbSize::Small => 22,
+            ThumbSize::Small => 16,
             ThumbSize::Medium => 44,
             ThumbSize::Large => 88,
         }

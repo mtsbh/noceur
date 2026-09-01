@@ -71,7 +71,7 @@ function home(): string {
  * size costs nothing against the list as it was.
  */
 const ART: Record<ArtSize, { art: number; row: number }> = {
-  small: { art: 22, row: 26 },
+  small: { art: 16, row: 24 },
   medium: { art: 44, row: 48 },
   large: { art: 88, row: 92 },
 };
@@ -203,7 +203,6 @@ export default function App() {
   const [treeWidth, setTreeWidth] = createSignal(storedTreeWidth());
   const [order, setOrder] = createSignal<Order>(storedOrder());
   const [columns, setColumns] = createSignal<Column[]>(loadColumns());
-  const [pickingColumns, setPickingColumns] = createSignal(false);
 
   const shownColumns = () => columns().filter((c) => c.visible);
 
@@ -319,6 +318,31 @@ export default function App() {
     if (row.kind !== 1) return;
     setSelected(row.fileId);
     play(row.fileId).then(setTransport).catch(() => {});
+  }
+
+  /**
+   * Steps to the next or previous audio row in the listing.
+   *
+   * The listing is the playlist — auditioning means walking a folder in the
+   * order on screen, so "next" follows the sort the user chose rather than a
+   * queue built somewhere else. Rows whose window is not loaded stop the walk
+   * rather than being guessed at.
+   */
+  function step(by: number) {
+    const from = transport()?.fileId ?? selected();
+    if (from == null) return;
+    let at = indexOf(from);
+    if (at < 0) return;
+
+    const total = listing()?.total ?? 0;
+    for (let i = at + by; i >= 0 && i < total; i += by) {
+      const row = rowAt(i);
+      if (!row) return;
+      if (row.kind === 1) {
+        playRow(row);
+        return;
+      }
+    }
   }
 
   /**
@@ -452,6 +476,24 @@ export default function App() {
     // The menu measures itself after mount and nudges back inside the window,
     // so the raw pointer position is the right starting point.
     setMenu({ row, x: e.clientX, y: e.clientY });
+  }
+
+  // Where the column chooser was opened from, or null when it is closed.
+  const [columnMenu, setColumnMenu] = createSignal<{ x: number; y: number } | null>(
+    null,
+  );
+
+  /** The column chooser, as menu entries that tick on and off. */
+  function columnMenuItems(): MenuItem[] {
+    return columns().map((col) => ({
+      kind: "item" as const,
+      label: col.label,
+      checked: col.visible,
+      // Name carries the row's identity and its state marker; a listing with it
+      // hidden is a list of blanks.
+      disabled: col.key === "name",
+      run: () => toggleColumn(col.key),
+    }));
   }
 
   /** Hands off to the shell's own menu, extensions and all. */
@@ -905,7 +947,15 @@ export default function App() {
         />
 
         <div class="pane">
-      <div class="hdr">
+      <div
+        class="hdr"
+        onContextMenu={(e) => {
+          // Right-clicking the header chooses columns, as it does in Explorer.
+          e.preventDefault();
+          e.stopPropagation();
+          setColumnMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
         <span class="art" />
         <For each={shownColumns()}>
           {(col, i) => (
@@ -939,25 +989,21 @@ export default function App() {
           title="Choose columns"
           onClick={(e) => {
             e.stopPropagation();
-            setPickingColumns(!pickingColumns());
+            const box = e.currentTarget.getBoundingClientRect();
+            setColumnMenu({ x: box.right - 170, y: box.bottom + 4 });
           }}
         >
           ⋮
         </span>
       </div>
 
-      <Show when={pickingColumns()}>
-        <div class="scrim bare" onClick={() => setPickingColumns(false)} />
-        <div class="colmenu">
-          <For each={columns()}>
-            {(col) => (
-              <div class="colopt" onClick={() => toggleColumn(col.key)}>
-                <span class={`tick ${col.visible ? "on" : ""}`}>✓</span>
-                {col.label}
-              </div>
-            )}
-          </For>
-        </div>
+      <Show when={columnMenu()}>
+        <Menu
+          x={columnMenu()!.x}
+          y={columnMenu()!.y}
+          items={columnMenuItems()}
+          onClose={() => setColumnMenu(null)}
+        />
       </Show>
 
       {/* The scroll container is the virtualizer's measuring stick, so it is
@@ -1073,7 +1119,12 @@ export default function App() {
         />
       </Show>
 
-      <Transport state={transport()} onState={setTransport} />
+      <Transport
+        state={transport()}
+        onState={setTransport}
+        onPrev={() => step(-1)}
+        onNext={() => step(1)}
+      />
 
       <div class="status">
         <Show when={!listing.error && listing()}>

@@ -7,7 +7,7 @@ const PIN_KEY = "noceur.pinned";
 const DRIVES_KEY = "noceur.showDrives";
 
 /** Height of one tree row. Sections and nodes share it so the virtualizer needs no measuring. */
-const TROW = 26;
+const TROW = 24;
 const TOVERSCAN = 12;
 
 /** Reads the pinned paths, tolerating a preference written by an older build. */
