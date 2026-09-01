@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::quickkey;
 use crate::volume::now;
 use noceur_fsmodel::{read_dir, EntryKind};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 /// Canonical key for a directory within a volume.
 ///
@@ -177,102 +177,206 @@ pub fn probe_batch(db: &Db, dir_id: i64, limit: usize) -> Result<usize, IndexErr
     let attempted = targets.len();
 
     for (file_id, name, dir_path, file_mtime) in targets {
-        let full = Path::new(&dir_path).join(&name);
-
-        let quick = match quickkey::compute(&full) {
-            Ok(q) => q,
-            Err(_) => {
-                mark_state(db, file_id, "unreadable")?;
-                continue;
-            }
-        };
-
-        let meta = match noceur_tags::read(&full) {
-            Ok(m) => m,
-            Err(_) => {
-                mark_state(db, file_id, "undecodable")?;
-                continue;
-            }
-        };
-
-        db.conn().execute(
-            "INSERT INTO content (quick_key, byte_size, duration_ms, sample_rate, channels, bit_depth)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(quick_key) DO UPDATE SET
-                 duration_ms = excluded.duration_ms,
-                 sample_rate = excluded.sample_rate,
-                 channels    = excluded.channels,
-                 bit_depth   = excluded.bit_depth",
-            params![
-                quick,
-                full.metadata().map(|m| m.len() as i64).unwrap_or(0),
-                meta.duration_ms.map(|v| v as i64),
-                meta.sample_rate.map(|v| v as i64),
-                meta.channels.map(|v| v as i64),
-                meta.bit_depth.map(|v| v as i64),
-            ],
-        )?;
-
-        let content_id: i64 = db.conn().query_row(
-            "SELECT id FROM content WHERE quick_key = ?1",
-            [&quick],
-            |r| r.get(0),
-        )?;
-
-        db.conn().execute(
-            "INSERT INTO content_tag (content_id, artist, title, album, album_artist, genre,
-                                      year, track_no, comment, isrc, bpm_tag, key_tag,
-                                      key_norm, has_artwork, read_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
-             ON CONFLICT(content_id) DO UPDATE SET
-                 artist=excluded.artist, title=excluded.title, album=excluded.album,
-                 album_artist=excluded.album_artist, genre=excluded.genre,
-                 year=excluded.year, track_no=excluded.track_no, comment=excluded.comment,
-                 isrc=excluded.isrc, bpm_tag=excluded.bpm_tag, key_tag=excluded.key_tag,
-                 key_norm=excluded.key_norm, has_artwork=excluded.has_artwork,
-                 read_at=excluded.read_at",
-            params![
-                content_id,
-                meta.artist,
-                meta.title,
-                meta.album,
-                meta.album_artist,
-                meta.genre,
-                meta.year.map(|v| v as i64),
-                meta.track_no.map(|v| v as i64),
-                meta.comment,
-                meta.isrc,
-                meta.bpm.map(|v| v as f64),
-                meta.key_tag,
-                meta.key_norm.map(|v| v as i64),
-                meta.has_artwork as i64,
-                // Never behind the mtime we just read the file at.
-                //
-                // Staleness is `f.mtime > ct.read_at`. Recording only the wall
-                // clock leaves a file whose mtime is in the future — a bad clock,
-                // an SMB share, a copy that preserved timestamps — permanently
-                // stale, and a caller that probes until nothing is stale would
-                // re-read it forever. Recording the mtime we actually read says
-                // what is true: the tags are current as of that stamp.
-                now().max(file_mtime),
-            ],
-        )?;
-
-        db.conn().execute(
-            "UPDATE file SET content_id = ?1, state = 'ok' WHERE id = ?2",
-            params![content_id, file_id],
-        )?;
-
-        // Re-index now that the row has an artist, title and album to match on.
-        crate::search::index_file(db, file_id)?;
+        probe_target(db, file_id, &name, &dir_path, file_mtime)?;
     }
     Ok(attempted)
+}
+
+/// Probes one file: identity, tags, and the search index.
+///
+/// Extracted from the batch loop so that re-reading a single file after it has
+/// been edited goes through exactly the same code. Two implementations of "work
+/// out what this file now says about itself" would drift, and the one used less
+/// often would be the one that drifted.
+fn probe_target(
+    db: &Db,
+    file_id: i64,
+    name: &str,
+    dir_path: &str,
+    file_mtime: i64,
+) -> Result<(), IndexError> {
+    let full = Path::new(dir_path).join(name);
+
+    let quick = match quickkey::compute(&full) {
+        Ok(q) => q,
+        Err(_) => {
+            mark_state(db, file_id, "unreadable")?;
+            return Ok(());
+        }
+    };
+
+    let meta = match noceur_tags::read(&full) {
+        Ok(m) => m,
+        Err(_) => {
+            mark_state(db, file_id, "undecodable")?;
+            return Ok(());
+        }
+    };
+
+    db.conn().execute(
+        "INSERT INTO content (quick_key, byte_size, duration_ms, sample_rate, channels, bit_depth)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(quick_key) DO UPDATE SET
+             duration_ms = excluded.duration_ms,
+             sample_rate = excluded.sample_rate,
+             channels    = excluded.channels,
+             bit_depth   = excluded.bit_depth",
+        params![
+            quick,
+            full.metadata().map(|m| m.len() as i64).unwrap_or(0),
+            meta.duration_ms.map(|v| v as i64),
+            meta.sample_rate.map(|v| v as i64),
+            meta.channels.map(|v| v as i64),
+            meta.bit_depth.map(|v| v as i64),
+        ],
+    )?;
+
+    let content_id: i64 = db.conn().query_row(
+        "SELECT id FROM content WHERE quick_key = ?1",
+        [&quick],
+        |r| r.get(0),
+    )?;
+
+    db.conn().execute(
+        "INSERT INTO content_tag (content_id, artist, title, album, album_artist, genre,
+                                  year, track_no, comment, isrc, bpm_tag, key_tag,
+                                  key_norm, has_artwork, read_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
+         ON CONFLICT(content_id) DO UPDATE SET
+             artist=excluded.artist, title=excluded.title, album=excluded.album,
+             album_artist=excluded.album_artist, genre=excluded.genre,
+             year=excluded.year, track_no=excluded.track_no, comment=excluded.comment,
+             isrc=excluded.isrc, bpm_tag=excluded.bpm_tag, key_tag=excluded.key_tag,
+             key_norm=excluded.key_norm, has_artwork=excluded.has_artwork,
+             read_at=excluded.read_at",
+        params![
+            content_id,
+            meta.artist,
+            meta.title,
+            meta.album,
+            meta.album_artist,
+            meta.genre,
+            meta.year.map(|v| v as i64),
+            meta.track_no.map(|v| v as i64),
+            meta.comment,
+            meta.isrc,
+            meta.bpm.map(|v| v as f64),
+            meta.key_tag,
+            meta.key_norm.map(|v| v as i64),
+            meta.has_artwork as i64,
+            // Never behind the mtime we just read the file at.
+            //
+            // Staleness is `f.mtime > ct.read_at`. Recording only the wall
+            // clock leaves a file whose mtime is in the future — a bad clock,
+            // an SMB share, a copy that preserved timestamps — permanently
+            // stale, and a caller that probes until nothing is stale would
+            // re-read it forever. Recording the mtime we actually read says
+            // what is true: the tags are current as of that stamp.
+            now().max(file_mtime),
+        ],
+    )?;
+
+    db.conn().execute(
+        "UPDATE file SET content_id = ?1, state = 'ok' WHERE id = ?2",
+        params![content_id, file_id],
+    )?;
+
+    // Re-index now that the row has an artist, title and album to match on.
+    crate::search::index_file(db, file_id)?;
+    Ok(())
 }
 
 fn mark_state(db: &Db, file_id: i64, state: &str) -> Result<(), IndexError> {
     db.conn().execute(
         "UPDATE file SET state = ?1 WHERE id = ?2",
         params![state, file_id],
+    )?;
+    Ok(())
+}
+
+/// Re-reads one file after something changed it on disk.
+///
+/// Called after the app writes tags. Refreshes the file's size and mtime from
+/// disk first, because a tag write changes both: leaving the stale numbers in
+/// the row would make the listing disagree with Explorer and could convince a
+/// later scan that nothing had happened.
+///
+/// Writing tags also changes the file's *identity*. `quick_key` is size plus a
+/// hash of the head and tail, so a retagged file hashes differently and lands on
+/// a new `content` row — losing the caches the old one had accumulated. The
+/// waveform is carried across, because tag edits do not touch a single sample of
+/// audio and re-deriving it costs a full decode of the track. The thumbnail is
+/// deliberately not carried: artwork lives in the tags, so it is exactly the
+/// thing an edit might have changed.
+pub fn reprobe(db: &Db, file_id: i64) -> Result<(), IndexError> {
+    let row: Option<(String, String, Option<i64>)> = db
+        .conn()
+        .query_row(
+            "SELECT f.name, d.path_lower, f.content_id
+             FROM file f JOIN dir d ON d.id = f.dir_id
+             WHERE f.id = ?1",
+            params![file_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+
+    let Some((name, dir_path, previous)) = row else {
+        return Ok(());
+    };
+    let full = Path::new(&dir_path).join(&name);
+
+    let (size, mtime) = match std::fs::metadata(noceur_fsmodel::path::extended(&full)) {
+        Ok(m) => (m.len() as i64, mtime_of(&m)),
+        // Gone since the edit: leave the row alone rather than inventing numbers
+        // for it. The next scan of the folder will notice it is missing.
+        Err(_) => return Ok(()),
+    };
+
+    db.conn().execute(
+        "UPDATE file SET size = ?1, mtime = ?2 WHERE id = ?3",
+        params![size, mtime, file_id],
+    )?;
+
+    probe_target(db, file_id, &name, &dir_path, mtime)?;
+
+    let current: Option<i64> = db
+        .conn()
+        .query_row(
+            "SELECT content_id FROM file WHERE id = ?1",
+            params![file_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+
+    if let (Some(from), Some(to)) = (previous, current) {
+        if from != to {
+            carry_envelope(db, from, to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Seconds since the epoch, matching what enumeration records.
+fn mtime_of(meta: &std::fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Moves a cached waveform from one content identity to another.
+///
+/// Only ever used where the audio is known to be the same and only the tags
+/// around it changed. Does nothing if the source has no envelope or the
+/// destination already has one.
+fn carry_envelope(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO envelope (content_id, buckets, data, miss)
+         SELECT ?2, buckets, data, miss FROM envelope WHERE content_id = ?1
+         ON CONFLICT(content_id) DO NOTHING",
+        params![from, to],
     )?;
     Ok(())
 }
@@ -758,5 +862,147 @@ mod tests {
     #[test]
     fn path_key_does_not_fold_case_on_unix() {
         assert_ne!(path_key(Path::new("/Music")), path_key(Path::new("/music")));
+    }
+
+    /// The path the tag editor depends on: write to the file, re-probe, and the
+    /// index agrees with what is now on disk — listing, and search with it.
+    #[test]
+    fn reprobing_picks_up_tags_written_since_the_last_probe() {
+        let (db, dir, vol) = setup();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        let dir_id = scan_dir(&db, vol, dir.path()).unwrap();
+        probe_dir(&db, dir_id).unwrap();
+
+        let file_id: i64 = db
+            .conn()
+            .query_row(
+                "SELECT id FROM file WHERE dir_id = ?1 AND name = 'track.wav'",
+                params![dir_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        noceur_tags::edit::write(
+            &path,
+            &noceur_tags::Edit {
+                artist: noceur_tags::Change::Set("Zenker Brothers".into()),
+                title: noceur_tags::Change::Set("Immersion".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        reprobe(&db, file_id).unwrap();
+
+        let artist: Option<String> = db
+            .conn()
+            .query_row(
+                "SELECT ct.artist FROM file f
+                 JOIN content_tag ct ON ct.content_id = f.content_id
+                 WHERE f.id = ?1",
+                params![file_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(artist.as_deref(), Some("Zenker Brothers"));
+
+        let hits = crate::search::search(&db, "Zenker", &[], 10).unwrap();
+        assert_eq!(
+            names(&hits),
+            vec!["track.wav"],
+            "an edited file must be findable by its new tags"
+        );
+    }
+
+    /// A tag write changes the file's size and head bytes, so it lands on a new
+    /// content row. The waveform is derived from the audio, which the edit did
+    /// not touch — losing it would cost a full decode of the track for the sake
+    /// of a corrected spelling.
+    #[test]
+    fn a_tag_edit_does_not_throw_away_the_cached_waveform() {
+        let (db, dir, vol) = setup();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        let dir_id = scan_dir(&db, vol, dir.path()).unwrap();
+        probe_dir(&db, dir_id).unwrap();
+
+        let (file_id, before): (i64, i64) = db
+            .conn()
+            .query_row(
+                "SELECT id, content_id FROM file WHERE dir_id = ?1 AND name = 'track.wav'",
+                params![dir_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+
+        crate::envelope::put(&db, before, 2, Some(&[1, 2, 3, 4])).unwrap();
+
+        noceur_tags::edit::write(
+            &path,
+            &noceur_tags::Edit {
+                artist: noceur_tags::Change::Set("Skee Mask".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        reprobe(&db, file_id).unwrap();
+
+        let after: i64 = db
+            .conn()
+            .query_row(
+                "SELECT content_id FROM file WHERE id = ?1",
+                params![file_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(
+            crate::envelope::get(&db, after, 2, 2).unwrap(),
+            crate::envelope::Cached::Envelope(vec![1, 2, 3, 4]),
+            "the waveform must survive the identity change (was {before}, now {after})"
+        );
+    }
+
+    /// The row has to agree with Explorer about the file's size after an edit,
+    /// and a stale mtime would also convince the next scan nothing had changed.
+    #[test]
+    fn reprobing_refreshes_the_size_the_listing_shows() {
+        let (db, dir, vol) = setup();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        let dir_id = scan_dir(&db, vol, dir.path()).unwrap();
+        let file_id: i64 = db
+            .conn()
+            .query_row(
+                "SELECT id FROM file WHERE dir_id = ?1 AND name = 'track.wav'",
+                params![dir_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        noceur_tags::edit::write(
+            &path,
+            &noceur_tags::Edit {
+                comment: noceur_tags::Change::Set("x".repeat(400)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        reprobe(&db, file_id).unwrap();
+
+        let recorded: i64 = db
+            .conn()
+            .query_row(
+                "SELECT size FROM file WHERE id = ?1",
+                params![file_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let actual = std::fs::metadata(&path).unwrap().len() as i64;
+        assert_eq!(recorded, actual);
     }
 }

@@ -13,6 +13,7 @@ mod fileops;
 mod format;
 mod shellmenu;
 mod state;
+mod tagedit;
 
 use state::AppState;
 
@@ -97,6 +98,8 @@ fn main() {
             commands::shell_menu,
             commands::open_url,
             commands::envelope,
+            tagedit::read_tags,
+            tagedit::write_tags,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

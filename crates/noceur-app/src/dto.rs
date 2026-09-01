@@ -157,3 +157,72 @@ pub struct Transport {
     /// 0..100.
     pub volume: u32,
 }
+
+/// The tags of a selection, as the editor should show them.
+///
+/// Every field is `Option<String>`, and the two cases mean different things.
+/// `Some("")` is "every file in the selection agrees that this is empty";
+/// `None` is "they disagree". The editor shows the first as a blank box and the
+/// second as a placeholder, because typing into a blank box that meant
+/// "different values" and having it write that blank to twelve files would
+/// destroy tags nobody asked to touch.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagForm {
+    /// How many files the form covers.
+    pub count: i64,
+    /// The file name when there is one file, else how many there are.
+    pub subject: String,
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
+    pub genre: Option<String>,
+    pub comment: Option<String>,
+    pub isrc: Option<String>,
+    pub year: Option<String>,
+    pub track_no: Option<String>,
+    pub bpm: Option<String>,
+    pub key: Option<String>,
+}
+
+/// What the editor asks to change.
+///
+/// A field the user never touched is absent, which means leave it alone. A field
+/// present but empty is a request to clear the tag. That distinction is the
+/// whole reason this is not just a `TagForm` sent back.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TagEdit {
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
+    pub genre: Option<String>,
+    pub comment: Option<String>,
+    pub isrc: Option<String>,
+    pub year: Option<String>,
+    pub track_no: Option<String>,
+    pub bpm: Option<String>,
+    pub key: Option<String>,
+}
+
+/// What happened to each file a write touched.
+///
+/// Reported per file rather than as one pass/fail, because a selection of twenty
+/// where one is read-only should write the other nineteen and say which one it
+/// could not — not refuse the lot, and not claim success.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteReport {
+    pub written: i64,
+    /// One entry per file that failed, naming it and why.
+    pub failures: Vec<WriteFailure>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteFailure {
+    pub name: String,
+    pub reason: String,
+}

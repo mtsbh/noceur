@@ -38,6 +38,7 @@ import Search from "./Search";
 import Transport from "./Transport";
 import Menu, { type MenuItem } from "./Menu";
 import SettingsPanel from "./SettingsPanel";
+import TagEditor from "./TagEditor";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -209,6 +210,8 @@ export default function App() {
   const [columns, setColumns] = createSignal<Column[]>(loadColumns());
   const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  /** File ids the tag editor is open on, or null when it is closed. */
+  const [editing, setEditing] = createSignal<number[] | null>(null);
 
   /** Every settings change is written straight through — there is no Save. */
   function commitSettings(next: SettingsState) {
@@ -551,6 +554,13 @@ export default function App() {
             .catch(() => {});
         },
       },
+      {
+        kind: "item",
+        label: many ? `Edit metadata of ${selection().size} tracks…` : "Edit metadata…",
+        hint: "f2",
+        disabled: row.kind !== 1,
+        run: () => setEditing([...selection()]),
+      },
       { kind: "separator" },
       {
         kind: "item",
@@ -639,6 +649,14 @@ export default function App() {
       if (e.key === "Delete" && !typing && !finding()) {
         e.preventDefault();
         deleteSelection();
+      }
+
+      // F2 opens the tag editor. Explorer renames on F2, but this is a music
+      // browser: the thing you want to change about a track is almost never the
+      // name of the file it lives in.
+      if (e.key === "F2" && !typing && !finding() && selection().size > 0) {
+        e.preventDefault();
+        setEditing([...selection()]);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -1138,6 +1156,16 @@ export default function App() {
           items={rowMenuItems(menu()!.row)}
           onClose={() => setMenu(null)}
         />
+      </Show>
+
+      <Show when={editing()}>
+        {(ids) => (
+          <TagEditor
+            fileIds={ids()}
+            onClose={() => setEditing(null)}
+            onWritten={() => refetchListing()}
+          />
+        )}
       </Show>
 
       <Show when={settingsOpen()}>

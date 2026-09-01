@@ -297,3 +297,68 @@ export async function envelope(fileId: number): Promise<Uint8Array> {
   const data = await invoke<number[]>("envelope", { fileId });
   return Uint8Array.from(data);
 }
+
+/**
+ * The tags of a selection, merged into one form.
+ *
+ * A field is `null` when the selected files disagree about it, and `""` when
+ * they agree it is empty. The editor must keep those apart: a blank box that
+ * meant "various" would write that blank to every file if it were submitted.
+ */
+export type TagForm = {
+  count: number;
+  /** The file name for one file, else how many there are. */
+  subject: string;
+  artist: string | null;
+  title: string | null;
+  album: string | null;
+  albumArtist: string | null;
+  genre: string | null;
+  comment: string | null;
+  isrc: string | null;
+  year: string | null;
+  trackNo: string | null;
+  bpm: string | null;
+  key: string | null;
+};
+
+/** The editable fields, in the order the editor lays them out. */
+export const TAG_FIELDS = [
+  ["title", "Title"],
+  ["artist", "Artist"],
+  ["album", "Album"],
+  ["albumArtist", "Album artist"],
+  ["genre", "Genre"],
+  ["year", "Year"],
+  ["trackNo", "Track"],
+  ["bpm", "BPM"],
+  ["key", "Key"],
+  ["isrc", "ISRC"],
+  ["comment", "Comment"],
+] as const;
+
+export type TagField = (typeof TAG_FIELDS)[number][0];
+
+/** What a write did, per file. */
+export type WriteReport = {
+  written: number;
+  failures: { name: string; reason: string }[];
+};
+
+export function readTags(fileIds: number[]): Promise<TagForm> {
+  return invoke<TagForm>("read_tags", { fileIds });
+}
+
+/**
+ * Writes tags to a selection.
+ *
+ * Only fields present in `edit` are touched; a field set to `""` clears the tag.
+ * Absent means leave every file's own value alone, which is why the editor sends
+ * only the boxes the user actually typed in.
+ */
+export function writeTags(
+  fileIds: number[],
+  edit: Partial<Record<TagField, string>>,
+): Promise<WriteReport> {
+  return invoke<WriteReport>("write_tags", { fileIds, edit });
+}

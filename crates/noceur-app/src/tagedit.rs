@@ -1,0 +1,308 @@
+//! Reading and writing tags for the metadata editor.
+//!
+//! Its own module rather than more of `commands.rs`, because this is the first
+//! thing the app does that writes to the user's files outside the shell — the
+//! copy, move and delete commands all go through `IFileOperation`, which gives
+//! them Explorer's progress, its conflict prompts and its undo. Nothing here has
+//! any of that, so it is worth keeping where it can be read in one sitting.
+
+use crate::dto::{TagEdit, TagForm, WriteFailure, WriteReport};
+use crate::state::AppState;
+use std::path::PathBuf;
+use tauri::State;
+
+/// Reads the tags of a selection into one editable form.
+///
+/// Reads the files themselves rather than the index. The index is a cache of
+/// what a probe last saw, and an editor showing a stale cache would quietly
+/// write it back — turning a file someone retagged in another program into a
+/// file with this app's old idea of its tags. A few dozen files is a few dozen
+/// tag reads; the editor opens on a selection, not on a library.
+#[tauri::command]
+pub async fn read_tags(state: State<'_, AppState>, file_ids: Vec<i64>) -> Result<TagForm, String> {
+    if file_ids.is_empty() {
+        return Ok(TagForm::default());
+    }
+    let db = state.db.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            file_ids
+                .iter()
+                .filter_map(|id| noceur_index::thumb::locate(&db, *id).ok().flatten())
+                .filter(|f| f.kind == 1)
+                .collect::<Vec<_>>()
+        };
+        if found.is_empty() {
+            return Err("none of those rows are audio files".to_string());
+        }
+
+        let mut merge = Merge::default();
+        for row in &found {
+            // A file that will not parse contributes nothing rather than failing
+            // the form: one bad file in a selection of thirty should not stop the
+            // other twenty-nine being retagged.
+            if let Ok(meta) = noceur_tags::read(&row.path) {
+                merge.add(&meta);
+            }
+        }
+
+        let subject = if found.len() == 1 {
+            found[0]
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        } else {
+            format!("{} files", found.len())
+        };
+
+        Ok(merge.into_form(found.len() as i64, subject))
+    })
+    .await
+    .map_err(|e| format!("tag read task failed: {e}"))?
+}
+
+/// Writes tags to a selection and re-reads what changed.
+///
+/// Per-file failures are collected rather than thrown. A selection of twenty
+/// where one file is open in another program should write the nineteen and name
+/// the one it could not; refusing the lot, or claiming success, are both worse
+/// than saying what happened.
+#[tauri::command]
+pub async fn write_tags(
+    state: State<'_, AppState>,
+    file_ids: Vec<i64>,
+    edit: TagEdit,
+) -> Result<WriteReport, String> {
+    let db = state.db.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let change = noceur_tags::Edit {
+            artist: noceur_tags::Change::from_input(edit.artist),
+            title: noceur_tags::Change::from_input(edit.title),
+            album: noceur_tags::Change::from_input(edit.album),
+            album_artist: noceur_tags::Change::from_input(edit.album_artist),
+            genre: noceur_tags::Change::from_input(edit.genre),
+            comment: noceur_tags::Change::from_input(edit.comment),
+            isrc: noceur_tags::Change::from_input(edit.isrc),
+            year: noceur_tags::Change::from_input(edit.year),
+            track_no: noceur_tags::Change::from_input(edit.track_no),
+            bpm: noceur_tags::Change::from_input(edit.bpm),
+            key: noceur_tags::Change::from_input(edit.key),
+        };
+        if change.is_empty() {
+            return Ok(WriteReport::default());
+        }
+
+        // Paths first, holding the lock only for that. Writing tags rewrites
+        // whole files, which for a large selection is far too long to keep the
+        // index — and every listing and thumbnail behind it — waiting.
+        let targets: Vec<(i64, PathBuf)> = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            file_ids
+                .iter()
+                .filter_map(|id| {
+                    noceur_index::thumb::locate(&db, *id)
+                        .ok()
+                        .flatten()
+                        .filter(|f| f.kind == 1)
+                        .map(|f| (*id, f.path))
+                })
+                .collect()
+        };
+
+        let mut report = WriteReport::default();
+        let mut written = Vec::new();
+
+        for (file_id, path) in targets {
+            match noceur_tags::edit::write(&path, &change) {
+                Ok(()) => {
+                    report.written += 1;
+                    written.push(file_id);
+                }
+                Err(e) => report.failures.push(WriteFailure {
+                    name: path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                    reason: e.to_string(),
+                }),
+            }
+        }
+
+        // Re-read what changed, so the listing and the search index agree with
+        // the files without waiting for the folder to be reopened.
+        if !written.is_empty() {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            for id in written {
+                noceur_index::reprobe(&db, id).map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(report)
+    })
+    .await
+    .map_err(|e| format!("tag write task failed: {e}"))?
+}
+
+/// Collects one field's value across a selection.
+///
+/// `None` while nothing has been seen; `Some(Some(v))` while every file so far
+/// agrees; `Some(None)` once two have disagreed and the form must say so.
+#[derive(Default)]
+struct Field(Option<Option<String>>);
+
+impl Field {
+    fn add(&mut self, value: String) {
+        match &self.0 {
+            None => self.0 = Some(Some(value)),
+            Some(Some(seen)) if *seen == value => {}
+            Some(Some(_)) => self.0 = Some(None),
+            Some(None) => {}
+        }
+    }
+
+    /// An empty selection reports agreement on emptiness rather than conflict —
+    /// there is nothing to conflict about, and a placeholder saying otherwise
+    /// would be a lie about files that were never read.
+    fn value(self) -> Option<String> {
+        self.0.unwrap_or(Some(String::new()))
+    }
+}
+
+#[derive(Default)]
+struct Merge {
+    artist: Field,
+    title: Field,
+    album: Field,
+    album_artist: Field,
+    genre: Field,
+    comment: Field,
+    isrc: Field,
+    year: Field,
+    track_no: Field,
+    bpm: Field,
+    key: Field,
+}
+
+impl Merge {
+    fn add(&mut self, meta: &noceur_tags::TrackMeta) {
+        let text = |v: &Option<String>| v.clone().unwrap_or_default();
+        self.artist.add(text(&meta.artist));
+        self.title.add(text(&meta.title));
+        self.album.add(text(&meta.album));
+        self.album_artist.add(text(&meta.album_artist));
+        self.genre.add(text(&meta.genre));
+        self.comment.add(text(&meta.comment));
+        self.isrc.add(text(&meta.isrc));
+        self.year
+            .add(meta.year.map(|v| v.to_string()).unwrap_or_default());
+        self.track_no
+            .add(meta.track_no.map(|v| v.to_string()).unwrap_or_default());
+        // Shown as it is stored, not as the list column formats it: the list
+        // marks a tagged BPM with a trailing dot, and this is the box its value
+        // gets written back out of.
+        self.bpm.add(meta.bpm.map(format_bpm).unwrap_or_default());
+        self.key.add(text(&meta.key_tag));
+    }
+
+    fn into_form(self, count: i64, subject: String) -> TagForm {
+        TagForm {
+            count,
+            subject,
+            artist: self.artist.value(),
+            title: self.title.value(),
+            album: self.album.value(),
+            album_artist: self.album_artist.value(),
+            genre: self.genre.value(),
+            comment: self.comment.value(),
+            isrc: self.isrc.value(),
+            year: self.year.value(),
+            track_no: self.track_no.value(),
+            bpm: self.bpm.value(),
+            key: self.key.value(),
+        }
+    }
+}
+
+/// A whole BPM stays whole, so a box that read `128` does not come back `128.0`
+/// and look like an edit nobody made.
+fn format_bpm(v: f32) -> String {
+    if v.fract().abs() < f32::EPSILON {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta(artist: &str, bpm: Option<f32>) -> noceur_tags::TrackMeta {
+        noceur_tags::TrackMeta {
+            artist: Some(artist.to_string()),
+            bpm,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn one_file_reports_its_own_values() {
+        let mut m = Merge::default();
+        m.add(&meta("Skee Mask", Some(140.0)));
+        let form = m.into_form(1, "t.wav".into());
+        assert_eq!(form.artist.as_deref(), Some("Skee Mask"));
+        assert_eq!(form.bpm.as_deref(), Some("140"));
+    }
+
+    #[test]
+    fn agreeing_files_report_the_shared_value() {
+        let mut m = Merge::default();
+        m.add(&meta("Skee Mask", None));
+        m.add(&meta("Skee Mask", None));
+        assert_eq!(
+            m.into_form(2, "2 files".into()).artist.as_deref(),
+            Some("Skee Mask")
+        );
+    }
+
+    /// The distinction the whole form exists for: a field the files disagree on
+    /// must come back as `None`, so the editor can show a placeholder instead of
+    /// a blank box that would write emptiness to all of them.
+    #[test]
+    fn disagreeing_files_report_no_value_at_all() {
+        let mut m = Merge::default();
+        m.add(&meta("Skee Mask", None));
+        m.add(&meta("Zenker Brothers", None));
+        assert_eq!(m.into_form(2, "2 files".into()).artist, None);
+    }
+
+    /// Agreement on emptiness is not disagreement. Two untagged files should
+    /// offer an empty box to type into, not a "various" placeholder.
+    #[test]
+    fn files_that_are_all_empty_agree_on_being_empty() {
+        let mut m = Merge::default();
+        m.add(&noceur_tags::TrackMeta::default());
+        m.add(&noceur_tags::TrackMeta::default());
+        assert_eq!(m.into_form(2, "2 files".into()).artist.as_deref(), Some(""));
+    }
+
+    /// One tagged and one untagged file disagree, which is the case that would
+    /// otherwise quietly wipe the tagged one.
+    #[test]
+    fn a_tagged_and_an_untagged_file_disagree() {
+        let mut m = Merge::default();
+        m.add(&meta("Skee Mask", None));
+        m.add(&noceur_tags::TrackMeta::default());
+        assert_eq!(m.into_form(2, "2 files".into()).artist, None);
+    }
+
+    #[test]
+    fn a_whole_bpm_keeps_no_decimal_point() {
+        assert_eq!(format_bpm(128.0), "128");
+        assert_eq!(format_bpm(127.5), "127.5");
+    }
+}

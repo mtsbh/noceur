@@ -1,0 +1,581 @@
+//! Writing tags back to audio files.
+//!
+//! Kept apart from [`crate::meta`] because the risk is not the same. Reading a
+//! file that turns out to be nonsense costs a row of dashes; writing to one
+//! rewrites something in the user's library that no undo stack covers. Every
+//! decision here leans the same way: change what was asked for, leave everything
+//! else exactly as it was, and refuse rather than guess.
+
+use crate::meta::MetaError;
+use lofty::config::WriteOptions;
+use lofty::file::TaggedFileExt;
+use lofty::prelude::{Accessor, ItemKey, TagExt};
+use lofty::probe::Probe;
+use lofty::tag::Tag;
+use std::path::Path;
+
+#[derive(Debug, thiserror::Error)]
+pub enum EditError {
+    #[error(transparent)]
+    Meta(#[from] MetaError),
+    #[error("cannot read {path}: {source}")]
+    Read {
+        path: String,
+        #[source]
+        source: lofty::error::LoftyError,
+    },
+    #[error("cannot save {path}: {source}")]
+    Save {
+        path: String,
+        #[source]
+        source: lofty::error::LoftyError,
+    },
+    #[error("{field} must be a number, got {value:?}")]
+    NotANumber { field: &'static str, value: String },
+    #[error("{field} is out of range: {value}")]
+    OutOfRange { field: &'static str, value: String },
+}
+
+/// What to do with one field.
+///
+/// Three states rather than `Option<String>`, because editing several files at
+/// once needs all three and conflating any two of them loses data. A field left
+/// alone must stay as it is in each file — which is not the same as writing the
+/// same value to all of them, and not the same as emptying it. The multi-select
+/// editor shows a blank box for fields that disagree, and that blank has to mean
+/// "leave each file's own value" rather than "erase them all".
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Change {
+    /// Leave whatever the file already has.
+    #[default]
+    Keep,
+    /// Write this value.
+    Set(String),
+    /// Remove the field.
+    Clear,
+}
+
+impl Change {
+    /// Builds a change from a UI field: `None` means untouched, `Some("")`
+    /// means the user emptied the box, which is a request to clear the tag.
+    pub fn from_input(value: Option<String>) -> Change {
+        match value {
+            None => Change::Keep,
+            Some(v) if v.trim().is_empty() => Change::Clear,
+            Some(v) => Change::Set(v.trim().to_string()),
+        }
+    }
+}
+
+/// The edits to apply to a file.
+///
+/// Every field defaults to [`Change::Keep`], so a caller constructs one with
+/// `..Default::default()` and names only what it means to change. Adding a field
+/// here cannot silently start clearing tags in files nobody meant to touch.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Edit {
+    pub artist: Change,
+    pub title: Change,
+    pub album: Change,
+    pub album_artist: Change,
+    pub genre: Change,
+    pub comment: Change,
+    pub isrc: Change,
+    /// Four digits. Written as the tag's year field.
+    pub year: Change,
+    pub track_no: Change,
+    /// Beats per minute. Written to both the integer and freeform keys, so the
+    /// value survives whichever one the next program reads.
+    pub bpm: Change,
+    /// Musical key, as text. Stored verbatim — this crate normalises keys for
+    /// display and sorting, but what goes in the file is what the user typed.
+    pub key: Change,
+}
+
+impl Edit {
+    /// Whether this would change anything at all.
+    ///
+    /// Checked before opening the file: a save with nothing in it should not
+    /// rewrite a perfectly good file, bump its mtime and cost it its cached
+    /// artwork and waveform for no reason.
+    pub fn is_empty(&self) -> bool {
+        *self == Edit::default()
+    }
+}
+
+/// Applies `edit` to the file at `path`.
+///
+/// Edits the file's existing tag in place rather than building a new one, so
+/// everything not named in the edit — artwork, replay gain, comments this crate
+/// does not model, whatever a DJ program wrote for its own use — survives
+/// untouched. A file with no tag at all gets one of whatever type its container
+/// prefers.
+///
+/// Numbers are parsed before anything is written, so a typo in the year cannot
+/// leave the file half-edited.
+pub fn write(path: &Path, edit: &Edit) -> Result<(), EditError> {
+    if edit.is_empty() {
+        return Ok(());
+    }
+
+    // Parse first, write second. Everything that can be rejected is rejected
+    // before the file is opened for writing.
+    let year = number(&edit.year, "year")?;
+    let track_no = number(&edit.track_no, "track number")?;
+    let bpm = decimal(&edit.bpm, "BPM")?;
+
+    let mut tagged =
+        Probe::open(path)
+            .and_then(|p| p.read())
+            .map_err(|source| EditError::Read {
+                path: path.display().to_string(),
+                source,
+            })?;
+
+    // The container's own preferred tag type, so an edit to a FLAC writes Vorbis
+    // comments and an edit to an MP3 writes ID3v2 — rather than bolting a
+    // foreign tag onto the file that half the world would then ignore.
+    let tag_type = tagged.primary_tag_type();
+
+    if tagged.tag(tag_type).is_none() {
+        tagged.insert_tag(Tag::new(tag_type));
+    }
+    let Some(tag) = tagged.tag_mut(tag_type) else {
+        // Unreachable in practice: the tag was just inserted.
+        return Ok(());
+    };
+
+    apply(tag, edit, year, track_no, bpm);
+
+    tag.save_to_path(path, WriteOptions::default())
+        .map_err(|source| EditError::Save {
+            path: path.display().to_string(),
+            source,
+        })
+}
+
+/// Applies an edit to a tag in memory.
+///
+/// Split out so the whole field mapping can be tested against every tag system
+/// without writing a file of each container format — the same reason
+/// [`crate::meta::apply_tag`] exists on the reading side.
+pub fn apply(
+    tag: &mut Tag,
+    edit: &Edit,
+    year: Option<Option<u32>>,
+    track_no: Option<Option<u32>>,
+    bpm: Option<Option<f64>>,
+) {
+    text(
+        tag,
+        &edit.artist,
+        |t, v| t.set_artist(v),
+        |t| t.remove_artist(),
+    );
+    text(
+        tag,
+        &edit.title,
+        |t, v| t.set_title(v),
+        |t| t.remove_title(),
+    );
+    text(
+        tag,
+        &edit.album,
+        |t, v| t.set_album(v),
+        |t| t.remove_album(),
+    );
+    text(
+        tag,
+        &edit.genre,
+        |t, v| t.set_genre(v),
+        |t| t.remove_genre(),
+    );
+    text(
+        tag,
+        &edit.comment,
+        |t, v| t.set_comment(v),
+        |t| t.remove_comment(),
+    );
+    item(tag, &edit.album_artist, ItemKey::AlbumArtist);
+    item(tag, &edit.isrc, ItemKey::Isrc);
+    item(tag, &edit.key, ItemKey::InitialKey);
+
+    match year {
+        Some(Some(v)) => tag.set_year(v),
+        Some(None) => tag.remove_year(),
+        None => {}
+    }
+    match track_no {
+        Some(Some(v)) => tag.set_track(v),
+        Some(None) => tag.remove_track(),
+        None => {}
+    }
+
+    // Written under both keys, and read back from either. ID3v2 and MP4's `tmpo`
+    // atom use the integer key; Vorbis comments use the freeform one. A file
+    // edited here should read correctly in a program that only looks at one.
+    //
+    // The exact value goes to both, including its decimals — despite the name,
+    // the integer key is a text frame, every DJ program writes fractional BPMs
+    // into it, and rounding here would silently discard what the user typed the
+    // moment anything read that key first. Which our own reader does.
+    match bpm {
+        Some(Some(v)) => {
+            tag.insert_text(ItemKey::IntegerBpm, trim_decimal(v));
+            tag.insert_text(ItemKey::Bpm, trim_decimal(v));
+        }
+        Some(None) => {
+            tag.remove_key(&ItemKey::IntegerBpm);
+            tag.remove_key(&ItemKey::Bpm);
+        }
+        None => {}
+    }
+}
+
+/// Applies a change through an accessor pair.
+fn text(tag: &mut Tag, change: &Change, set: impl Fn(&mut Tag, String), clear: impl Fn(&mut Tag)) {
+    match change {
+        Change::Keep => {}
+        Change::Set(v) => set(tag, v.clone()),
+        Change::Clear => clear(tag),
+    }
+}
+
+/// Applies a change to a field lofty has no named accessor for.
+fn item(tag: &mut Tag, change: &Change, key: ItemKey) {
+    match change {
+        Change::Keep => {}
+        Change::Set(v) => {
+            tag.insert_text(key, v.clone());
+        }
+        Change::Clear => {
+            tag.remove_key(&key);
+        }
+    }
+}
+
+/// `None` to leave alone, `Some(None)` to clear, `Some(Some(n))` to set.
+fn number(change: &Change, field: &'static str) -> Result<Option<Option<u32>>, EditError> {
+    match change {
+        Change::Keep => Ok(None),
+        Change::Clear => Ok(Some(None)),
+        Change::Set(v) => {
+            let n = v.trim().parse::<u32>().map_err(|_| EditError::NotANumber {
+                field,
+                value: v.clone(),
+            })?;
+            Ok(Some(Some(n)))
+        }
+    }
+}
+
+/// The same, for a value that may carry decimals.
+fn decimal(change: &Change, field: &'static str) -> Result<Option<Option<f64>>, EditError> {
+    match change {
+        Change::Keep => Ok(None),
+        Change::Clear => Ok(Some(None)),
+        Change::Set(v) => {
+            let n =
+                v.trim()
+                    .replace(',', ".")
+                    .parse::<f64>()
+                    .map_err(|_| EditError::NotANumber {
+                        field,
+                        value: v.clone(),
+                    })?;
+            if !n.is_finite() || n <= 0.0 || n > 1000.0 {
+                return Err(EditError::OutOfRange {
+                    field,
+                    value: v.clone(),
+                });
+            }
+            Ok(Some(Some(n)))
+        }
+    }
+}
+
+/// Formats a BPM without a trailing `.0`, so a whole number stays whole in the
+/// file — plenty of programs display the tag verbatim.
+fn trim_decimal(v: f64) -> String {
+    if (v.fract()).abs() < f64::EPSILON {
+        format!("{}", v as i64)
+    } else {
+        let s = format!("{v:.2}");
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::meta::{apply_tag, TrackMeta};
+    use lofty::tag::TagType;
+
+    /// Runs an edit through a tag and reads the result back the way the app
+    /// does, so the two halves are checked against each other rather than
+    /// against my idea of what lofty stores.
+    fn round_trip(tag: &mut Tag, edit: &Edit) -> TrackMeta {
+        let year = number(&edit.year, "year").unwrap();
+        let track = number(&edit.track_no, "track number").unwrap();
+        let bpm = decimal(&edit.bpm, "BPM").unwrap();
+        apply(tag, edit, year, track, bpm);
+
+        let mut meta = TrackMeta::default();
+        apply_tag(&mut meta, tag);
+        meta
+    }
+
+    fn tag() -> Tag {
+        Tag::new(TagType::Id3v2)
+    }
+
+    fn write_wav(path: &std::path::PathBuf) {
+        let sample_rate = 44_100u32;
+        let samples = sample_rate / 10;
+        let data_len = samples * 2;
+        let mut f = Vec::new();
+        f.extend_from_slice(b"RIFF");
+        f.extend_from_slice(&(36 + data_len).to_le_bytes());
+        f.extend_from_slice(b"WAVEfmt ");
+        f.extend_from_slice(&16u32.to_le_bytes());
+        f.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        f.extend_from_slice(&1u16.to_le_bytes()); // mono
+        f.extend_from_slice(&sample_rate.to_le_bytes());
+        f.extend_from_slice(&(sample_rate * 2).to_le_bytes()); // byte rate
+        f.extend_from_slice(&2u16.to_le_bytes()); // block align
+        f.extend_from_slice(&16u16.to_le_bytes()); // bits
+        f.extend_from_slice(b"data");
+        f.extend_from_slice(&data_len.to_le_bytes());
+        f.extend_from_slice(&vec![0u8; data_len as usize]);
+        std::fs::write(path, f).unwrap();
+    }
+
+    #[test]
+    fn setting_a_field_writes_it() {
+        let mut t = tag();
+        let meta = round_trip(
+            &mut t,
+            &Edit {
+                artist: Change::Set("Akiko Kiyama".into()),
+                title: Change::Set("Rabbits".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(meta.artist.as_deref(), Some("Akiko Kiyama"));
+        assert_eq!(meta.title.as_deref(), Some("Rabbits"));
+    }
+
+    /// The whole reason `Change` has three states: a field nobody touched must
+    /// come out unchanged, not blanked.
+    #[test]
+    fn keeping_a_field_leaves_it_alone() {
+        let mut t = tag();
+        t.set_artist("Original".into());
+        let meta = round_trip(
+            &mut t,
+            &Edit {
+                title: Change::Set("New".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(meta.artist.as_deref(), Some("Original"));
+    }
+
+    #[test]
+    fn clearing_a_field_removes_it() {
+        let mut t = tag();
+        t.set_artist("Original".into());
+        let meta = round_trip(
+            &mut t,
+            &Edit {
+                artist: Change::Clear,
+                ..Default::default()
+            },
+        );
+        assert_eq!(meta.artist, None);
+    }
+
+    /// BPM lives under a different key in each tag system, so what matters is
+    /// that it survives a write and a read in every one of them — not which key
+    /// lofty happened to put it under.
+    #[test]
+    fn bpm_round_trips_in_every_tag_system() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments, TagType::Mp4Ilst] {
+            let mut t = Tag::new(kind);
+            let meta = round_trip(
+                &mut t,
+                &Edit {
+                    bpm: Change::Set("128".into()),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(meta.bpm, Some(128.0), "{kind:?} lost its BPM");
+        }
+    }
+
+    /// A DJ library is full of fractional BPMs, and the key our own reader looks
+    /// at first is named "integer" — rounding on the way in would throw away
+    /// what the user typed before anything ever read it back.
+    #[test]
+    fn a_fractional_bpm_keeps_its_decimals() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments, TagType::Mp4Ilst] {
+            let mut t = Tag::new(kind);
+            let meta = round_trip(
+                &mut t,
+                &Edit {
+                    bpm: Change::Set("127.5".into()),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(meta.bpm, Some(127.5), "{kind:?} rounded the BPM");
+        }
+    }
+
+    /// European keyboards produce a comma, and refusing it would be pedantry.
+    #[test]
+    fn a_comma_decimal_is_accepted() {
+        let mut t = tag();
+        let meta = round_trip(
+            &mut t,
+            &Edit {
+                bpm: Change::Set("127,5".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(meta.bpm, Some(127.5));
+    }
+
+    #[test]
+    fn a_written_key_is_parsed_back_into_its_canonical_form() {
+        let mut t = tag();
+        let meta = round_trip(
+            &mut t,
+            &Edit {
+                key: Change::Set("8A".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(meta.key_tag.as_deref(), Some("8A"));
+        assert!(meta.key_norm.is_some(), "8A must parse as a Camelot key");
+    }
+
+    #[test]
+    fn year_and_track_round_trip() {
+        let mut t = tag();
+        let meta = round_trip(
+            &mut t,
+            &Edit {
+                year: Change::Set("2019".into()),
+                track_no: Change::Set("4".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(meta.year, Some(2019));
+        assert_eq!(meta.track_no, Some(4));
+    }
+
+    /// Rejected before the file is opened, so a typo cannot leave a file with
+    /// half an edit applied to it.
+    #[test]
+    fn a_year_that_is_not_a_number_is_refused() {
+        let err = number(&Change::Set("nineteen".into()), "year").unwrap_err();
+        assert!(matches!(err, EditError::NotANumber { .. }));
+    }
+
+    #[test]
+    fn an_absurd_bpm_is_refused() {
+        assert!(matches!(
+            decimal(&Change::Set("0".into()), "BPM").unwrap_err(),
+            EditError::OutOfRange { .. }
+        ));
+        assert!(matches!(
+            decimal(&Change::Set("99999".into()), "BPM").unwrap_err(),
+            EditError::OutOfRange { .. }
+        ));
+    }
+
+    /// An edit with nothing in it must not rewrite the file: that would bump its
+    /// mtime and cost it its cached artwork and waveform for no change at all.
+    #[test]
+    fn an_empty_edit_is_empty() {
+        assert!(Edit::default().is_empty());
+        assert!(!Edit {
+            artist: Change::Clear,
+            ..Default::default()
+        }
+        .is_empty());
+    }
+
+    /// Everything above works on a tag in memory. This is the one that touches a
+    /// real file, because that is where the risk actually is: lofty has to rewrite
+    /// the container around the tag, and a file that comes back unreadable is a
+    /// track lost out of someone's library.
+    #[test]
+    fn an_edit_survives_a_round_trip_through_a_real_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        write(
+            &path,
+            &Edit {
+                artist: Change::Set("Afriqua".into()),
+                title: Change::Set("Cheep Spouse".into()),
+                bpm: Change::Set("125".into()),
+                key: Change::Set("4A".into()),
+                ..Default::default()
+            },
+        )
+        .expect("writing tags to a plain WAV must work");
+
+        let meta = crate::meta::read(&path).expect("the file must still be readable");
+        assert_eq!(meta.artist.as_deref(), Some("Afriqua"));
+        assert_eq!(meta.title.as_deref(), Some("Cheep Spouse"));
+        assert_eq!(meta.bpm, Some(125.0));
+        assert_eq!(meta.key_tag.as_deref(), Some("4A"));
+
+        // A second edit must not disturb the first: this is the multi-pass case,
+        // where someone fixes the artist now and the key later.
+        write(
+            &path,
+            &Edit {
+                album: Change::Set("Cheep".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let meta = crate::meta::read(&path).unwrap();
+        assert_eq!(meta.album.as_deref(), Some("Cheep"));
+        assert_eq!(
+            meta.artist.as_deref(),
+            Some("Afriqua"),
+            "the earlier edit must survive the later one"
+        );
+    }
+
+    /// An empty edit must not rewrite the file at all — checked by watching the
+    /// bytes, since the cost of a needless rewrite is a changed mtime and a lost
+    /// waveform cache rather than a wrong tag.
+    #[test]
+    fn an_empty_edit_does_not_touch_the_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+        let before = std::fs::read(&path).unwrap();
+
+        write(&path, &Edit::default()).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
+
+    /// What the editor's boxes mean: untouched is untouched, emptied is cleared.
+    #[test]
+    fn an_emptied_box_clears_and_an_untouched_one_keeps() {
+        assert_eq!(Change::from_input(None), Change::Keep);
+        assert_eq!(Change::from_input(Some("   ".into())), Change::Clear);
+        assert_eq!(
+            Change::from_input(Some("  Bicep ".into())),
+            Change::Set("Bicep".into())
+        );
+    }
+}
