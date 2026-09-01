@@ -95,6 +95,7 @@ fn main() {
             commands::file_op_paths,
             commands::drop_effect,
             commands::shell_menu,
+            commands::open_url,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

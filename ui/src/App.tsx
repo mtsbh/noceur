@@ -25,6 +25,7 @@ import {
   fileOpPaths,
   dropEffect,
   shellMenu,
+  openUrl,
   type Transport as TransportState,
   type ArtSize,
   type Order,
@@ -35,6 +36,7 @@ import {
 import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
 import Transport from "./Transport";
+import Menu, { type MenuItem } from "./Menu";
 import {
   DEFAULT_COLUMNS,
   cellText,
@@ -439,20 +441,99 @@ export default function App() {
       setSelected(row.fileId);
     }
 
-    shellMenu([...selection()])
-      .then(() => refetchListing())
-      .catch(() => openFallbackMenu(e, row));
+    // Shift goes straight to the shell's menu, the way shift-right-click has
+    // always meant "give me the longer menu" in Explorer.
+    if (e.shiftKey) {
+      openShellMenu();
+      return;
+    }
+
+    setSelected(row.fileId);
+    // The menu measures itself after mount and nudges back inside the window,
+    // so the raw pointer position is the right starting point.
+    setMenu({ row, x: e.clientX, y: e.clientY });
   }
 
-  function openFallbackMenu(e: MouseEvent, row: RowDisplay) {
-    setSelected(row.fileId);
-    // Kept inside the window: a row near the bottom or right edge would
-    // otherwise open a menu half off-screen.
-    setMenu({
-      row,
-      x: Math.min(e.clientX, window.innerWidth - 190),
-      y: Math.min(e.clientY, window.innerHeight - 130),
-    });
+  /** Hands off to the shell's own menu, extensions and all. */
+  function openShellMenu() {
+    setMenu(null);
+    shellMenu([...selection()])
+      .then(() => refetchListing())
+      .catch(() => {});
+  }
+
+  /**
+   * What the row menu offers.
+   *
+   * The things a music browser knows and the shell does not go here; everything
+   * the shell does better stays one entry away, under "Windows menu".
+   */
+  function rowMenuItems(row: RowDisplay): MenuItem[] {
+    const many = selection().size > 1;
+    const lookup = [row.artist, row.title || row.name].filter(Boolean).join(" ");
+
+    return [
+      {
+        kind: "item",
+        label: "Play",
+        hint: "double-click",
+        disabled: row.kind !== 1,
+        run: () => playRow(row),
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
+        label: "Reveal in Explorer",
+        run: () => {
+          reveal(row.fileId).catch(() => {});
+        },
+      },
+      {
+        kind: "item",
+        label: many ? `Copy ${selection().size} paths` : "Copy path",
+        run: () => {
+          Promise.all([...selection()].map((id) => pathOf(id)))
+            .then((paths) => copyText(paths.join("\r\n")))
+            .catch(() => {});
+        },
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
+        label: "Search Discogs",
+        disabled: row.kind !== 1 || lookup === "",
+        run: () => {
+          openUrl(
+            `https://www.discogs.com/search/?q=${encodeURIComponent(lookup)}&type=release`,
+          ).catch(() => {});
+        },
+      },
+      {
+        kind: "item",
+        label: "Search YouTube",
+        disabled: row.kind !== 1 || lookup === "",
+        run: () => {
+          openUrl(
+            `https://www.youtube.com/results?search_query=${encodeURIComponent(lookup)}`,
+          ).catch(() => {});
+        },
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
+        label: many ? `Delete ${selection().size} items` : "Delete",
+        hint: "del",
+        danger: true,
+        run: deleteSelection,
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
+        label: "Windows menu",
+        hint: "shift-click",
+        run: openShellMenu,
+      },
+    ];
   }
 
   /**
@@ -984,52 +1065,12 @@ export default function App() {
       </div>
 
       <Show when={menu()}>
-        <div class="scrim bare" onPointerDown={() => setMenu(null)} />
-        <div
-          class="ctxmenu"
-          style={{ left: `${menu()!.x}px`, top: `${menu()!.y}px` }}
-        >
-          <Show when={menu()!.row.kind === 1}>
-            <div
-              class="ctxitem"
-              onClick={() => {
-                playRow(menu()!.row);
-                setMenu(null);
-              }}
-            >
-              Play
-            </div>
-          </Show>
-          <div
-            class="ctxitem"
-            onClick={() => {
-              reveal(menu()!.row.fileId).catch(() => {});
-              setMenu(null);
-            }}
-          >
-            Reveal in Explorer
-          </div>
-          <div
-            class="ctxitem"
-            onClick={() => {
-              const id = menu()!.row.fileId;
-              pathOf(id).then(copyText).catch(() => {});
-              setMenu(null);
-            }}
-          >
-            Copy path
-          </div>
-          <div class="ctxsep" />
-          <div
-            class="ctxitem danger"
-            onClick={() => {
-              deleteSelection();
-              setMenu(null);
-            }}
-          >
-            Delete
-          </div>
-        </div>
+        <Menu
+          x={menu()!.x}
+          y={menu()!.y}
+          items={rowMenuItems(menu()!.row)}
+          onClose={() => setMenu(null)}
+        />
       </Show>
 
       <Transport state={transport()} onState={setTransport} />

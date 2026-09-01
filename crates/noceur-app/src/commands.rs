@@ -758,3 +758,61 @@ fn show_shell_menu(app: tauri::AppHandle, paths: Vec<PathBuf>) -> Result<(), Str
 fn show_shell_menu(_app: tauri::AppHandle, _paths: Vec<PathBuf>) -> Result<(), String> {
     Err("the shell context menu is only implemented on Windows".into())
 }
+
+/// Opens a URL in the default browser.
+///
+/// Used by the search actions in the row menu — looking a track up on Discogs is
+/// something a DJ does constantly, and it is one of the few things a music
+/// browser can do that a file manager cannot.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    // Only http(s). A context menu that will launch anything the frontend hands
+    // it is a way to run arbitrary programs by way of a crafted listing.
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("only http and https links can be opened".into());
+    }
+    open_in_browser(&url)
+}
+
+#[cfg(windows)]
+fn open_in_browser(url: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    fn wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let verb = wide("open");
+    let target = wide(url);
+
+    // SAFETY: both strings are NUL-terminated and outlive the call.
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(target.as_ptr()),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+
+    // ShellExecuteW reports success as a value above 32 — a handle-shaped return
+    // from an API old enough to predate error codes.
+    if result.0 as usize > 32 {
+        Ok(())
+    } else {
+        Err("no application is registered to open links".into())
+    }
+}
+
+#[cfg(not(windows))]
+fn open_in_browser(_url: &str) -> Result<(), String> {
+    Err("opening links is only implemented on Windows".into())
+}

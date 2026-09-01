@@ -271,3 +271,8 @@ export function dropEffect(sources: string[], destination: string): Promise<stri
 export function shellMenu(fileIds: number[]): Promise<void> {
   return invoke<void>("shell_menu", { fileIds });
 }
+
+/** Opens a link in the default browser. Only http and https are accepted. */
+export function openUrl(url: string): Promise<void> {
+  return invoke<void>("open_url", { url });
+}

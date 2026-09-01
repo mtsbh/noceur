@@ -795,11 +795,30 @@ body.resizing * {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
 }
 .ctxitem {
+  display: flex;
+  align-items: center;
+  gap: 22px;
   padding: 6px 14px;
   cursor: pointer;
   color: var(--fg2);
   font-size: 11px;
   white-space: nowrap;
+}
+.ctxlabel {
+  flex: 1;
+}
+/* The key that does the same thing, so the menu teaches the shortcut. */
+.ctxhint {
+  color: var(--fg4);
+  font-size: 10px;
+}
+.ctxitem.off {
+  color: var(--fg4);
+  cursor: default;
+}
+.ctxitem.off:hover {
+  background: none;
+  color: var(--fg4);
 }
 .ctxitem:hover {
   background: rgba(238, 234, 228, 0.05);
