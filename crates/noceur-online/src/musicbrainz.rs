@@ -4,10 +4,12 @@
 //! Archive can be asked about. Nothing is written back, and no account or key is
 //! involved — this is the public read-only web service.
 
-use crate::{agent, OnlineError};
+use crate::sources::Candidate;
+use crate::{agent, pace, CoverSize, OnlineError};
 use serde::Deserialize;
 
 const SERVICE: &str = "MusicBrainz";
+pub const NAME: &str = "Cover Art Archive";
 const ENDPOINT: &str = "https://musicbrainz.org/ws/2/release";
 
 /// Results one search asks for.
@@ -63,6 +65,9 @@ pub fn search_releases(artist: &str, title: &str) -> Result<Vec<Release>, Online
         ));
     }
     let query = terms.join(" AND ");
+
+    // Paced here rather than at the call sites, so no caller can forget.
+    pace();
 
     let response = agent()
         .get(ENDPOINT)
@@ -187,6 +192,36 @@ struct LabelInfo {
 #[derive(Deserialize)]
 struct Label {
     name: Option<String>,
+}
+
+/// The same search, as candidates the picker can show beside other sources'.
+///
+/// The Cover Art Archive holds art for only a fraction of what MusicBrainz
+/// knows about, and nothing here can tell which without a request per release.
+/// So every release becomes a candidate and the ones with no picture simply
+/// fail to load in the grid — one wasted image request each, against twelve
+/// extra round trips to find out in advance.
+pub fn search_candidates(artist: &str, title: &str) -> Result<Vec<Candidate>, OnlineError> {
+    Ok(search_releases(artist, title)?
+        .into_iter()
+        .map(|r| Candidate {
+            source: NAME,
+            thumbnail: crate::covers::front_url(&r.id, CoverSize::Thumbnail),
+            full: crate::covers::front_url(&r.id, CoverSize::Embed),
+            title: r.title,
+            artist: r.artist,
+            detail: [
+                r.date.get(0..4).unwrap_or("").to_string(),
+                r.country,
+                r.label,
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · "),
+            size: Some(500),
+        })
+        .collect())
 }
 
 #[cfg(test)]

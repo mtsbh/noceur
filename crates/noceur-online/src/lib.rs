@@ -11,10 +11,14 @@
 //! stating plainly rather than leaving it to be discovered.
 
 pub mod covers;
+pub mod deezer;
+pub mod itunes;
 pub mod musicbrainz;
+pub mod sources;
 
 pub use covers::{fetch_front, CoverSize};
 pub use musicbrainz::{search_releases, Release};
+pub use sources::{fetch_image, Candidate};
 
 #[derive(Debug, thiserror::Error)]
 pub enum OnlineError {
@@ -34,6 +38,10 @@ pub enum OnlineError {
     },
     #[error("that image is {size} bytes, which is larger than this app will embed")]
     TooLarge { size: u64 },
+    #[error("this app will not download from {url}")]
+    Refused { url: String },
+    #[error("what came back from {url} is not an image")]
+    NotAnImage { url: String },
 }
 
 /// How this app identifies itself.
@@ -60,4 +68,86 @@ fn agent() -> ureq::Agent {
         .user_agent(USER_AGENT)
         .build()
         .into()
+}
+
+/// Minimum gap between requests to MusicBrainz.
+///
+/// Their published limit is one request per second per client, enforced by
+/// throttling and eventually by blocking. A batch that retagged two hundred
+/// tracks without pacing itself would be indistinguishable from abuse, and
+/// would earn the block it deserved.
+pub const MIN_GAP: std::time::Duration = std::time::Duration::from_millis(1100);
+
+/// When the last rate-limited request went out.
+static LAST_REQUEST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// Blocks until enough time has passed since the previous request.
+///
+/// Process-wide rather than per-caller, because the limit is per client and the
+/// service has no idea how many parts of this app decided to ask it something.
+/// Called on the blocking pool, where sleeping is what that pool is for.
+pub fn pace() {
+    let wait = {
+        let mut last = match LAST_REQUEST.lock() {
+            Ok(l) => l,
+            // A poisoned lock means some other thread panicked mid-request.
+            // Pacing is a courtesy, not a correctness property, so recover
+            // rather than propagate.
+            Err(e) => e.into_inner(),
+        };
+        let now = std::time::Instant::now();
+        let wait = last
+            .map(|t| MIN_GAP.saturating_sub(now.duration_since(t)))
+            .unwrap_or_default();
+        *last = Some(now + wait);
+        wait
+    };
+    if !wait.is_zero() {
+        std::thread::sleep(wait);
+    }
+}
+
+/// Searches every source for cover art.
+///
+/// Each source is asked independently and one that fails is simply absent from
+/// the results: a service being down, rate-limiting, or having changed its
+/// format should cost its own candidates and nobody else's. Returning an error
+/// only when every source failed keeps a temporary outage at one provider from
+/// looking like the feature is broken.
+///
+/// Results are interleaved rather than concatenated, so the grid opens showing
+/// each source's best guess rather than ten from whichever answered first.
+pub fn search_all(artist: &str, album: &str) -> Result<Vec<Candidate>, OnlineError> {
+    let mut lists = Vec::new();
+    let mut last_error = None;
+
+    for result in [
+        musicbrainz::search_candidates(artist, album),
+        itunes::search(artist, album),
+        deezer::search(artist, album),
+    ] {
+        match result {
+            Ok(found) => lists.push(found.into_iter()),
+            Err(e) => last_error = Some(e),
+        }
+    }
+
+    if lists.is_empty() {
+        return Err(last_error.unwrap_or(OnlineError::NothingToSearch));
+    }
+
+    let mut merged = Vec::new();
+    loop {
+        let mut any = false;
+        for list in &mut lists {
+            if let Some(candidate) = list.next() {
+                merged.push(candidate);
+                any = true;
+            }
+        }
+        if !any {
+            break;
+        }
+    }
+    Ok(merged)
 }

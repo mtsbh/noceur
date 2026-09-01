@@ -8,16 +8,18 @@ import {
 } from "./api";
 
 /**
- * Picks cover art for a selection from the Cover Art Archive.
+ * Picks cover art for a selection.
  *
  * Shows candidates rather than guessing. Which pressing a track came from is a
  * judgement only the user can make — a compilation, a remaster and a bootleg all
  * match the same search and carry different sleeves — so nothing is written to
  * any file until one is chosen.
  *
- * Candidates whose image fails to load are hidden as they fail. MusicBrainz
- * knows about far more releases than the archive holds art for, and a grid of
- * broken images would be worse than a short one.
+ * Several sources are searched at once and their results interleaved, because
+ * their catalogues barely overlap: a twelve-inch missing from one is routinely
+ * in another, and the same record can carry a different sleeve depending on who
+ * is asked. Candidates whose image fails to load are hidden as they fail, since
+ * the databases know about far more releases than anyone holds pictures of.
  */
 export default function CoverPicker(props: {
   /** The row the search is based on — normally the first of the selection. */
@@ -29,6 +31,8 @@ export default function CoverPicker(props: {
 }) {
   const [candidates, setCandidates] = createSignal<CoverCandidate[] | null>(null);
   const [missing, setMissing] = createSignal<Set<string>>(new Set());
+  /** Which source's results to show, or "" for all of them. */
+  const [only, setOnly] = createSignal("");
   const [busy, setBusy] = createSignal("");
   const [error, setError] = createSignal("");
   const [report, setReport] = createSignal<WriteReport | null>(null);
@@ -55,14 +59,22 @@ export default function CoverPicker(props: {
     onCleanup(() => window.removeEventListener("keydown", onKey, true));
   });
 
-  /** Candidates whose thumbnail actually loaded. */
-  const shown = () => (candidates() ?? []).filter((c) => !missing().has(c.releaseId));
+  /** Candidates whose thumbnail actually loaded, in the chosen source. */
+  const withArt = () => (candidates() ?? []).filter((c) => !missing().has(c.full));
+  const shown = () => withArt().filter((c) => !only() || c.source === only());
+
+  /** Sources that actually returned something with a picture behind it. */
+  const sources = () => {
+    const seen: string[] = [];
+    for (const c of withArt()) if (!seen.includes(c.source)) seen.push(c.source);
+    return seen;
+  };
 
   function choose(candidate: CoverCandidate) {
     if (busy()) return;
-    setBusy(candidate.releaseId);
+    setBusy(candidate.full);
     setError("");
-    applyCover(props.fileIds, candidate.releaseId)
+    applyCover(props.fileIds, candidate.full)
       .then((r) => {
         setBusy("");
         setReport(r);
@@ -95,8 +107,29 @@ export default function CoverPicker(props: {
         <div class="coverbody">
           <Show
             when={candidates()}
-            fallback={<p class="sethint">Searching MusicBrainz…</p>}
+            fallback={<p class="sethint">Searching…</p>}
           >
+            <Show when={sources().length > 1}>
+              <div class="setseg sourcetabs" role="group">
+                <button
+                  class={`segbtn ${only() === "" ? "on" : ""}`}
+                  onClick={() => setOnly("")}
+                >
+                  All
+                </button>
+                <For each={sources()}>
+                  {(name) => (
+                    <button
+                      class={`segbtn ${only() === name ? "on" : ""}`}
+                      onClick={() => setOnly(name)}
+                    >
+                      {name}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+
             <Show
               when={shown().length > 0}
               fallback={
@@ -110,10 +143,10 @@ export default function CoverPicker(props: {
                 <For each={shown()}>
                   {(c) => (
                     <button
-                      class={`covercard ${busy() === c.releaseId ? "busy" : ""}`}
+                      class={`covercard ${busy() === c.full ? "busy" : ""}`}
                       disabled={Boolean(busy())}
                       onClick={() => choose(c)}
-                      title={`${c.artist} — ${c.title}`}
+                      title={`${c.artist} — ${c.title} · ${c.source}`}
                     >
                       <img
                         src={c.thumbnail}
@@ -122,16 +155,11 @@ export default function CoverPicker(props: {
                         draggable={false}
                         // Hidden rather than shown broken: the archive holds art
                         // for only a fraction of what the search returns.
-                        onError={() =>
-                          setMissing(new Set([...missing(), c.releaseId]))
-                        }
+                        onError={() => setMissing(new Set([...missing(), c.full]))}
                       />
                       <span class="covertitle">{c.title || "Untitled"}</span>
-                      <span class="covermeta">
-                        {[c.date.slice(0, 4), c.country, c.label]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
+                      <span class="covermeta">{c.detail}</span>
+                      <span class="coversource">{c.source}</span>
                     </button>
                   )}
                 </For>
@@ -161,7 +189,7 @@ export default function CoverPicker(props: {
 
         <footer class="tagfoot">
           <span class="sethint credit">
-            Covers from the Cover Art Archive; releases from MusicBrainz.
+            Covers from the Cover Art Archive, Apple and Deezer.
           </span>
           <button class="btn" onClick={props.onClose}>
             Close

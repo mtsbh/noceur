@@ -71,3 +71,59 @@ fn a_release_with_no_art_reports_nothing_rather_than_failing() {
         "a release with no cover is normal, not an error: {missing:?}"
     );
 }
+
+#[test]
+#[ignore = "reaches the network"]
+fn every_source_answers_and_agrees_on_a_well_known_record() {
+    let found =
+        noceur_online::search_all("Skee Mask", "Compro").expect("some source should answer");
+    assert!(!found.is_empty());
+
+    let mut seen: Vec<&str> = found.iter().map(|c| c.source).collect();
+    seen.sort_unstable();
+    seen.dedup();
+    println!("sources answering: {seen:?}");
+
+    for c in found.iter().take(9) {
+        println!(
+            "  {:<20} {:<34} {:<22} {}",
+            c.source, c.title, c.artist, c.detail
+        );
+        assert!(
+            noceur_online::sources::is_allowed(&c.full),
+            "every candidate must point at a host this app will download from: {}",
+            c.full
+        );
+    }
+
+    assert!(
+        seen.len() >= 2,
+        "at least two of the three sources should know this record, got {seen:?}"
+    );
+}
+
+/// The bytes a pick actually embeds, from a source that is not MusicBrainz.
+#[test]
+#[ignore = "reaches the network"]
+fn a_candidate_from_any_source_downloads_as_an_image() {
+    let found = noceur_online::search_all("Skee Mask", "Compro").unwrap();
+
+    for c in found.iter().take(6) {
+        match noceur_online::fetch_image(&c.full) {
+            Ok(bytes) => {
+                println!(
+                    "{} -> {} bytes, {:?}",
+                    c.source,
+                    bytes.len(),
+                    noceur_online::covers::sniff_mime(&bytes)
+                );
+                assert!(bytes.len() > 1024);
+                return;
+            }
+            // Not every candidate has a picture behind it; that is the point of
+            // showing several.
+            Err(e) => println!("{} had none: {e}", c.source),
+        }
+    }
+    panic!("no candidate produced a downloadable image");
+}

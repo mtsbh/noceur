@@ -363,25 +363,32 @@ export function writeTags(
   return invoke<WriteReport>("write_tags", { fileIds, edit });
 }
 
-/** One release the cover search found. */
+/** One sleeve a source found. */
 export type CoverCandidate = {
-  releaseId: string;
-  /** Public Cover Art Archive URL; loaded straight into an `<img>`. */
-  thumbnail: string;
+  /** Which service found it. */
+  source: string;
   title: string;
   artist: string;
-  date: string;
-  country: string;
-  label: string;
-  score: number;
+  /** Year, country, label — whatever that source knows, pre-joined. */
+  detail: string;
+  /** Small rendering, loaded straight into an `<img>` by the picker. */
+  thumbnail: string;
+  /** What gets downloaded and embedded when this one is chosen. */
+  full: string;
+  size: number | null;
 };
 
-/** Searches online for releases that might carry this track's artwork. */
+/**
+ * Searches every source for artwork for this track.
+ *
+ * Their catalogues barely overlap, so a record missing from one is often in
+ * another. A source that fails is simply absent from the results.
+ */
 export function findCovers(fileId: number): Promise<CoverCandidate[]> {
   return invoke<CoverCandidate[]>("find_covers", { fileId });
 }
 
-/** Downloads a release's front cover and embeds it in every selected file. */
-export function applyCover(fileIds: number[], releaseId: string): Promise<WriteReport> {
-  return invoke<WriteReport>("apply_cover", { fileIds, releaseId });
+/** Downloads a chosen cover and embeds it in every selected file. */
+export function applyCover(fileIds: number[], url: string): Promise<WriteReport> {
+  return invoke<WriteReport>("apply_cover", { fileIds, url });
 }

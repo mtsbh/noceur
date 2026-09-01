@@ -5,9 +5,9 @@
 //! library's contents to a web service would be a different kind of program.
 //! What leaves the machine is the artist and title of the track being looked up.
 
-use crate::dto::{CoverCandidate, WriteFailure, WriteReport};
+use crate::dto::{WriteFailure, WriteReport};
 use crate::state::AppState;
-use noceur_online::{covers, musicbrainz, CoverSize};
+use noceur_online::Candidate;
 use std::path::PathBuf;
 use tauri::State;
 
@@ -21,11 +21,16 @@ use tauri::State;
 /// came from is a judgement the user makes — a compilation, a remaster and a
 /// bootleg all match the same search and carry different sleeves — so the app
 /// offers what it found and embeds nothing until asked.
+///
+/// Asks every source. Their catalogues barely overlap: the Cover Art Archive is
+/// strongest on independent and obscure records, Apple on anything with a
+/// distributor, and Deezer often has a twelve-inch neither of the others
+/// carried.
 #[tauri::command]
 pub async fn find_covers(
     state: State<'_, AppState>,
     file_id: i64,
-) -> Result<Vec<CoverCandidate>, String> {
+) -> Result<Vec<Candidate>, String> {
     let db = state.db.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -46,44 +51,33 @@ pub async fn find_covers(
             .or_else(|| meta.title.clone())
             .unwrap_or_else(|| stem(&path));
 
-        let releases = musicbrainz::search_releases(&artist, &title).map_err(|e| e.to_string())?;
-
-        Ok(releases
-            .into_iter()
-            .map(|r| CoverCandidate {
-                thumbnail: covers::front_url(&r.id, CoverSize::Thumbnail),
-                release_id: r.id,
-                title: r.title,
-                artist: r.artist,
-                date: r.date,
-                country: r.country,
-                label: r.label,
-                score: r.score,
-            })
-            .collect())
+        noceur_online::search_all(&artist, &title).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| format!("cover search task failed: {e}"))?
 }
 
-/// Embeds a release's front cover into a selection.
+/// Embeds a chosen cover into a selection.
 ///
 /// The image is downloaded once and written to every file, so choosing a cover
 /// for an album of twelve tracks costs one request rather than twelve. Failures
 /// are per file, for the same reason as in the tag editor: one locked file in a
 /// selection should not cost the other eleven their artwork.
+///
+/// The URL came from a search, but this command cannot know that — so the fetch
+/// is restricted to the sources' own hosts rather than trusted. Nothing is
+/// written to disk as an image: the bytes go from the download straight into
+/// the tag.
 #[tauri::command]
 pub async fn apply_cover(
     state: State<'_, AppState>,
     file_ids: Vec<i64>,
-    release_id: String,
+    url: String,
 ) -> Result<WriteReport, String> {
     let db = state.db.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let image = covers::fetch_front(&release_id, CoverSize::Embed)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "that release has no front cover to download".to_string())?;
+        let image = noceur_online::fetch_image(&url).map_err(|e| e.to_string())?;
 
         let targets: Vec<(i64, PathBuf)> = {
             let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
