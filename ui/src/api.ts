@@ -362,3 +362,26 @@ export function writeTags(
 ): Promise<WriteReport> {
   return invoke<WriteReport>("write_tags", { fileIds, edit });
 }
+
+/** One release the cover search found. */
+export type CoverCandidate = {
+  releaseId: string;
+  /** Public Cover Art Archive URL; loaded straight into an `<img>`. */
+  thumbnail: string;
+  title: string;
+  artist: string;
+  date: string;
+  country: string;
+  label: string;
+  score: number;
+};
+
+/** Searches online for releases that might carry this track's artwork. */
+export function findCovers(fileId: number): Promise<CoverCandidate[]> {
+  return invoke<CoverCandidate[]>("find_covers", { fileId });
+}
+
+/** Downloads a release's front cover and embeds it in every selected file. */
+export function applyCover(fileIds: number[], releaseId: string): Promise<WriteReport> {
+  return invoke<WriteReport>("apply_cover", { fileIds, releaseId });
+}

@@ -39,6 +39,7 @@ import Transport from "./Transport";
 import Menu, { type MenuItem } from "./Menu";
 import SettingsPanel from "./SettingsPanel";
 import TagEditor from "./TagEditor";
+import CoverPicker from "./CoverPicker";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -212,6 +213,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
+  /** The row the cover search runs on, plus every file a pick applies to. */
+  const [covering, setCovering] = createSignal<{ fileId: number; fileIds: number[] } | null>(
+    null,
+  );
 
   /** Every settings change is written straight through — there is no Save. */
   function commitSettings(next: SettingsState) {
@@ -560,6 +565,15 @@ export default function App() {
         hint: "f2",
         disabled: row.kind !== 1,
         run: () => setEditing([...selection()]),
+      },
+      {
+        kind: "item",
+        label: many ? `Find album art for ${selection().size} tracks…` : "Find album art…",
+        disabled: row.kind !== 1,
+        // Searched on the row that was right-clicked, applied to the whole
+        // selection: an album's tracks share a sleeve, and searching on each of
+        // them would be twelve requests for one answer.
+        run: () => setCovering({ fileId: row.fileId, fileIds: [...selection()] }),
       },
       { kind: "separator" },
       {
@@ -1164,6 +1178,17 @@ export default function App() {
             fileIds={ids()}
             onClose={() => setEditing(null)}
             onWritten={() => refetchListing()}
+          />
+        )}
+      </Show>
+
+      <Show when={covering()}>
+        {(target) => (
+          <CoverPicker
+            fileId={target().fileId}
+            fileIds={target().fileIds}
+            onClose={() => setCovering(null)}
+            onApplied={() => refetchListing()}
           />
         )}
       </Show>

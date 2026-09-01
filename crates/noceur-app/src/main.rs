@@ -7,6 +7,7 @@
 
 mod art;
 mod commands;
+mod covers;
 mod dragdrop;
 mod dto;
 mod fileops;
@@ -100,6 +101,8 @@ fn main() {
             commands::envelope,
             tagedit::read_tags,
             tagedit::write_tags,
+            covers::find_covers,
+            covers::apply_cover,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

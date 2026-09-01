@@ -1335,3 +1335,86 @@ body.resizing * {
   font-size: 11px;
   color: var(--fg2);
 }
+
+/* ── Cover picker ──────────────────────────────────────────────────────────
+   Wider than the tag editor: this one is entirely about comparing pictures,
+   and a grid of four across is the smallest that lets two pressings of the
+   same record be told apart at a glance. */
+.covers {
+  position: fixed;
+  z-index: 14;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 640px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.coverbody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+.covergrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.covercard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.covercard:hover:not(:disabled) {
+  background: var(--raise);
+  border-color: var(--acc-line);
+}
+.covercard:disabled {
+  cursor: default;
+}
+.covercard.busy {
+  border-color: var(--acc);
+  background: var(--acc-fill);
+}
+.covercard img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--hair);
+  display: block;
+}
+.covertitle {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.covermeta {
+  color: var(--fg3);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The archive and the database are volunteer projects; saying where the
+   pictures come from is the least this can do. */
+.sethint.credit {
+  flex: 1;
+  margin: 0;
+  align-self: center;
+}

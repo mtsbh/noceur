@@ -226,3 +226,23 @@ pub struct WriteFailure {
     pub name: String,
     pub reason: String,
 }
+
+/// One release the cover search turned up.
+///
+/// Carries the thumbnail's URL rather than its bytes. Cover Art Archive URLs are
+/// public and stable, so the picker points an `<img>` straight at one — which
+/// avoids pulling a dozen images through the IPC bridge to show a grid the user
+/// may well dismiss, and lets the ones with no artwork simply fail to load.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoverCandidate {
+    pub release_id: String,
+    pub thumbnail: String,
+    pub title: String,
+    pub artist: String,
+    pub date: String,
+    pub country: String,
+    pub label: String,
+    /// How well MusicBrainz thought this matched, 0..=100.
+    pub score: u32,
+}

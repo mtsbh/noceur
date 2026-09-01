@@ -9,6 +9,7 @@
 use crate::meta::MetaError;
 use lofty::config::WriteOptions;
 use lofty::file::TaggedFileExt;
+use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::{Accessor, ItemKey, TagExt};
 use lofty::probe::Probe;
 use lofty::tag::Tag;
@@ -34,6 +35,8 @@ pub enum EditError {
     NotANumber { field: &'static str, value: String },
     #[error("{field} is out of range: {value}")]
     OutOfRange { field: &'static str, value: String },
+    #[error("what came back for {path} is not an image this can embed")]
+    NotAnImage { path: String },
 }
 
 /// What to do with one field.
@@ -305,6 +308,73 @@ fn trim_decimal(v: f64) -> String {
     }
 }
 
+/// Replaces a file's front cover.
+///
+/// The existing front cover is removed before the new one is added, rather than
+/// appended alongside it: a file carrying two front covers shows whichever one
+/// the reading program happens to reach first, which makes the change look like
+/// it silently failed. Other picture types — a back cover, a liner note — are
+/// left alone, because nothing about choosing a front cover says anything about
+/// them.
+///
+/// The MIME type is sniffed from the bytes rather than taken on trust. It gets
+/// written into the tag, and a picture labelled as something it is not is a
+/// picture some programs refuse to draw.
+pub fn set_front_cover(path: &Path, image: &[u8]) -> Result<(), EditError> {
+    let mime = sniff_mime(image).ok_or_else(|| EditError::NotAnImage {
+        path: path.display().to_string(),
+    })?;
+
+    let mut tagged =
+        Probe::open(path)
+            .and_then(|p| p.read())
+            .map_err(|source| EditError::Read {
+                path: path.display().to_string(),
+                source,
+            })?;
+
+    let tag_type = tagged.primary_tag_type();
+    if tagged.tag(tag_type).is_none() {
+        tagged.insert_tag(Tag::new(tag_type));
+    }
+    let Some(tag) = tagged.tag_mut(tag_type) else {
+        return Ok(());
+    };
+
+    tag.remove_picture_type(PictureType::CoverFront);
+    tag.push_picture(Picture::new_unchecked(
+        PictureType::CoverFront,
+        Some(mime),
+        None,
+        image.to_vec(),
+    ));
+
+    tag.save_to_path(path, WriteOptions::default())
+        .map_err(|source| EditError::Save {
+            path: path.display().to_string(),
+            source,
+        })
+}
+
+/// Identifies an image from its first bytes.
+///
+/// Only the formats that actually turn up as cover art. Anything else is
+/// refused rather than stored as "unknown": a tag full of bytes no reader can
+/// identify is worse than no artwork.
+fn sniff_mime(bytes: &[u8]) -> Option<MimeType> {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(MimeType::Jpeg)
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(MimeType::Png)
+    } else if bytes.starts_with(b"GIF8") {
+        Some(MimeType::Gif)
+    } else if bytes.starts_with(b"BM") {
+        Some(MimeType::Bmp)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -566,6 +636,71 @@ mod tests {
         write(&path, &Edit::default()).unwrap();
 
         assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
+
+    /// A minimal but real JPEG, so the picture path can be exercised without a
+    /// fixture file: the SOI marker is what identifies it, and lofty stores the
+    /// bytes rather than decoding them.
+    fn jpeg() -> Vec<u8> {
+        let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
+        v.extend_from_slice(&[0u8; 64]);
+        v.extend_from_slice(&[0xFF, 0xD9]);
+        v
+    }
+
+    #[test]
+    fn a_front_cover_can_be_embedded_and_read_back() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        set_front_cover(&path, &jpeg()).expect("embedding a JPEG must work");
+
+        let meta = crate::meta::read(&path).unwrap();
+        assert!(meta.has_artwork, "the file must now report artwork");
+        let art = crate::meta::artwork(&path).unwrap().expect("a picture");
+        assert_eq!(art.data, jpeg());
+        assert_eq!(art.mime.as_deref(), Some("image/jpeg"));
+    }
+
+    /// Two front covers in one file means whichever the reader reaches first
+    /// wins, which makes a change look as though it did nothing.
+    #[test]
+    fn replacing_a_cover_leaves_exactly_one() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        set_front_cover(&path, &jpeg()).unwrap();
+        // The PNG signature, spelled out: 137 P N G CR LF SUB LF.
+        let mut png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        png.extend_from_slice(&[0u8; 32]);
+        set_front_cover(&path, &png).unwrap();
+
+        let art = crate::meta::artwork(&path).unwrap().expect("a picture");
+        assert_eq!(
+            art.mime.as_deref(),
+            Some("image/png"),
+            "the newer cover wins"
+        );
+        assert_eq!(art.data, png);
+    }
+
+    /// A tag full of bytes no reader can identify is worse than no artwork, and
+    /// an HTML error page dressed up as a cover is exactly what a failed
+    /// download looks like.
+    #[test]
+    fn something_that_is_not_an_image_is_refused() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("track.wav");
+        write_wav(&path);
+
+        let err = set_front_cover(&path, b"<html>404</html>").unwrap_err();
+        assert!(matches!(err, EditError::NotAnImage { .. }));
+        assert!(
+            !crate::meta::read(&path).unwrap().has_artwork,
+            "a refused cover must not have been written"
+        );
     }
 
     /// What the editor's boxes mean: untouched is untouched, emptied is cleared.
