@@ -1658,3 +1658,44 @@ body.resizing * {
 .sethint code {
   color: var(--fg2);
 }
+.quickstar {
+  width: 22px;
+  padding: 2px 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg4);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.quickstar:hover:not(:disabled) {
+  color: var(--fg2);
+}
+.quickstar.on {
+  color: var(--acc);
+}
+.quickstar:disabled {
+  cursor: default;
+}
+.setsub {
+  margin: 14px 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.setremove {
+  float: right;
+  border: 0;
+  background: none;
+  color: var(--fg4);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+.setremove:hover {
+  color: var(--acc);
+}

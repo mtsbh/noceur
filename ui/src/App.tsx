@@ -1261,6 +1261,7 @@ export default function App() {
         <QuickTag
           fileId={transport()?.fileId ?? 0}
           groups={settings().quick}
+          rating={settings().quickRating}
           onClose={() => setQuickOpen(false)}
           onWritten={() => refetchListing()}
         />

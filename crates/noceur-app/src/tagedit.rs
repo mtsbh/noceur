@@ -91,6 +91,7 @@ pub async fn write_tags(
             track_no: noceur_tags::Change::from_input(edit.track_no),
             bpm: noceur_tags::Change::from_input(edit.bpm),
             key: noceur_tags::Change::from_input(edit.key),
+            rating: noceur_tags::Change::from_input(edit.rating),
             // Quick tag sends only the fields it is changing, so every entry
             // here is a deliberate set or clear — there is no "leave alone" to
             // express, because leaving alone is not sending it.
@@ -315,6 +316,13 @@ mod tests {
     }
 }
 
+/// The key a rating travels under in the quick-tag map.
+///
+/// Not a tag name: ratings live in a frame of their own in every format, and
+/// this is only how the panel and the backend refer to one. The colon keeps it
+/// from colliding with any field somebody names.
+pub const RATING_FIELD: &str = "noceur:rating";
+
 /// Reads the named fields a quick-tag panel shows for one track.
 ///
 /// Reads the file rather than the index for the same reason the editor does:
@@ -339,9 +347,15 @@ pub async fn quick_fields(
 
         // A file that will not parse has no fields to show; the panel simply
         // starts empty rather than refusing to open.
-        Ok(noceur_tags::read_fields(&found.path, &names)
-            .map(|f| f.values.into_iter().collect())
-            .unwrap_or_default())
+        let fields = noceur_tags::read_fields(&found.path, &names).unwrap_or_default();
+        let mut out: std::collections::HashMap<String, String> =
+            fields.values.into_iter().collect();
+        // The rating rides in the same map under a name no tag uses, so the
+        // panel reads one reply rather than two.
+        if let Some(stars) = fields.rating {
+            out.insert(RATING_FIELD.to_string(), stars.to_string());
+        }
+        Ok(out)
     })
     .await
     .map_err(|e| format!("quick tag read failed: {e}"))?

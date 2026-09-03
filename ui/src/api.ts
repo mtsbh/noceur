@@ -360,9 +360,21 @@ export function writeTags(
   fileIds: number[],
   edit: Partial<Record<TagField, string>>,
   custom: Record<string, string> = {},
+  rating?: string,
 ): Promise<WriteReport> {
-  return invoke<WriteReport>("write_tags", { fileIds, edit: { ...edit, custom } });
+  return invoke<WriteReport>("write_tags", {
+    fileIds,
+    edit: { ...edit, custom, rating },
+  });
 }
+
+/**
+ * The key a rating travels under in the quick-tag map.
+ *
+ * Not a tag name — ratings live in a frame of their own in every format. Matches
+ * `RATING_FIELD` on the other side.
+ */
+export const RATING_FIELD = "noceur:rating";
 
 /** One sleeve a source found. */
 export type CoverCandidate = {

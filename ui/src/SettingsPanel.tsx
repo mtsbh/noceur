@@ -2,7 +2,12 @@ import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
 import { credentials, openUrl, setDiscogsToken } from "./api";
 import type { Column } from "./columns";
-import { QUICK_KEYS, type QuickGroup, type Settings as S } from "./settings";
+import {
+  NEW_QUICK_GROUP,
+  QUICK_KEYS,
+  type QuickGroup,
+  type Settings as S,
+} from "./settings";
 
 export type ArtSize = "small" | "medium" | "large";
 
@@ -141,6 +146,17 @@ export default function Settings(props: {
               Every library has its own vocabulary, so the field names are yours
               too — <code>ENERGY</code> and <code>MOOD</code> are only defaults.
             </p>
+            <div class="setrow">
+              <span class="setlabel">Stars</span>
+              <label class="setcheck">
+                <input
+                  type="checkbox"
+                  checked={props.settings.quickRating}
+                  onChange={(e) => patch({ quickRating: e.currentTarget.checked })}
+                />
+                <span>offer a 1–5 rating row (shift+1 … shift+5)</span>
+              </label>
+            </div>
             <For each={props.settings.quick}>
               {(g, row) => (
                 <div class="setquick">
@@ -194,10 +210,48 @@ export default function Settings(props: {
                   </div>
                   <p class="sethint">
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}
+                    <button
+                      class="setremove"
+                      title="Remove this row"
+                      onClick={() =>
+                        patch({
+                          quick: props.settings.quick.filter((_, i) => i !== row()),
+                        })
+                      }
+                    >
+                      remove
+                    </button>
                   </p>
                 </div>
               )}
             </For>
+            <Show when={props.settings.quick.length < QUICK_KEYS.length}>
+              <button
+                class="btn"
+                onClick={() =>
+                  patch({ quick: [...props.settings.quick, { ...NEW_QUICK_GROUP }] })
+                }
+              >
+                Add a row
+              </button>
+            </Show>
+
+            <h4 class="setsub">Where these end up</h4>
+            <p class="sethint">
+              A name that a format already knows goes to its proper home:
+              <code>MOOD</code> becomes ID3's <code>TMOO</code> frame, and
+              <code>GENRE</code> or <code>COMMENT</code> become the real genre
+              and comment. Anything else becomes a user-defined field —
+              <code>TXXX</code> in MP3, WAV and AIFF, a plain key in FLAC, an
+              iTunes atom in M4A — which is where Mp3tag, OneTagger and Serato
+              look for custom values.
+            </p>
+            <p class="sethint">
+              Rekordbox only displays a handful of fields, so if you want energy
+              visible on a CDJ, point a row at <code>COMMENT</code> or
+              <code>GROUPING</code> rather than a name of your own. The star
+              rating above is separate and always goes where Rekordbox reads it.
+            </p>
             <p class="sethint">
               ID3 reads any four capitals as a frame identifier, so a field name
               of exactly four — <code>VIBE</code> — is refused rather than

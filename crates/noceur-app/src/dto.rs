@@ -198,6 +198,8 @@ pub struct TagEdit {
     /// quick-tag group is pointed at. An empty value clears the field, matching
     /// what an emptied box means everywhere else.
     pub custom: std::collections::HashMap<String, String>,
+    /// Stars, `"0"` to `"5"`. Zero removes the rating.
+    pub rating: Option<String>,
     pub artist: Option<String>,
     pub title: Option<String>,
     pub album: Option<String>,

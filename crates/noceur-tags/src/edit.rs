@@ -76,13 +76,6 @@ impl Change {
 
 /// The edits to apply to a file.
 ///
-/// There is deliberately no star rating here. ID3 stores one in `POPM`, which is
-/// a binary frame — an email, a byte, and a play counter — that this path cannot
-/// construct, and the text alternatives disagree about their own scale: Vorbis
-/// `RATING` is 0-100 in some programs and 0-5 in others. A rating that half the
-/// world reads as one star out of five and the other half as four is worse than
-/// no rating, so it waits for a change that can write the real frame.
-///
 /// Every field defaults to [`Change::Keep`], so a caller constructs one with
 /// `..Default::default()` and names only what it means to change. Adding a field
 /// here cannot silently start clearing tags in files nobody meant to touch.
@@ -104,6 +97,9 @@ pub struct Edit {
     /// Musical key, as text. Stored verbatim — this crate normalises keys for
     /// display and sorting, but what goes in the file is what the user typed.
     pub key: Change,
+    /// Stars, `"0"` to `"5"`. ID3 gets a real `POPM` frame on the scale DJ
+    /// software uses; every other format gets the star count as text.
+    pub rating: Change,
     /// Named fields this crate does not model: `ENERGY`, `MOOD`, whatever a
     /// quick-tag group is pointed at. Written as a user-defined text frame in
     /// ID3 and as a plain comment key elsewhere, which is where every other tag
@@ -187,7 +183,24 @@ pub fn write(path: &Path, edit: &Edit) -> Result<(), EditError> {
         .map_err(|source| EditError::Save {
             path: path.display().to_string(),
             source,
-        })
+        })?;
+
+    // The rating, for the containers that keep it in a frame the generic tag
+    // cannot carry. A second pass over the file, but only when a rating is
+    // actually being changed — which in practice means quick tagging, where it
+    // is the only thing being changed.
+    if !matches!(edit.rating, Change::Keep) {
+        let stars = match &edit.rating {
+            Change::Set(v) => v.trim().parse::<u8>().ok().filter(|n| *n <= 5),
+            _ => None,
+        };
+        crate::rating::write_id3(path, stars).map_err(|source| EditError::Save {
+            path: path.display().to_string(),
+            source,
+        })?;
+    }
+
+    Ok(())
 }
 
 /// Applies an edit to a tag in memory.
@@ -202,6 +215,35 @@ pub fn apply(
     track_no: Option<Option<u32>>,
     bpm: Option<Option<f64>>,
 ) {
+    // Every format except ID3 keeps the rating in an ordinary text field, so it
+    // goes in with everything else. ID3's binary frame is handled by `write`,
+    // which is the only place that has a file to write it to.
+    // A rating is stored differently by every format, and lofty models that
+    // difference by what the value *is* rather than by which key it is under:
+    // ID3 holds a `POPM` structure, which arrives and leaves as raw bytes, while
+    // everything else holds a plain number.
+    //
+    // Zero stars removes the rating rather than storing a zero. That is what
+    // pressing the star a track already has means, and a rating of nothing is
+    // not something the programs reading it agree about.
+    match &edit.rating {
+        Change::Keep => {}
+        Change::Clear => tag.remove_key(&ItemKey::Popularimeter),
+        Change::Set(stars) => match stars.trim().parse::<u8>() {
+            Ok(0) => tag.remove_key(&ItemKey::Popularimeter),
+            // ID3 is handled after the save, natively: its `POPM` frame is one
+            // lofty keeps out of the format-independent tag entirely, so it can
+            // neither be read nor written from here.
+            Ok(n) if n <= 5 && tag.tag_type() != lofty::tag::TagType::Id3v2 => {
+                // Stars as written, not a 0-255 byte. `RATING` in a Vorbis
+                // comment is read as a small number by the programs that look
+                // at it, and 255 there reads as wildly out of range.
+                tag.insert_text(ItemKey::Popularimeter, n.to_string());
+            }
+            _ => {}
+        },
+    }
+
     for (name, change) in &edit.custom {
         let name = name.trim();
         if name.is_empty() {

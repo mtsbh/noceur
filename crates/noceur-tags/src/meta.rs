@@ -198,6 +198,14 @@ pub fn read_fields(path: &Path, names: &[String]) -> Result<Fields, MetaError> {
         }
     }
 
+    // Formats that keep the rating in an ordinary field are read here; ID3's
+    // `POPM` never reaches the generic tag and is read from the file directly.
+    out.rating = tag
+        .get_string(&ItemKey::Popularimeter)
+        .and_then(|v| v.trim().parse::<u8>().ok())
+        .map(crate::rating::stars_from_byte)
+        .or_else(|| crate::rating::read_id3(path));
+
     Ok(out)
 }
 
@@ -206,6 +214,8 @@ pub fn read_fields(path: &Path, names: &[String]) -> Result<Fields, MetaError> {
 pub struct Fields {
     /// Only the fields that are actually set, in the order they were asked for.
     pub values: Vec<(String, String)>,
+    /// Stars, 0 to 5, when the file carries a rating.
+    pub rating: Option<u8>,
 }
 
 #[cfg(test)]
@@ -562,5 +572,157 @@ mod tests {
 
         let fields = read_fields(&path, &["ENERGY".into()]).unwrap();
         assert!(fields.values.is_empty());
+    }
+
+    /// The scale DJ software uses. Getting it wrong shows a five-star track as
+    /// one star in Rekordbox, which is exactly the sort of thing nobody notices
+    /// until a set.
+    #[test]
+    fn a_rating_round_trips_through_a_real_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+
+        for stars in 1..=5u8 {
+            crate::edit::write(
+                &path,
+                &crate::Edit {
+                    rating: crate::Change::Set(stars.to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                read_fields(&path, &[]).unwrap().rating,
+                Some(stars),
+                "{stars} stars did not survive"
+            );
+        }
+
+        // Zero stars is the absence of a rating, not a rating of nothing —
+        // which is what pressing the star you already gave a track means.
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                rating: crate::Change::Set("0".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(read_fields(&path, &[]).unwrap().rating, None);
+    }
+
+    /// A rating written here has to be the one Rekordbox reads: five even steps
+    /// of 51, not the media-player scale.
+    #[test]
+    fn stars_are_stored_on_the_scale_dj_software_reads() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                rating: crate::Change::Set("4".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // A WAV keeps its tags in ID3, so the rating goes into a real `POPM`
+        // frame on the byte scale DJ software reads.
+        assert_eq!(crate::rating::read_id3(&path), Some(4));
+        assert_eq!(
+            crate::rating::byte_from_stars(4),
+            204,
+            "four stars is 4 x 51"
+        );
+    }
+
+    #[test]
+    fn a_rating_can_be_cleared() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                rating: crate::Change::Set("5".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                rating: crate::Change::Clear,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(read_fields(&path, &[]).unwrap().rating, None);
+    }
+
+    /// Ratings arrive on several scales depending on what wrote them.
+    #[test]
+    fn every_rating_scale_in_circulation_reads_sensibly() {
+        // Stars written directly, as Vorbis comments often hold them.
+        assert_eq!(crate::rating::stars_from_byte(4), 4);
+        // The DJ scale: 51 per star.
+        for (raw, stars) in [(51, 1), (102, 2), (153, 3), (204, 4), (255, 5)] {
+            assert_eq!(
+                crate::rating::stars_from_byte(raw),
+                stars,
+                "{raw} should be {stars}"
+            );
+        }
+        // Windows Media Player's scale agrees from three stars up. Its two-star
+        // 64 reads as one here, which is the documented cost of following the
+        // scale this app actually writes.
+        for (raw, stars) in [(128, 3), (196, 4), (255, 5)] {
+            assert_eq!(
+                crate::rating::stars_from_byte(raw),
+                stars,
+                "{raw} should be {stars}"
+            );
+        }
+        assert_eq!(crate::rating::stars_from_byte(0), 0);
+    }
+
+    /// Writing a rating must not disturb the rest of the tag: the ID3 path
+    /// converts the whole tag to its format-specific form to add one frame, and
+    /// dropping everything else on the way would be a quiet disaster.
+    #[test]
+    fn a_rating_does_not_cost_the_other_tags() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                artist: crate::Change::Set("Skee Mask".into()),
+                title: crate::Change::Set("Rev8617".into()),
+                bpm: crate::Change::Set("143".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        crate::edit::write(
+            &path,
+            &crate::Edit {
+                rating: crate::Change::Set("5".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let meta = read(&path).unwrap();
+        assert_eq!(meta.artist.as_deref(), Some("Skee Mask"));
+        assert_eq!(meta.title.as_deref(), Some("Rev8617"));
+        assert_eq!(meta.bpm, Some(143.0));
+        assert_eq!(read_fields(&path, &[]).unwrap().rating, Some(5));
     }
 }

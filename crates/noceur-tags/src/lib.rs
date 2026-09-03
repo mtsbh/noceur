@@ -3,6 +3,7 @@
 pub mod edit;
 pub mod key;
 pub mod meta;
+pub mod rating;
 
 pub use edit::{Change, Edit, EditError};
 pub use key::{KeyNotation, MusicalKey};

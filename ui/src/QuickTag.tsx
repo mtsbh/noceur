@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import { quickFields, writeTags } from "./api";
+import { RATING_FIELD, quickFields, writeTags } from "./api";
 import { QUICK_KEYS, type QuickGroup } from "./settings";
 
 /**
@@ -29,6 +29,8 @@ export default function QuickTag(props: {
   /** The playing track, or 0 when nothing is loaded. */
   fileId: number;
   groups: QuickGroup[];
+  /** Whether to offer a star rating row. */
+  rating: boolean;
   onClose: () => void;
   /** Called after a write lands, so the listing can re-read the row. */
   onWritten: () => void;
@@ -40,7 +42,23 @@ export default function QuickTag(props: {
   /** The file the pending edits belong to, so a track change flushes to it. */
   let owner = 0;
 
-  const names = () => props.groups.map((g) => g.field);
+  const names = () => props.groups.map((g) => g.field).filter(Boolean);
+
+  /** Stars currently on the track, 0 when none. */
+  const stars = () => Number(current()[RATING_FIELD] ?? "0") || 0;
+
+  /**
+   * Sets the rating, or clears it when the star already given is pressed again.
+   *
+   * Which is how every star control anyone has used behaves, and the only way
+   * to say "actually, no rating" without a separate control for it.
+   */
+  function rate(value: number) {
+    if (props.fileId <= 0) return;
+    const next = stars() === value ? 0 : value;
+    setCurrent({ ...current(), [RATING_FIELD]: String(next) });
+    schedule();
+  }
 
   // Re-read whenever the playing track changes. Any edits still pending belong
   // to the track that is leaving and are written to it first, not to the one
@@ -108,10 +126,13 @@ export default function QuickTag(props: {
     if (!pending() || owner <= 0) return;
 
     const custom: Record<string, string> = {};
-    for (const g of props.groups) custom[g.field] = current()[g.field] ?? "";
+    for (const g of props.groups) {
+      if (g.field) custom[g.field] = current()[g.field] ?? "";
+    }
+    const rating = props.rating ? (current()[RATING_FIELD] ?? "0") : undefined;
     setPending(false);
 
-    writeTags([owner], {}, custom)
+    writeTags([owner], {}, custom, rating)
       .then(() => props.onWritten())
       .catch(() => {});
   }
@@ -132,6 +153,21 @@ export default function QuickTag(props: {
       }
 
       const pressed = e.key.toLowerCase();
+
+      // Stars are on the number row with a shift, so the digits stay free for
+      // the first tag group — energy is pressed far more often than a rating.
+      if (props.rating && e.shiftKey) {
+        const digit = "!\"£$%".indexOf(e.key);
+        const viaCode = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"].indexOf(e.code);
+        const star = viaCode >= 0 ? viaCode : digit;
+        if (star >= 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          rate(star + 1);
+          return;
+        }
+      }
+
       props.groups.forEach((g, row) => {
         const keys = QUICK_KEYS[row] ?? [];
         const index = keys.indexOf(pressed);
@@ -153,6 +189,24 @@ export default function QuickTag(props: {
   return (
     <div class="quicktag">
       <div class="quickrows">
+        <Show when={props.rating}>
+          <div class="quickrow">
+            <span class="quicklabel">Rating</span>
+            <For each={[1, 2, 3, 4, 5]}>
+              {(n) => (
+                <button
+                  class={`quickstar ${stars() >= n ? "on" : ""}`}
+                  disabled={props.fileId <= 0}
+                  onClick={() => rate(n)}
+                  title={`${n} star${n > 1 ? "s" : ""} — shift+${n}`}
+                >
+                  ★
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+
         <For each={props.groups}>
           {(g, row) => (
             <div class="quickrow">

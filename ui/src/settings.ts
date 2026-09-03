@@ -31,6 +31,16 @@ export type QuickGroup = {
 export type Settings = {
   wave: { shape: WaveShape; colour: WaveColour };
   quick: QuickGroup[];
+  /** Whether the quick-tag panel offers a star rating row. */
+  quickRating: boolean;
+};
+
+/** A group added by the "add" button, before it is named. */
+export const NEW_QUICK_GROUP: QuickGroup = {
+  label: "New",
+  field: "",
+  values: [],
+  multi: false,
 };
 
 /**
@@ -66,6 +76,7 @@ export const DEFAULT_QUICK: QuickGroup[] = [
 export const DEFAULTS: Settings = {
   wave: { shape: "filled", colour: "rgb" },
   quick: DEFAULT_QUICK,
+  quickRating: true,
 };
 
 const KEY = "noceur.settings";
@@ -93,6 +104,7 @@ export function loadSettings(): Settings {
         colour: colour && COLOURS.includes(colour) ? colour : DEFAULTS.wave.colour,
       },
       quick: Array.isArray(parsed.quick) ? parsed.quick.filter(isGroup) : DEFAULT_QUICK,
+      quickRating: parsed.quickRating !== false,
     };
   } catch {
     return DEFAULTS;
