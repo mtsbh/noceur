@@ -160,6 +160,45 @@ pub fn same_volume(a: &Path, b: &Path) -> bool {
     }
 }
 
+/// Renames one file through the shell.
+///
+/// Separate from [`run`] because renaming takes a name rather than a destination
+/// folder, and folding it into the same signature would mean a parameter that is
+/// a path for three operations and a bare name for the fourth.
+///
+/// Goes through `IFileOperation` for the reason everything else here does: the
+/// rename lands on the system undo stack, so a template that turned out wrong is
+/// Ctrl+Z in Explorer rather than a folder to repair by hand.
+pub fn rename(from: &Path, to: &Path) -> Result<(), String> {
+    let Some(new_name) = to.file_name() else {
+        return Err("no new name to rename to".into());
+    };
+
+    let _apartment = Apartment::enter();
+
+    // SAFETY: as in `run` — every interface is created here and released by its
+    // Drop impl, and nothing is shared across threads.
+    unsafe {
+        let operation: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_ALL)
+            .map_err(|e| format!("cannot start a file operation: {e}"))?;
+
+        operation
+            .SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR)
+            .map_err(|e| format!("cannot configure the file operation: {e}"))?;
+
+        let item = shell_item(from)?;
+        operation
+            .RenameItem(&item, &HSTRING::from(new_name), None)
+            .map_err(|e| format!("cannot queue the rename: {e}"))?;
+
+        operation
+            .PerformOperations()
+            .map_err(|e| format!("the rename failed: {e}"))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

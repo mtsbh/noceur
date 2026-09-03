@@ -14,6 +14,7 @@ mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod renamer;
 mod shellmenu;
 mod state;
 mod tagedit;
@@ -109,6 +110,8 @@ fn main() {
             autotag::match_track,
             autotag::credentials,
             autotag::set_discogs_token,
+            renamer::preview_rename,
+            renamer::apply_rename,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

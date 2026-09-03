@@ -43,6 +43,7 @@ import TagEditor from "./TagEditor";
 import CoverPicker from "./CoverPicker";
 import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
+import Renamer from "./Renamer";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -215,6 +216,8 @@ export default function App() {
   const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [quickOpen, setQuickOpen] = createSignal(false);
+  /** Files the rename dialog is open on, or null when it is closed. */
+  const [renaming, setRenaming] = createSignal<number[] | null>(null);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -575,6 +578,12 @@ export default function App() {
         hint: "f2",
         disabled: row.kind !== 1,
         run: () => setEditing([...selection()]),
+      },
+      {
+        kind: "item",
+        label: many ? `Rename ${selection().size} tracks…` : "Rename…",
+        disabled: row.kind !== 1,
+        run: () => setRenaming([...selection()]),
       },
       {
         kind: "item",
@@ -1202,6 +1211,16 @@ export default function App() {
           items={rowMenuItems(menu()!.row)}
           onClose={() => setMenu(null)}
         />
+      </Show>
+
+      <Show when={renaming()}>
+        {(ids) => (
+          <Renamer
+            fileIds={ids()}
+            onClose={() => setRenaming(null)}
+            onRenamed={() => refetchListing()}
+          />
+        )}
       </Show>
 
       <Show when={matching()}>

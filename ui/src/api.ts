@@ -462,3 +462,42 @@ export function quickFields(
 ): Promise<Record<string, string>> {
   return invoke<Record<string, string>>("quick_fields", { fileId, names });
 }
+
+/** One file's proposed rename. */
+export type RenamePreview = {
+  fileId: number;
+  from: string;
+  to: string;
+  /** Why it will be skipped, or empty when it will go ahead. */
+  problem: string;
+  unchanged: boolean;
+};
+
+/** Fields a rename template can refer to. */
+export const RENAME_FIELDS: [string, string][] = [
+  ["artist", "Track artist"],
+  ["title", "Track title"],
+  ["album", "Album"],
+  ["albumartist", "Album artist"],
+  ["genre", "Genre"],
+  ["year", "Year"],
+  ["track", "Track number"],
+  ["track2", "Track number, two digits"],
+  ["bpm", "BPM"],
+  ["key", "Musical key"],
+  ["label", "Label, from the comment"],
+  ["filename", "Current name, without extension"],
+];
+
+/** Works out what the selection would be called. Changes nothing. */
+export function previewRename(
+  fileIds: number[],
+  template: string,
+): Promise<RenamePreview[]> {
+  return invoke<RenamePreview[]>("preview_rename", { fileIds, template });
+}
+
+/** Applies exactly the names the preview showed. */
+export function applyRename(renames: [number, string][]): Promise<WriteReport> {
+  return invoke<WriteReport>("apply_rename", { renames });
+}

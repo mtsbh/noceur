@@ -1699,3 +1699,95 @@ body.resizing * {
 .setremove:hover {
   color: var(--acc);
 }
+
+/* ── Rename ────────────────────────────────────────────────────────────────
+   The list of before-and-after names is the whole dialog: renaming is the one
+   bulk change with no undo inside the app, so seeing every result before
+   agreeing to it is not a nicety. */
+.renamer {
+  position: fixed;
+  z-index: 14;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 680px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.renamebody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+.renameinput {
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--bg);
+  border: 1px solid var(--hair2);
+  border-radius: 5px;
+  color: var(--fg);
+  font-size: 12px;
+  outline: none;
+}
+.renameinput:focus {
+  border-color: var(--acc-line);
+}
+.renamepresets {
+  margin: 10px 0 8px;
+}
+/* Clickable field names, so nobody has to remember the vocabulary. */
+.fieldchip {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--fg3);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.fieldchip:hover {
+  color: var(--acc);
+}
+.renamelist {
+  margin-top: 10px;
+  border-top: 1px solid var(--hair);
+}
+.renamerow {
+  display: grid;
+  grid-template-columns: 1fr 16px 1fr;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.renamefrom,
+.renameto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.renamefrom {
+  color: var(--fg3);
+}
+.renameto {
+  color: var(--fg);
+}
+.renamearrow {
+  color: var(--fg4);
+  text-align: center;
+}
+/* A row that will not be renamed says so in place, rather than disappearing —
+   a preview that silently omits files is a preview you cannot trust. */
+.renamerow.same .renameto {
+  color: var(--fg4);
+  font-style: italic;
+}
+.renamerow.bad .renameto {
+  color: var(--acc);
+}
