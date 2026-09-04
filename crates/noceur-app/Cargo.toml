@@ -4,6 +4,17 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Switches Tauri from loading the front end off the dev server to serving the
+# built assets embedded in the executable. Without it a release build starts up
+# pointing at http://localhost:1420 and shows "localhost refused to connect" to
+# anyone who does not happen to have `npm run dev` running.
+#
+# The Tauri CLI turns this on for `tauri build`; a plain `cargo build --release`
+# does not, so every release build here has to pass `--features custom-protocol`.
+# See `docs/superpowers/notes/building.md`.
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
