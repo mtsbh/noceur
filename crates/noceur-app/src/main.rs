@@ -7,6 +7,7 @@
 
 mod art;
 mod autotag;
+mod cleanup;
 mod commands;
 mod config;
 mod covers;
@@ -112,6 +113,9 @@ fn main() {
             autotag::set_discogs_token,
             renamer::preview_rename,
             renamer::apply_rename,
+            cleanup::cleanup_rules,
+            cleanup::preview_cleanup,
+            cleanup::apply_cleanup,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

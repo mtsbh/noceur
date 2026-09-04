@@ -2,10 +2,12 @@ import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
 import {
   TAG_FIELDS,
+  applyCover,
   readTags,
   writeTags,
   type TagField,
   type TagForm,
+  type WriteFailure,
   type WriteReport,
 } from "./api";
 
@@ -35,11 +37,24 @@ export default function TagEditor(props: {
    * autotagger proposes is visible as a proposal before it is written.
    */
   initial?: Partial<Record<TagField, string>>;
+  /**
+   * Cover art the matched release came with.
+   *
+   * Offered here rather than embedded on the spot, because a match is a
+   * proposal: the release the fields came from is the release the picture came
+   * from, and if one of them is wrong so is the other. It goes in on Save, with
+   * everything else, or not at all.
+   */
+  initialArt?: string;
 }) {
   const [form, setForm] = createSignal<TagForm | null>(null);
   const [edits, setEdits] = createSignal<Partial<Record<TagField, string>>>(
     props.initial ?? {},
   );
+  // Ticked to begin with: someone who took a match wants the release, and the
+  // artwork is part of it. Unticking is one click and the picture is right there
+  // to judge it by.
+  const [embedArt, setEmbedArt] = createSignal(true);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
   const [report, setReport] = createSignal<WriteReport | null>(null);
@@ -81,32 +96,58 @@ export default function TagEditor(props: {
   const various = (key: TagField): boolean =>
     edits()[key] === undefined && form() !== null && form()![key] === null;
 
-  const dirty = () => Object.keys(edits()).length > 0;
+  /** Whether the cover from the match is going to be written. */
+  const artWanted = () => Boolean(props.initialArt) && embedArt();
 
-  function save() {
+  const dirty = () => Object.keys(edits()).length > 0 || artWanted();
+
+  async function save() {
     if (!dirty() || busy()) return;
     setBusy(true);
     setError("");
-    writeTags(props.fileIds, edits())
-      .then((r) => {
-        setReport(r);
-        setBusy(false);
-        if (r.failures.length === 0) {
-          props.onWritten();
-          props.onClose();
-          return;
-        }
-        // Some files were written and some were not. The dialog stays open
-        // showing which failed — closing it would leave the user believing the
-        // whole selection was retagged.
-        props.onWritten();
-        setEdits({});
-        readTags(props.fileIds).then(setForm).catch(() => {});
-      })
-      .catch((e) => {
-        setError(String(e));
-        setBusy(false);
-      });
+
+    const fields = edits();
+    let written = 0;
+    let failures: WriteFailure[] = [];
+
+    try {
+      if (Object.keys(fields).length > 0) {
+        const r = await writeTags(props.fileIds, fields);
+        written = r.written;
+        failures = r.failures;
+      }
+
+      // Artwork after the text, and only into the files the text reached. A
+      // file that refused its tags is locked or read-only, and asking it for a
+      // second rewrite produces a second identical complaint about the same
+      // file.
+      if (artWanted() && failures.length === 0) {
+        const r = await applyCover(props.fileIds, props.initialArt!);
+        written = Math.max(written, r.written);
+        failures = r.failures;
+      }
+    } catch (e) {
+      setError(String(e));
+      setBusy(false);
+      return;
+    }
+
+    const result: WriteReport = { written, failures };
+    setReport(result);
+    setBusy(false);
+
+    if (failures.length === 0) {
+      props.onWritten();
+      props.onClose();
+      return;
+    }
+    // Some files were written and some were not. The dialog stays open showing
+    // which failed — closing it would leave the user believing the whole
+    // selection was retagged.
+    props.onWritten();
+    setEdits({});
+    setEmbedArt(false);
+    readTags(props.fileIds).then(setForm).catch(() => {});
   }
 
   return (
@@ -173,6 +214,30 @@ export default function TagEditor(props: {
                 file.
               </Show>
             </p>
+          </Show>
+
+          {/* The cover the match arrived with. Shown at a size worth judging,
+              because "is this the right release" is a question a thumbnail
+              cannot answer. */}
+          <Show when={props.initialArt}>
+            <label class="artoffer">
+              <img src={props.initialArt!} alt="" draggable={false} />
+              <span class="artoffertext">
+                <span class="artoffertitle">
+                  <input
+                    type="checkbox"
+                    checked={embedArt()}
+                    onChange={(e) => setEmbedArt(e.currentTarget.checked)}
+                  />
+                  Embed this cover art
+                </span>
+                <span class="sethint">
+                  From the same release as the fields above. Written into the
+                  {(form()?.count ?? 0) > 1 ? " files" : " file"} on Save,
+                  replacing any artwork already there.
+                </span>
+              </span>
+            </label>
           </Show>
 
           <Show when={error()}>

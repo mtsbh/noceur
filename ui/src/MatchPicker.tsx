@@ -20,8 +20,18 @@ import { matchTrack, type TagField, type TrackMatch } from "./api";
 export default function MatchPicker(props: {
   fileId: number;
   onClose: () => void;
-  /** Called with the fields to pre-fill the editor with. */
-  onChoose: (fields: Partial<Record<TagField, string>>) => void;
+  /**
+   * Called with the fields to pre-fill the editor with, and the cover art the
+   * release came with when it has one.
+   *
+   * The art travels with the fields rather than being applied here: it belongs
+   * to the same release, so it is right exactly when they are, and it should be
+   * agreed to in the same place and at the same moment they are.
+   */
+  onChoose: (
+    fields: Partial<Record<TagField, string>>,
+    art: string | undefined,
+  ) => void;
 }) {
   const [matches, setMatches] = createSignal<TrackMatch[] | null>(null);
   const [error, setError] = createSignal("");
@@ -117,7 +127,10 @@ export default function MatchPicker(props: {
             >
               <For each={matches()}>
                 {(m) => (
-                  <button class="matchrow" onClick={() => props.onChoose(fieldsOf(m))}>
+                  <button
+                    class="matchrow"
+                    onClick={() => props.onChoose(fieldsOf(m), m.art ?? undefined)}
+                  >
                     <span class="matchart">
                       <Show when={m.art}>
                         <img src={m.art!} alt="" loading="lazy" draggable={false} />

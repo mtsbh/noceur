@@ -71,6 +71,20 @@ pub struct Guess {
 /// alone still searches usefully and a wrong guess at the artist does not.
 pub fn from_file_name(name: &str) -> Guess {
     let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name);
+
+    // `Artist_-_Title` is as common as the spaced form and parses as neither an
+    // artist nor a title without this — the whole name lands in the title and
+    // the search goes out with the artist blank, which is the difference between
+    // a confident match and none. Only for names with no spaces at all, so an
+    // underscore inside an otherwise ordinary name is left where it is.
+    let opened;
+    let stem = if !stem.contains(' ') && stem.contains('_') {
+        opened = stem.replace('_', " ");
+        opened.as_str()
+    } else {
+        stem
+    };
+
     let stem = strip_leading_track_number(stem);
 
     // ` - ` with spaces, which is the convention; a bare hyphen is left alone
@@ -312,6 +326,40 @@ mod tests {
     #[test]
     fn a_file_called_only_a_number_keeps_its_name() {
         assert_eq!(from_file_name("01.wav").title, "01");
+    }
+
+    /// The underscored form is as common as the spaced one, and without this it
+    /// searches with a blank artist and the whole name as the title — which is
+    /// the difference between a confident match and none.
+    #[test]
+    fn an_underscored_name_parses_like_a_spaced_one() {
+        assert_eq!(
+            from_file_name("Afriqua_-_Cheep_Spouse.wav"),
+            Guess {
+                artist: "Afriqua".into(),
+                title: "Cheep Spouse".into()
+            }
+        );
+        assert_eq!(
+            from_file_name("01_Afriqua_-_Cheep_Spouse.wav"),
+            Guess {
+                artist: "Afriqua".into(),
+                title: "Cheep Spouse".into()
+            }
+        );
+    }
+
+    /// An underscore inside a name that is otherwise spaced normally is part of
+    /// the name, not a separator someone chose.
+    #[test]
+    fn an_underscore_in_an_ordinary_name_stays() {
+        assert_eq!(
+            from_file_name("Some Artist - Track_01.wav"),
+            Guess {
+                artist: "Some Artist".into(),
+                title: "Track_01".into()
+            }
+        );
     }
 
     /// `(Original Mix)` is in half a DJ library's file names and in almost no

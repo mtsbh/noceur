@@ -1,5 +1,6 @@
 //! Filesystem model: enumeration, classification and ordering.
 
+pub mod cleanup;
 pub mod entry;
 pub mod enumerate;
 pub mod kind;

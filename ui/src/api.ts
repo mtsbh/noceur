@@ -339,10 +339,13 @@ export const TAG_FIELDS = [
 
 export type TagField = (typeof TAG_FIELDS)[number][0];
 
+/** One file a write could not touch, and why. */
+export type WriteFailure = { name: string; reason: string };
+
 /** What a write did, per file. */
 export type WriteReport = {
   written: number;
-  failures: { name: string; reason: string }[];
+  failures: WriteFailure[];
 };
 
 export function readTags(fileIds: number[]): Promise<TagForm> {
@@ -500,4 +503,63 @@ export function previewRename(
 /** Applies exactly the names the preview showed. */
 export function applyRename(renames: [number, string][]): Promise<WriteReport> {
   return invoke<WriteReport>("apply_rename", { renames });
+}
+
+/** One cleanup rule, as the back end describes it. */
+export type CleanRule = { slug: string; label: string; hint: string };
+
+/** One tag field a cleanup would change. */
+export type CleanField = {
+  field: string;
+  label: string;
+  from: string;
+  to: string;
+};
+
+/** One file's proposed cleanup. */
+export type CleanPreview = {
+  fileId: number;
+  from: string;
+  to: string;
+  fields: CleanField[];
+  problem: string;
+  unchanged: boolean;
+};
+
+/** One file's cleanup, as it goes back to be applied. */
+export type CleanApply = {
+  fileId: number;
+  /** Empty to leave the file name alone. */
+  name: string;
+  fields: [string, string][];
+};
+
+/**
+ * The rules this build knows about.
+ *
+ * Fetched rather than listed here, so what is on screen cannot drift from what
+ * actually runs.
+ */
+export function cleanupRules(): Promise<CleanRule[]> {
+  return invoke<CleanRule[]>("cleanup_rules");
+}
+
+/** Works out what the rules would do to the selection. Changes nothing. */
+export function previewCleanup(
+  fileIds: number[],
+  rules: string[],
+  name: boolean,
+  tags: boolean,
+): Promise<CleanPreview[]> {
+  return invoke<CleanPreview[]>("preview_cleanup", {
+    fileIds,
+    rules,
+    name,
+    tags,
+  });
+}
+
+/** Applies exactly what the preview showed. */
+export function applyCleanup(items: CleanApply[]): Promise<WriteReport> {
+  return invoke<WriteReport>("apply_cleanup", { items });
 }

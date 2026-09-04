@@ -188,12 +188,12 @@ pub async fn apply_rename(
 /// same reason: it puts the change on Windows' own undo stack, so a rename that
 /// turns out wrong is Ctrl+Z in Explorer rather than a repair job.
 #[cfg(windows)]
-fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
+pub(crate) fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
     crate::fileops::rename(from, to)
 }
 
 #[cfg(not(windows))]
-fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
+pub(crate) fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::rename(from, to).map_err(|e| e.to_string())
 }
 

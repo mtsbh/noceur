@@ -44,6 +44,7 @@ import CoverPicker from "./CoverPicker";
 import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
+import Cleanup from "./Cleanup";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -218,6 +219,7 @@ export default function App() {
   const [quickOpen, setQuickOpen] = createSignal(false);
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
+  const [cleaning, setCleaning] = createSignal<number[] | null>(null);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -230,6 +232,8 @@ export default function App() {
   );
   /** Fields a match pre-filled the editor with, cleared when it closes. */
   const [prefill, setPrefill] = createSignal<Partial<Record<TagField, string>>>({});
+  /** Cover art the chosen match came with, offered in the editor alongside it. */
+  const [prefillArt, setPrefillArt] = createSignal<string | undefined>(undefined);
 
   /** Every settings change is written straight through — there is no Save. */
   function commitSettings(next: SettingsState) {
@@ -584,6 +588,12 @@ export default function App() {
         label: many ? `Rename ${selection().size} tracks…` : "Rename…",
         disabled: row.kind !== 1,
         run: () => setRenaming([...selection()]),
+      },
+      {
+        kind: "item",
+        label: many ? `Clean up ${selection().size} tracks…` : "Clean up…",
+        disabled: row.kind !== 1,
+        run: () => setCleaning([...selection()]),
       },
       {
         kind: "item",
@@ -1223,15 +1233,27 @@ export default function App() {
         )}
       </Show>
 
+      <Show when={cleaning()}>
+        {(ids) => (
+          <Cleanup
+            fileIds={ids()}
+            onClose={() => setCleaning(null)}
+            onChanged={() => refetchListing()}
+          />
+        )}
+      </Show>
+
       <Show when={matching()}>
         {(target) => (
           <MatchPicker
             fileId={target().fileId}
             onClose={() => setMatching(null)}
-            onChoose={(fields) => {
+            onChoose={(fields, art) => {
               // Straight into the editor, pre-filled: the fields are visible as
-              // proposed edits before anything is written.
+              // proposed edits before anything is written, and the release's
+              // cover comes with them rather than needing a second search.
               setPrefill(fields);
+              setPrefillArt(art);
               setEditing(target().fileIds);
               setMatching(null);
             }}
@@ -1244,9 +1266,11 @@ export default function App() {
           <TagEditor
             fileIds={ids()}
             initial={prefill()}
+            initialArt={prefillArt()}
             onClose={() => {
               setEditing(null);
               setPrefill({});
+              setPrefillArt(undefined);
             }}
             onWritten={() => refetchListing()}
           />

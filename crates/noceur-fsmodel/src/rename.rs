@@ -64,7 +64,7 @@ pub fn fill(template: &str, fields: &Fields) -> String {
 ///
 /// Empty brackets, doubled separators and leading or trailing punctuation all
 /// come from the same cause and all look like a bug in the name.
-fn tidy(text: &str) -> String {
+pub(crate) fn tidy(text: &str) -> String {
     let mut s = text.to_string();
     for (from, to) in [
         ("()", ""),

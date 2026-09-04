@@ -1791,3 +1791,108 @@ body.resizing * {
 .renamerow.bad .renameto {
   color: var(--acc);
 }
+
+/* ── Cover art offered with a match ────────────────────────────────────────
+   Big enough to answer "is this the right release", which is the only question
+   worth asking about a cover before it goes into the file. */
+.artoffer {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 12px;
+  align-items: start;
+  margin-top: 14px;
+  padding: 10px;
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.artoffer:hover {
+  background: var(--hover);
+}
+.artoffer img {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--bg);
+}
+.artoffertext {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.artoffertitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg);
+}
+.artoffertitle input {
+  accent-color: var(--acc);
+  cursor: pointer;
+}
+
+/* ── Clean up ──────────────────────────────────────────────────────────────
+   Shares the rename dialog's shell and its before-and-after list, because it
+   is the same promise: nothing is written until every result has been seen. */
+.rulelist {
+  margin: 12px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rule {
+  display: grid;
+  grid-template-columns: 16px auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.rule:hover {
+  background: var(--hover);
+}
+.rule input {
+  accent-color: var(--acc);
+  cursor: pointer;
+}
+.rulelabel {
+  color: var(--fg);
+  white-space: nowrap;
+}
+/* The hint is the part that stops a rule being a surprise, so it is always on
+   screen rather than hidden behind a hover. */
+.rulehint {
+  color: var(--fg4);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cleanrow {
+  border-bottom: 1px solid var(--hair);
+}
+.cleanrow .renamerow {
+  border-bottom: 0;
+}
+/* Tag changes are indented under the file they belong to: one file is one row
+   on screen however many fields it turns out to touch. */
+.renamerow.tagchange {
+  padding-left: 14px;
+  font-size: 11px;
+}
+.renamerow.tagchange .renameto {
+  color: var(--acc);
+}
+.fieldname {
+  color: var(--fg4);
+  margin-right: 4px;
+}
+.cleanrow.same .renameto {
+  color: var(--fg4);
+  font-style: italic;
+}
+.cleanrow.bad .renameto {
+  color: var(--acc);
+}
