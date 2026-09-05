@@ -122,12 +122,7 @@ export function CloseIcon() {
   );
 }
 
-/* ── Toolbar icons ───────────────────────────────────────────────────────────
-   A shared set rather than one icon per action, because which glyph reads as
-   "find metadata" is a matter of taste and habit — someone who came from another
-   tagger has a picture in mind already. Any of these can be assigned to any
-   toolbar button in settings. */
-
+/** The track actions button. These are all ways of changing a track's tags. */
 export function TagIcon() {
   return (
     <Icon>
@@ -137,117 +132,11 @@ export function TagIcon() {
   );
 }
 
-export function GlobeIcon() {
+/** The little triangle that says a button opens a menu. */
+export function CaretIcon() {
   return (
-    <Icon>
-      <circle cx="8" cy="8" r="5.6" />
-      <path d="M2.4 8h11.2" />
-      <path d="M8 2.4a9 9 0 0 1 0 11.2 9 9 0 0 1 0-11.2Z" />
-    </Icon>
+    <svg viewBox="0 0 16 16" width="8" height="8" aria-hidden="true">
+      <path fill="currentColor" d="M3 6h10l-5 5.5Z" />
+    </svg>
   );
 }
-
-export function ImageIcon() {
-  return (
-    <Icon>
-      <rect x="2.4" y="3.2" width="11.2" height="9.6" rx="1.2" />
-      <circle cx="5.9" cy="6.4" r="1" />
-      <path d="m3 11.4 3.1-3a.8.8 0 0 1 1.1 0l2.2 2.1 1.3-1.2a.8.8 0 0 1 1.1 0l1.2 1.1" />
-    </Icon>
-  );
-}
-
-export function RenameIcon() {
-  return (
-    <Icon>
-      <path d="M8 3.4v9.2" />
-      <path d="M5.6 3.4h4.8M5.6 12.6h4.8" />
-      <path d="M2.4 5.6V4.2a.8.8 0 0 1 .8-.8h9.6a.8.8 0 0 1 .8.8v1.4" />
-    </Icon>
-  );
-}
-
-export function BroomIcon() {
-  return (
-    <Icon>
-      <path d="M9.6 2.6 6.4 5.8" />
-      <path d="M4.6 7.6a1.4 1.4 0 0 1 2 0l1.8 1.8a1.4 1.4 0 0 1 0 2l-.7.7-3.8-3.8Z" />
-      <path d="m3.9 8.3-1.5 4.3a.6.6 0 0 0 .74.76l4.36-1.36" />
-      <path d="M11 4.2a2 2 0 0 1 2.8 2.8" />
-    </Icon>
-  );
-}
-
-export function StarIcon() {
-  return (
-    <Icon>
-      <path d="m8 2.6 1.66 3.36 3.71.54-2.69 2.62.64 3.7L8 11.07l-3.32 1.75.64-3.7L2.63 6.5l3.71-.54Z" />
-    </Icon>
-  );
-}
-
-export function PencilIcon() {
-  return (
-    <Icon>
-      <path d="M11.1 2.9a1.4 1.4 0 0 1 2 2l-7.5 7.5-2.7.7.7-2.7Z" />
-      <path d="m10.1 3.9 2 2" />
-    </Icon>
-  );
-}
-
-export function DiscIcon() {
-  return (
-    <Icon>
-      <circle cx="8" cy="8" r="5.6" />
-      <circle cx="8" cy="8" r="1.5" />
-    </Icon>
-  );
-}
-
-export function WandIcon() {
-  return (
-    <Icon>
-      <path d="m3.2 12.8 7.2-7.2" />
-      <path d="m9.6 4.8 1.6 1.6" />
-      <path d="M12.4 2.2v2M13.8 3.6h-2M11.4 8.4v1.8M12.9 9.3h-1.8" />
-    </Icon>
-  );
-}
-
-export function SearchIcon() {
-  return (
-    <Icon>
-      <circle cx="7.2" cy="7.2" r="4.2" />
-      <path d="m10.4 10.4 2.8 2.8" />
-    </Icon>
-  );
-}
-
-export function TrashIcon() {
-  return (
-    <Icon>
-      <path d="M2.9 4.4h10.2" />
-      <path d="M5.4 4.4V3.2a.8.8 0 0 1 .8-.8h3.6a.8.8 0 0 1 .8.8v1.2" />
-      <path d="M4.2 4.4v8a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1v-8" />
-      <path d="M6.6 6.8v4M9.4 6.8v4" />
-    </Icon>
-  );
-}
-
-/** Every toolbar icon, by name, so a stored preference can name one. */
-export const TOOLBAR_ICONS = {
-  tag: TagIcon,
-  globe: GlobeIcon,
-  image: ImageIcon,
-  rename: RenameIcon,
-  broom: BroomIcon,
-  star: StarIcon,
-  pencil: PencilIcon,
-  disc: DiscIcon,
-  wand: WandIcon,
-  search: SearchIcon,
-} as const;
-
-export type IconName = keyof typeof TOOLBAR_ICONS;
-
-export const ICON_NAMES = Object.keys(TOOLBAR_ICONS) as IconName[];

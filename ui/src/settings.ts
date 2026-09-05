@@ -1,4 +1,3 @@
-import { ICON_NAMES, type IconName } from "./icons";
 import type { WaveColour, WaveShape } from "./Waveform";
 
 /**
@@ -30,43 +29,21 @@ export type QuickGroup = {
 };
 
 /**
- * A thing the toolbar can do to the selection.
+ * A thing the track-actions button can do to the selection.
  *
- * The same set the right-click menu offers. Nothing here is exclusive to the
- * bar — a button is a shortcut to a menu entry, so removing one from the bar
- * never removes the ability.
+ * The same set the right-click menu offers, and reachable there too — this is a
+ * second route to the same dialogs rather than the only one.
  */
 export type ActionId = "tags" | "match" | "art" | "rename" | "clean" | "quick";
 
-/** One button on the toolbar: what it does, what it looks like, whether it is there. */
-export type ToolbarButton = { id: ActionId; icon: IconName; on: boolean };
-
-/** What each action is called, and what the button's tooltip says. */
-export const ACTIONS: Record<ActionId, { label: string; hint: string }> = {
-  tags: { label: "Edit metadata", hint: "Edit the tags of the selected tracks" },
-  match: { label: "Find metadata", hint: "Look the selected track up online" },
-  art: { label: "Find album art", hint: "Search for cover art for the selection" },
-  rename: { label: "Rename", hint: "Rename the selection from a template" },
-  clean: { label: "Clean up", hint: "Fix names and tags with a set of rules" },
-  quick: { label: "Quick tag", hint: "Tag the playing track by keyboard" },
-};
-
-export const ACTION_IDS = Object.keys(ACTIONS) as ActionId[];
-
-/**
- * What the toolbar starts as.
- *
- * All of them on, because a bar that starts empty is a feature nobody finds.
- * The icons are the obvious pairing; every one of them can be swapped in
- * settings, which is the point of storing the icon rather than hard-coding it.
- */
-export const DEFAULT_TOOLBAR: ToolbarButton[] = [
-  { id: "tags", icon: "tag", on: true },
-  { id: "match", icon: "globe", on: true },
-  { id: "art", icon: "image", on: true },
-  { id: "rename", icon: "rename", on: true },
-  { id: "clean", icon: "broom", on: true },
-  { id: "quick", icon: "star", on: true },
+/** What each action is called, and the key that does the same thing. */
+export const ACTIONS: { id: ActionId; label: string; key?: string }[] = [
+  { id: "tags", label: "Edit metadata", key: "f2" },
+  { id: "match", label: "Find metadata online" },
+  { id: "art", label: "Find album art" },
+  { id: "rename", label: "Rename" },
+  { id: "clean", label: "Clean up" },
+  { id: "quick", label: "Quick tag", key: "t" },
 ];
 
 export type Settings = {
@@ -74,8 +51,6 @@ export type Settings = {
   quick: QuickGroup[];
   /** Whether the quick-tag panel offers a star rating row. */
   quickRating: boolean;
-  /** The shortcut buttons in the path bar, in the order they appear. */
-  toolbar: ToolbarButton[];
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -120,7 +95,6 @@ export const DEFAULTS: Settings = {
   wave: { shape: "filled", colour: "rgb" },
   quick: DEFAULT_QUICK,
   quickRating: true,
-  toolbar: DEFAULT_TOOLBAR,
 };
 
 const KEY = "noceur.settings";
@@ -149,46 +123,10 @@ export function loadSettings(): Settings {
       },
       quick: Array.isArray(parsed.quick) ? parsed.quick.filter(isGroup) : DEFAULT_QUICK,
       quickRating: parsed.quickRating !== false,
-      toolbar: mergeToolbar(parsed.toolbar),
     };
   } catch {
     return DEFAULTS;
   }
-}
-
-/**
- * Reconciles a stored toolbar with the actions this build has.
- *
- * Kept in the stored order, with anything unrecognised dropped and anything new
- * appended — so a build that adds an action shows it rather than hiding it
- * behind a preference written before it existed, and one that removes an action
- * does not leave a button that does nothing.
- */
-function mergeToolbar(stored: unknown): ToolbarButton[] {
-  if (!Array.isArray(stored)) return DEFAULT_TOOLBAR;
-
-  const seen = new Set<ActionId>();
-  const out: ToolbarButton[] = [];
-
-  for (const entry of stored) {
-    const b = entry as ToolbarButton;
-    if (!b || !ACTION_IDS.includes(b.id) || seen.has(b.id)) continue;
-    seen.add(b.id);
-    out.push({
-      id: b.id,
-      icon: ICON_NAMES.includes(b.icon) ? b.icon : defaultIcon(b.id),
-      on: b.on !== false,
-    });
-  }
-
-  for (const fallback of DEFAULT_TOOLBAR) {
-    if (!seen.has(fallback.id)) out.push(fallback);
-  }
-  return out;
-}
-
-function defaultIcon(id: ActionId): IconName {
-  return DEFAULT_TOOLBAR.find((b) => b.id === id)?.icon ?? "tag";
 }
 
 /** Guards a stored group, since this file is editable by hand. */
