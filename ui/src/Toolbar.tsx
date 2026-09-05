@@ -50,7 +50,14 @@ export default function Toolbar(props: {
   /** Quick tag works on whatever is playing, so it never needs a selection. */
   const needsSelection = (id: ActionId) => id !== "quick";
 
-  const title = (button: (typeof BUTTONS)[number]) => {
+  /**
+   * What the tooltip says.
+   *
+   * The label, and then what it would actually do right now — how many tracks
+   * it would touch, or why it is greyed out. A tooltip that only repeats the
+   * label answers a question nobody with the icon in front of them is asking.
+   */
+  const tip = (button: (typeof BUTTONS)[number]) => {
     if (!needsSelection(button.id)) return `${button.label} — ${button.hint}`;
     if (props.count === 0) return `${button.label} — select a track first`;
     if (props.count === 1) return `${button.label} — ${button.hint}`;
@@ -60,17 +67,33 @@ export default function Toolbar(props: {
   return (
     <div class="toolbar" role="group" aria-label="Track actions">
       <For each={BUTTONS}>
-        {(button) => (
-          <button
-            class={`toolbtn ${button.id === "quick" && props.quickOpen ? "on" : ""}`}
-            title={title(button)}
-            aria-label={button.label}
-            disabled={needsSelection(button.id) && props.count === 0}
-            onClick={() => props.onRun(button.id)}
-          >
-            <button.icon />
-          </button>
-        )}
+        {(button) => {
+          const off = () => needsSelection(button.id) && props.count === 0;
+          return (
+            <button
+              class={`toolbtn ${off() ? "off" : ""} ${
+                button.id === "quick" && props.quickOpen ? "on" : ""
+              }`}
+              // `data-tip` rather than `title`: the browser's own tooltip takes
+              // about a second to appear, is drawn by the OS in the OS's
+              // colours, and would sit under a window that draws its own title
+              // bar. This one is the app's.
+              data-tip={tip(button)}
+              aria-label={tip(button)}
+              // Marked unavailable rather than `disabled`, because a disabled
+              // button receives no mouse events in this engine — so it would
+              // lose its tooltip at exactly the moment the tooltip is the whole
+              // point, when it is greyed out and the reason is not obvious.
+              aria-disabled={off()}
+              onClick={() => {
+                if (off()) return;
+                props.onRun(button.id);
+              }}
+            >
+              <button.icon />
+            </button>
+          );
+        }}
       </For>
     </div>
   );
