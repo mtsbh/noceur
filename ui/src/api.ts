@@ -37,6 +37,19 @@ export function thumbUrl(fileId: number, size: ArtSize): string {
 }
 
 /**
+ * URL of the picture a file actually carries, at the size it was embedded.
+ *
+ * Not a thumbnail: the editor shows artwork to be judged rather than
+ * recognised, and 88 pixels cannot answer "is this the right cover". Served
+ * uncached, and `version` exists to defeat the web view's own cache — the URL
+ * says nothing about which picture it holds, so replacing or removing the
+ * artwork has to change the URL or the old image goes on being drawn.
+ */
+export function fullArtUrl(fileId: number, version = 0): string {
+  return `${convertFileSrc(String(fileId), "thumb")}?size=full&v=${version}`;
+}
+
+/**
  * Shell icon for a folder named by path.
  *
  * The tree reads the filesystem rather than the index, so its nodes have no row
@@ -407,6 +420,16 @@ export function findCovers(fileId: number): Promise<CoverCandidate[]> {
 /** Downloads a chosen cover and embeds it in every selected file. */
 export function applyCover(fileIds: number[], url: string): Promise<WriteReport> {
   return invoke<WriteReport>("apply_cover", { fileIds, url });
+}
+
+/**
+ * Strips the artwork out of every selected file.
+ *
+ * Every picture, not only the front cover: a file showing the wrong sleeve
+ * usually carries two, and removing one makes the other appear.
+ */
+export function removeCover(fileIds: number[]): Promise<WriteReport> {
+  return invoke<WriteReport>("remove_cover", { fileIds });
 }
 
 /** One candidate match for a track, from any source. */

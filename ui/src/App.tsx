@@ -2,6 +2,7 @@ import {
   createSignal,
   createResource,
   createEffect,
+  createMemo,
   on,
   onCleanup,
   For,
@@ -45,9 +46,15 @@ import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
+import Toolbar from "./Toolbar";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
-import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
+import {
+  loadSettings,
+  saveSettings,
+  type ActionId,
+  type Settings as SettingsState,
+} from "./settings";
 import {
   DEFAULT_COLUMNS,
   cellText,
@@ -199,6 +206,65 @@ export default function App() {
     setSelected(row.fileId);
   }
 
+  /**
+   * The selected rows that are audio files.
+   *
+   * The toolbar and the menu both act on tracks, and a selection can hold
+   * folders — dragging a box across a listing takes whatever it crosses. Rows
+   * whose window has since been dropped are not in here, which is the same
+   * limit the shift-select range has and for the same reason: the id is known,
+   * what it points at is not.
+   */
+  const audioSelection = createMemo(() => {
+    const ids = selection();
+    if (ids.size === 0) return [];
+    const out: number[] = [];
+    for (const rows of Object.values(pages)) {
+      for (const r of rows) {
+        if (r.kind === 1 && ids.has(r.fileId)) out.push(r.fileId);
+      }
+    }
+    return out;
+  });
+
+  /**
+   * Runs a toolbar button.
+   *
+   * Every one of these opens exactly what the matching menu entry opens; the
+   * bar is a second route to the same dialogs rather than a second
+   * implementation of them.
+   */
+  function runAction(id: ActionId) {
+    if (id === "quick") {
+      setQuickOpen((open) => !open);
+      return;
+    }
+    const ids = audioSelection();
+    if (ids.length === 0) return;
+
+    switch (id) {
+      case "tags":
+        setEditing(ids);
+        break;
+      // These two search on one track and apply to the whole selection, which is
+      // the rule the menu follows: twelve tracks off one release share a cover
+      // and an album, and searching for each of them would ask the same question
+      // twelve times.
+      case "match":
+        setMatching({ fileId: ids[0], fileIds: ids });
+        break;
+      case "art":
+        setCovering({ fileId: ids[0], fileIds: ids });
+        break;
+      case "rename":
+        setRenaming(ids);
+        break;
+      case "clean":
+        setCleaning(ids);
+        break;
+    }
+  }
+
   /** Position of a row in the listing, or -1 if its window is not loaded. */
   function indexOf(fileId: number): number {
     for (const [page, rows] of Object.entries(pages)) {
@@ -234,6 +300,14 @@ export default function App() {
   const [prefill, setPrefill] = createSignal<Partial<Record<TagField, string>>>({});
   /** Cover art the chosen match came with, offered in the editor alongside it. */
   const [prefillArt, setPrefillArt] = createSignal<string | undefined>(undefined);
+  /**
+   * Bumped whenever artwork is written from outside the tag editor.
+   *
+   * The editor draws the file's own cover, and the URL it draws it from names
+   * the file rather than the picture — so nothing about it changes when the
+   * cover search replaces one underneath it.
+   */
+  const [artNonce, setArtNonce] = createSignal(0);
 
   /** Every settings change is written straight through — there is no Save. */
   function commitSettings(next: SettingsState) {
@@ -1009,6 +1083,12 @@ export default function App() {
         </Show>
 
         <span class="grow" />
+        <Toolbar
+          buttons={settings().toolbar}
+          count={audioSelection().length}
+          quickOpen={quickOpen()}
+          onRun={runAction}
+        />
         <div class="sizes" role="group" aria-label="Cover art size">
           <For each={ART_SIZES}>
             {(size) => (
@@ -1022,13 +1102,6 @@ export default function App() {
             )}
           </For>
         </div>
-        <button
-          class={`gearbtn wide ${quickOpen() ? "on" : ""}`}
-          title="Quick tag (T) — tag the playing track by keyboard"
-          onClick={() => setQuickOpen((open) => !open)}
-        >
-          TAG
-        </button>
         <button
           class={`gearbtn ${settingsOpen() ? "on" : ""}`}
           title="Settings"
@@ -1160,7 +1233,23 @@ export default function App() {
                                   only 404. On error the image hides itself and
                                   the cell's own background shows through, which
                                   covers art that turns out not to decode. */}
-                              <span class="art">
+                              {/* Clicking the artwork opens the editor on that
+                                  row, where the cover can be seen at a size
+                                  worth looking at, replaced, or removed. The
+                                  row is selected first, so the editor opens on
+                                  what was clicked rather than on whatever
+                                  happened to be selected before. */}
+                              <span
+                                class="art"
+                                title={r().hasArt ? "Open cover art" : undefined}
+                                onClick={(e) => {
+                                  if (!r().hasArt || r().kind !== 1) return;
+                                  e.stopPropagation();
+                                  setSelection(new Set([r().fileId]));
+                                  setSelected(r().fileId);
+                                  setEditing([r().fileId]);
+                                }}
+                              >
                                 <Show when={r().hasArt}>
                                   <img
                                     src={thumbUrl(r().fileId, artSize())}
@@ -1267,6 +1356,8 @@ export default function App() {
             fileIds={ids()}
             initial={prefill()}
             initialArt={prefillArt()}
+            artNonce={artNonce()}
+            onFindArt={() => setCovering({ fileId: ids()[0], fileIds: ids() })}
             onClose={() => {
               setEditing(null);
               setPrefill({});
@@ -1283,7 +1374,12 @@ export default function App() {
             fileId={target().fileId}
             fileIds={target().fileIds}
             onClose={() => setCovering(null)}
-            onApplied={() => refetchListing()}
+            onApplied={() => {
+              refetchListing();
+              // The editor may be open behind this, drawing the cover that was
+              // just replaced.
+              setArtNonce((n) => n + 1);
+            }}
           />
         )}
       </Show>

@@ -27,6 +27,18 @@ enum Target {
     Folder(String),
 }
 
+/// What size a `thumb://` URL is asking for.
+///
+/// `Full` is not another thumbnail size — it is the picture the file actually
+/// carries, at whatever size it was embedded, served straight out of the tag.
+/// The editor shows artwork to be judged rather than recognised, and 88 pixels
+/// cannot answer "is this the right cover, and is it worth keeping".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Want {
+    Thumb(ThumbSize),
+    Full,
+}
+
 /// Decodes `%XX` escapes. Windows paths arrive with `:` and `\` encoded.
 fn percent_decode(s: &str) -> String {
     let raw = s.as_bytes();
@@ -53,7 +65,7 @@ fn percent_decode(s: &str) -> String {
 /// malformed, which the caller turns into a 400: the web view is the only thing
 /// that builds these URLs, so a malformed one is a bug here rather than something
 /// to accommodate.
-fn parse(uri: &str) -> Option<(Target, ThumbSize)> {
+fn parse(uri: &str) -> Option<(Target, Want)> {
     let uri = uri.split("://").nth(1).unwrap_or(uri);
     let path_and_query = uri.split_once('/').map(|(_, rest)| rest).unwrap_or("");
 
@@ -69,9 +81,12 @@ fn parse(uri: &str) -> Option<(Target, ThumbSize)> {
             .map(|v| v.to_string())
     };
 
-    let size = param("size=")
-        .and_then(|v| ThumbSize::parse(&v))
-        .unwrap_or(ThumbSize::Small);
+    let raw = param("size=").unwrap_or_default();
+    let size = if raw == "full" {
+        Want::Full
+    } else {
+        Want::Thumb(ThumbSize::parse(&raw).unwrap_or(ThumbSize::Small))
+    };
 
     if let Some(folder) = param("path=").filter(|p| !p.is_empty()) {
         return Some((Target::Folder(percent_decode(&folder)), size));
@@ -163,13 +178,18 @@ fn png_for(db: &Db, file_id: i64, size: ThumbSize) -> Result<Option<Vec<u8>>, St
 /// asynchronous protocol handlers off the main loop, so a slow decode delays one
 /// image rather than the window.
 pub fn respond(state: &AppState, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
-    let Some((target, size)) = parse(&request.uri().to_string()) else {
+    let Some((target, want)) = parse(&request.uri().to_string()) else {
         return reply(StatusCode::BAD_REQUEST, Vec::new());
     };
 
     // A folder named by path needs no index at all, so it never waits on the
     // database lock — which matters because the tree asks for one of these per
-    // visible node.
+    // visible node. There is no full-size version of a shell icon, so the
+    // largest one stands in.
+    let size = match want {
+        Want::Thumb(size) => size,
+        Want::Full => ThumbSize::Large,
+    };
     let file_id = match target {
         Target::Folder(path) => {
             return match folder_png(Path::new(&path), size) {
@@ -184,6 +204,13 @@ pub fn respond(state: &AppState, request: &Request<Vec<u8>>) -> Response<Vec<u8>
         return reply(StatusCode::INTERNAL_SERVER_ERROR, Vec::new());
     };
 
+    if want == Want::Full {
+        return match full_art(&db, file_id) {
+            Some((mime, bytes)) => uncached(StatusCode::OK, &mime, bytes),
+            None => uncached(StatusCode::NOT_FOUND, "image/png", Vec::new()),
+        };
+    }
+
     match png_for(&db, file_id, size) {
         // 404 is the honest answer for "no cover art", and the <img> onerror
         // path in the frontend is exactly how a row falls back to its placeholder.
@@ -191,6 +218,22 @@ pub fn respond(state: &AppState, request: &Request<Vec<u8>>) -> Response<Vec<u8>
         Ok(Some(png)) => reply(StatusCode::OK, png),
         Err(_) => reply(StatusCode::INTERNAL_SERVER_ERROR, Vec::new()),
     }
+}
+
+/// The picture a file actually carries, with the type the tag declares.
+///
+/// Read from the file every time rather than cached. There is one of these on
+/// screen at a time, in a dialog somebody opened deliberately, and the whole
+/// point of showing it is that it is the current truth about the file — a cached
+/// copy would go on showing artwork that had just been removed.
+fn full_art(db: &Db, file_id: i64) -> Option<(String, Vec<u8>)> {
+    let found = thumb::locate(db, file_id).ok().flatten()?;
+    if found.kind != 1 {
+        return None;
+    }
+    let art = noceur_tags::artwork(&found.path).ok().flatten()?;
+    let mime = art.mime.unwrap_or_else(|| "image/jpeg".to_string());
+    Some((mime, art.data))
 }
 
 fn reply(status: StatusCode, body: Vec<u8>) -> Response<Vec<u8>> {
@@ -206,6 +249,21 @@ fn reply(status: StatusCode, body: Vec<u8>) -> Response<Vec<u8>> {
         .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
+/// Replies with something that must not be remembered.
+///
+/// The opposite of the thumbnail rule: a full-size cover is served under a URL
+/// that says nothing about which picture it holds, and the picture behind it
+/// changes the moment somebody replaces or removes it.
+fn uncached(status: StatusCode, mime: &str, body: Vec<u8>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(status)
+        .header("Content-Type", mime)
+        .header("Cache-Control", "no-store")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(body)
+        .unwrap_or_else(|_| Response::new(Vec::new()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,7 +272,7 @@ mod tests {
     fn parses_a_file_id_and_size() {
         assert_eq!(
             parse("thumb://localhost/42?size=large"),
-            Some((Target::Row(42), ThumbSize::Large))
+            Some((Target::Row(42), Want::Thumb(ThumbSize::Large)))
         );
     }
 
@@ -224,7 +282,7 @@ mod tests {
     fn parses_the_windows_http_form_identically() {
         assert_eq!(
             parse("http://thumb.localhost/42?size=large"),
-            Some((Target::Row(42), ThumbSize::Large))
+            Some((Target::Row(42), Want::Thumb(ThumbSize::Large)))
         );
     }
 
@@ -232,7 +290,7 @@ mod tests {
     fn defaults_to_small_when_no_size_is_given() {
         assert_eq!(
             parse("thumb://localhost/7"),
-            Some((Target::Row(7), ThumbSize::Small))
+            Some((Target::Row(7), Want::Thumb(ThumbSize::Small)))
         );
     }
 
@@ -240,7 +298,16 @@ mod tests {
     fn tolerates_other_query_parameters_around_the_size() {
         assert_eq!(
             parse("thumb://localhost/7?v=2&size=medium&x=1"),
-            Some((Target::Row(7), ThumbSize::Medium))
+            Some((Target::Row(7), Want::Thumb(ThumbSize::Medium)))
+        );
+    }
+
+    /// The editor asks for the picture itself rather than a rendering of it.
+    #[test]
+    fn full_is_a_request_for_the_embedded_picture() {
+        assert_eq!(
+            parse("thumb://localhost/42?size=full"),
+            Some((Target::Row(42), Want::Full))
         );
     }
 
@@ -257,7 +324,7 @@ mod tests {
             parse("thumb://localhost/0?size=small&path=E%3A%5Cmusic%5Cdownloads"),
             Some((
                 Target::Folder("E:\\music\\downloads".into()),
-                ThumbSize::Small
+                Want::Thumb(ThumbSize::Small)
             ))
         );
     }
@@ -267,7 +334,7 @@ mod tests {
     fn a_path_parameter_beats_the_file_id() {
         assert_eq!(
             parse("thumb://localhost/99?size=small&path=C%3A%5C"),
-            Some((Target::Folder("C:\\".into()), ThumbSize::Small))
+            Some((Target::Folder("C:\\".into()), Want::Thumb(ThumbSize::Small)))
         );
     }
 

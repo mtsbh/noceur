@@ -108,6 +108,7 @@ fn main() {
             tagedit::quick_fields,
             covers::find_covers,
             covers::apply_cover,
+            covers::remove_cover,
             autotag::match_track,
             autotag::credentials,
             autotag::set_discogs_token,

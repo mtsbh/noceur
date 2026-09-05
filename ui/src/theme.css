@@ -1792,6 +1792,96 @@ body.resizing * {
   color: var(--acc);
 }
 
+/* ── Toolbar ───────────────────────────────────────────────────────────────
+   Shortcuts to the right-click menu, in the path bar. Disabled rather than
+   hidden without a selection: a bar whose buttons appear and disappear as rows
+   are clicked is harder to aim at than one that stays put. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 8px;
+  padding-right: 8px;
+  border-right: 1px solid var(--hair2);
+}
+.toolbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg3);
+  cursor: pointer;
+}
+.toolbtn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--fg);
+}
+.toolbtn.on {
+  color: var(--acc);
+  background: var(--hover);
+}
+.toolbtn:disabled {
+  color: var(--fg5, var(--fg4));
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* One row per button in settings: what it does, what it looks like, where it
+   sits. */
+.toolset {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 0;
+}
+.toolsetname {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.toolsetname input {
+  accent-color: var(--acc);
+  cursor: pointer;
+}
+.iconpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+.iconbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--fg4);
+  cursor: pointer;
+}
+.iconbtn:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.iconbtn.on {
+  color: var(--acc);
+  background: var(--hover);
+}
+.toolmove {
+  display: flex;
+  gap: 2px;
+}
+
 /* ── Cover art offered with a match ────────────────────────────────────────
    Big enough to answer "is this the right release", which is the only question
    worth asking about a cover before it goes into the file. */
@@ -1804,17 +1894,47 @@ body.resizing * {
   padding: 10px;
   border: 1px solid var(--hair2);
   border-radius: 6px;
+}
+/* Only the offered-cover form is one big click target; the current-artwork form
+   has its own buttons and must not swallow clicks meant for them. */
+label.artoffer {
   cursor: pointer;
 }
-.artoffer:hover {
+label.artoffer:hover {
   background: var(--hover);
 }
-.artoffer img {
+.artbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 88px;
   height: 88px;
-  object-fit: cover;
   border-radius: 4px;
   background: var(--bg);
+  overflow: hidden;
+}
+.artbox img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.artbox.empty {
+  border: 1px dashed var(--hair2);
+}
+/* Artwork on its way out is shown faded rather than hidden: the removal has
+   not happened yet, and a picture that vanished before Save would be a lie
+   about the state of the file. */
+.artbox.going {
+  opacity: 0.28;
+}
+.artnone {
+  color: var(--fg4);
+  font-size: 10px;
+}
+.artbtns {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
 }
 .artoffertext {
   display: flex;

@@ -3,7 +3,9 @@ import { CloseIcon } from "./icons";
 import {
   TAG_FIELDS,
   applyCover,
+  fullArtUrl,
   readTags,
+  removeCover,
   writeTags,
   type TagField,
   type TagForm,
@@ -46,6 +48,16 @@ export default function TagEditor(props: {
    * everything else, or not at all.
    */
   initialArt?: string;
+  /**
+   * Opens the cover search for this selection.
+   *
+   * A callback rather than a dialog of its own, because the search already
+   * exists at the top level and two of them open at once would be two dialogs
+   * arguing about the same files.
+   */
+  onFindArt?: () => void;
+  /** Bumped by the app when artwork is written from somewhere else. */
+  artNonce?: number;
 }) {
   const [form, setForm] = createSignal<TagForm | null>(null);
   const [edits, setEdits] = createSignal<Partial<Record<TagField, string>>>(
@@ -55,6 +67,17 @@ export default function TagEditor(props: {
   // artwork is part of it. Unticking is one click and the picture is right there
   // to judge it by.
   const [embedArt, setEmbedArt] = createSignal(true);
+  /** Whether Save will strip the artwork out of the selection. */
+  const [dropArt, setDropArt] = createSignal(false);
+  /** Whether the file turned out to have artwork to show at all. */
+  const [hasArt, setHasArt] = createSignal(true);
+  /**
+   * Bumped to make the web view fetch the picture again.
+   *
+   * The cover URL names a file, not a picture, so nothing about it changes when
+   * the picture behind it does.
+   */
+  const [artVersion, setArtVersion] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
   const [report, setReport] = createSignal<WriteReport | null>(null);
@@ -64,6 +87,16 @@ export default function TagEditor(props: {
     readTags(ids)
       .then(setForm)
       .catch((e) => setError(String(e)));
+  });
+
+  // A file that had no artwork can acquire some while this is open, and the
+  // "no artwork" state unmounts the image that would otherwise notice. So every
+  // time the picture might have changed, assume there is one and let the load
+  // fail again if there is not.
+  createEffect(() => {
+    props.artNonce;
+    artVersion();
+    setHasArt(true);
   });
 
   createEffect(() => {
@@ -99,7 +132,7 @@ export default function TagEditor(props: {
   /** Whether the cover from the match is going to be written. */
   const artWanted = () => Boolean(props.initialArt) && embedArt();
 
-  const dirty = () => Object.keys(edits()).length > 0 || artWanted();
+  const dirty = () => Object.keys(edits()).length > 0 || artWanted() || dropArt();
 
   async function save() {
     if (!dirty() || busy()) return;
@@ -121,8 +154,12 @@ export default function TagEditor(props: {
       // file that refused its tags is locked or read-only, and asking it for a
       // second rewrite produces a second identical complaint about the same
       // file.
-      if (artWanted() && failures.length === 0) {
+      if (failures.length === 0 && artWanted()) {
         const r = await applyCover(props.fileIds, props.initialArt!);
+        written = Math.max(written, r.written);
+        failures = r.failures;
+      } else if (failures.length === 0 && dropArt()) {
+        const r = await removeCover(props.fileIds);
         written = Math.max(written, r.written);
         failures = r.failures;
       }
@@ -131,6 +168,9 @@ export default function TagEditor(props: {
       setBusy(false);
       return;
     }
+
+    setArtVersion((v) => v + 1);
+    setDropArt(false);
 
     const result: WriteReport = { written, failures };
     setReport(result);
@@ -216,12 +256,74 @@ export default function TagEditor(props: {
             </p>
           </Show>
 
-          {/* The cover the match arrived with. Shown at a size worth judging,
-              because "is this the right release" is a question a thumbnail
-              cannot answer. */}
-          <Show when={props.initialArt}>
+          {/* Artwork, at a size worth judging — "is this the right cover, and
+              is it worth keeping" is not a question a 16-pixel thumbnail in a
+              list can answer, which is why it has to be looked at somewhere. */}
+          <Show
+            when={props.initialArt}
+            fallback={
+              <div class="artoffer">
+                <span class={`artbox ${hasArt() ? "" : "empty"} ${dropArt() ? "going" : ""}`}>
+                  <Show when={hasArt()} fallback={<span class="artnone">No artwork</span>}>
+                    <img
+                      src={fullArtUrl(
+                        props.fileIds[0],
+                        artVersion() + (props.artNonce ?? 0),
+                      )}
+                      alt=""
+                      draggable={false}
+                      onLoad={() => setHasArt(true)}
+                      onError={() => setHasArt(false)}
+                    />
+                  </Show>
+                </span>
+                <span class="artoffertext">
+                  <span class="artoffertitle">Cover art</span>
+                  <span class="sethint">
+                    <Show
+                      when={dropArt()}
+                      fallback={
+                        <Show
+                          when={hasArt()}
+                          fallback="This file carries no picture."
+                        >
+                          <Show when={props.fileIds.length > 1} fallback="Embedded in the file.">
+                            Embedded in the first of the {props.fileIds.length}{" "}
+                            selected files.
+                          </Show>
+                        </Show>
+                      }
+                    >
+                      Will be removed from{" "}
+                      {props.fileIds.length > 1
+                        ? `all ${props.fileIds.length} files`
+                        : "the file"}{" "}
+                      on Save.
+                    </Show>
+                  </span>
+                  <span class="artbtns">
+                    <button class="btn" onClick={() => props.onFindArt?.()}>
+                      {hasArt() ? "Replace…" : "Find art…"}
+                    </button>
+                    <Show when={hasArt() || dropArt()}>
+                      <button
+                        class={`btn ${dropArt() ? "primary" : ""}`}
+                        onClick={() => setDropArt((d) => !d)}
+                      >
+                        {dropArt() ? "Keep it" : "Remove"}
+                      </button>
+                    </Show>
+                  </span>
+                </span>
+              </div>
+            }
+          >
+            {/* The cover a match arrived with, which is a proposal rather than
+                something the file has. */}
             <label class="artoffer">
-              <img src={props.initialArt!} alt="" draggable={false} />
+              <span class="artbox">
+                <img src={props.initialArt!} alt="" draggable={false} />
+              </span>
               <span class="artoffertext">
                 <span class="artoffertitle">
                   <input

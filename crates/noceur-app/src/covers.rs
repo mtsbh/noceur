@@ -143,6 +143,89 @@ pub async fn apply_cover(
     .map_err(|e| format!("cover apply task failed: {e}"))?
 }
 
+/// Strips the artwork out of a selection.
+///
+/// The counterpart to embedding one, and the reason the editor can be used to
+/// fix a file rather than only to add to it: a track that came off a rip with
+/// somebody's logo on it, or with the wrong album's sleeve, has no way back
+/// otherwise.
+///
+/// Files with no artwork to begin with are counted as done rather than rewritten
+/// — the selection was asked to end up without artwork, and they already do.
+#[tauri::command]
+pub async fn remove_cover(
+    state: State<'_, AppState>,
+    file_ids: Vec<i64>,
+) -> Result<WriteReport, String> {
+    let db = state.db.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let targets: Vec<(i64, PathBuf)> = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            file_ids
+                .iter()
+                .filter_map(|id| {
+                    noceur_index::thumb::locate(&db, *id)
+                        .ok()
+                        .flatten()
+                        .filter(|f| f.kind == 1)
+                        .map(|f| (*id, f.path))
+                })
+                .collect()
+        };
+
+        // Captured before the writes, for the same reason as when embedding one:
+        // removing artwork changes each file's identity, and the thumbnails
+        // cached against the old one would otherwise be left behind as covers
+        // for a picture that is no longer in the file.
+        let stale: Vec<i64> = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            targets
+                .iter()
+                .filter_map(|(id, _)| {
+                    noceur_index::thumb::locate(&db, *id)
+                        .ok()
+                        .flatten()
+                        .and_then(|f| f.content_id)
+                })
+                .collect()
+        };
+
+        let mut report = WriteReport::default();
+        let mut written = Vec::new();
+
+        for (file_id, path) in targets {
+            match noceur_tags::edit::remove_pictures(&path) {
+                Ok(()) => {
+                    report.written += 1;
+                    written.push(file_id);
+                }
+                Err(e) => report.failures.push(WriteFailure {
+                    name: path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                    reason: e.to_string(),
+                }),
+            }
+        }
+
+        if !written.is_empty() {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            for content_id in stale {
+                noceur_index::thumb::invalidate(&db, content_id).map_err(|e| e.to_string())?;
+            }
+            for id in written {
+                noceur_index::reprobe(&db, id).map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(report)
+    })
+    .await
+    .map_err(|e| format!("cover removal task failed: {e}"))?
+}
+
 /// Resolves a row to the audio file it names.
 fn locate(
     db: &std::sync::Arc<std::sync::Mutex<noceur_index::Db>>,

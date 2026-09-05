@@ -491,6 +491,44 @@ pub fn set_front_cover(path: &Path, image: &[u8]) -> Result<(), EditError> {
         })
 }
 
+/// Removes every picture from a file.
+///
+/// All of them, not only the one typed as the front cover. A file that shows the
+/// wrong artwork usually carries two — an old cover some program left typed as
+/// "other", and the one on top of it — and removing only the front one makes the
+/// other reappear, which reads as the removal having failed.
+///
+/// A file with no pictures is left completely alone rather than rewritten: this
+/// runs across a selection, and rewriting an untouched file would cost it its
+/// cached thumbnail and waveform for no change.
+pub fn remove_pictures(path: &Path) -> Result<(), EditError> {
+    let mut tagged =
+        Probe::open(path)
+            .and_then(|p| p.read())
+            .map_err(|source| EditError::Read {
+                path: path.display().to_string(),
+                source,
+            })?;
+
+    let tag_type = tagged.primary_tag_type();
+    let Some(tag) = tagged.tag_mut(tag_type) else {
+        return Ok(());
+    };
+    if tag.pictures().is_empty() {
+        return Ok(());
+    }
+
+    while !tag.pictures().is_empty() {
+        tag.remove_picture(0);
+    }
+
+    tag.save_to_path(path, WriteOptions::default())
+        .map_err(|source| EditError::Save {
+            path: path.display().to_string(),
+            source,
+        })
+}
+
 /// Identifies an image from its first bytes.
 ///
 /// Only the formats that actually turn up as cover art. Anything else is

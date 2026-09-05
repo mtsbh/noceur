@@ -1,12 +1,14 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import { CloseIcon } from "./icons";
+import { CloseIcon, ICON_NAMES, TOOLBAR_ICONS, type IconName } from "./icons";
 import { credentials, openUrl, setDiscogsToken } from "./api";
 import type { Column } from "./columns";
 import {
+  ACTIONS,
   NEW_QUICK_GROUP,
   QUICK_KEYS,
   type QuickGroup,
   type Settings as S,
+  type ToolbarButton,
 } from "./settings";
 
 export type ArtSize = "small" | "medium" | "large";
@@ -43,6 +45,21 @@ export default function Settings(props: {
 
   const patch = (next: Partial<S>) => props.onSettings({ ...props.settings, ...next });
 
+  /** Changes one toolbar button, leaving the order and the others alone. */
+  const setButton = (at: number, next: Partial<ToolbarButton>) =>
+    patch({
+      toolbar: props.settings.toolbar.map((b, i) => (i === at ? { ...b, ...next } : b)),
+    });
+
+  /** Moves a button along the bar, which is how the order is chosen. */
+  const moveButton = (at: number, by: number) => {
+    const to = at + by;
+    if (to < 0 || to >= props.settings.toolbar.length) return;
+    const next = [...props.settings.toolbar];
+    [next[at], next[to]] = [next[to], next[at]];
+    patch({ toolbar: next });
+  };
+
   /** Replaces one quick-tag group, leaving the rest alone. */
   function editGroup(index: number, change: Partial<QuickGroup>) {
     patch({
@@ -74,6 +91,68 @@ export default function Settings(props: {
         </header>
 
         <div class="setbody">
+          <section class="setgroup">
+            <h3>Toolbar</h3>
+            <p class="sethint">
+              Shortcut buttons in the path bar, for what the right-click menu
+              does. Everything here stays in that menu whether or not it has a
+              button, so turning one off costs nothing but the shortcut.
+            </p>
+
+            <For each={props.settings.toolbar}>
+              {(button, at) => (
+                <div class="toolset">
+                  <label class="toolsetname">
+                    <input
+                      type="checkbox"
+                      checked={button.on}
+                      onChange={(e) => setButton(at(), { on: e.currentTarget.checked })}
+                    />
+                    {ACTIONS[button.id].label}
+                  </label>
+
+                  {/* Which glyph reads as "find metadata" is a matter of habit,
+                      so any icon can go on any button. */}
+                  <div class="iconpick" role="group" aria-label="Icon">
+                    <For each={ICON_NAMES}>
+                      {(name: IconName) => {
+                        const Glyph = TOOLBAR_ICONS[name];
+                        return (
+                          <button
+                            class={`iconbtn ${button.icon === name ? "on" : ""}`}
+                            title={name}
+                            onClick={() => setButton(at(), { icon: name })}
+                          >
+                            <Glyph />
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+
+                  <div class="toolmove">
+                    <button
+                      class="segbtn"
+                      title="Move left"
+                      disabled={at() === 0}
+                      onClick={() => moveButton(at(), -1)}
+                    >
+                      ←
+                    </button>
+                    <button
+                      class="segbtn"
+                      title="Move right"
+                      disabled={at() === props.settings.toolbar.length - 1}
+                      onClick={() => moveButton(at(), 1)}
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </For>
+          </section>
+
           <section class="setgroup">
             <h3>Waveform</h3>
 
