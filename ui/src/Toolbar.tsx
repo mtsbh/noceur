@@ -22,15 +22,14 @@ export type ActionId = "tags" | "match" | "art" | "rename" | "clean" | "quick";
 const BUTTONS: {
   id: ActionId;
   label: string;
-  hint: string;
   icon: () => import("solid-js").JSX.Element;
 }[] = [
-  { id: "tags", label: "Edit metadata", hint: "Edit the tags of the selection", icon: TagIcon },
-  { id: "match", label: "Find metadata", hint: "Look the track up online", icon: GlobeIcon },
-  { id: "art", label: "Find album art", hint: "Search for cover art", icon: ImageIcon },
-  { id: "rename", label: "Rename", hint: "Rename from a template", icon: RenameIcon },
-  { id: "clean", label: "Clean up", hint: "Fix names and tags with rules", icon: BroomIcon },
-  { id: "quick", label: "Quick tag", hint: "Tag the playing track by keyboard", icon: StarIcon },
+  { id: "tags", label: "Edit metadata", icon: TagIcon },
+  { id: "match", label: "Find metadata", icon: GlobeIcon },
+  { id: "art", label: "Find album art", icon: ImageIcon },
+  { id: "rename", label: "Rename", icon: RenameIcon },
+  { id: "clean", label: "Clean up", icon: BroomIcon },
+  { id: "quick", label: "Quick tag", icon: StarIcon },
 ];
 
 /**
@@ -50,20 +49,6 @@ export default function Toolbar(props: {
   /** Quick tag works on whatever is playing, so it never needs a selection. */
   const needsSelection = (id: ActionId) => id !== "quick";
 
-  /**
-   * What the tooltip says.
-   *
-   * The label, and then what it would actually do right now — how many tracks
-   * it would touch, or why it is greyed out. A tooltip that only repeats the
-   * label answers a question nobody with the icon in front of them is asking.
-   */
-  const tip = (button: (typeof BUTTONS)[number]) => {
-    if (!needsSelection(button.id)) return `${button.label} — ${button.hint}`;
-    if (props.count === 0) return `${button.label} — select a track first`;
-    if (props.count === 1) return `${button.label} — ${button.hint}`;
-    return `${button.label} — ${props.count} tracks`;
-  };
-
   return (
     <div class="toolbar" role="group" aria-label="Track actions">
       <For each={BUTTONS}>
@@ -78,12 +63,14 @@ export default function Toolbar(props: {
               // about a second to appear, is drawn by the OS in the OS's
               // colours, and would sit under a window that draws its own title
               // bar. This one is the app's.
-              data-tip={tip(button)}
-              aria-label={tip(button)}
+              //
+              // The name and nothing else. What the button would do to how many
+              // files is answered by the dialog it opens, which lists them.
+              data-tip={button.label}
+              aria-label={button.label}
               // Marked unavailable rather than `disabled`, because a disabled
-              // button receives no mouse events in this engine — so it would
-              // lose its tooltip at exactly the moment the tooltip is the whole
-              // point, when it is greyed out and the reason is not obvious.
+              // button receives no mouse events in this engine and would lose
+              // its tooltip along with them.
               aria-disabled={off()}
               onClick={() => {
                 if (off()) return;
