@@ -28,24 +28,6 @@ export type QuickGroup = {
   multi: boolean;
 };
 
-/**
- * A thing the track-actions button can do to the selection.
- *
- * The same set the right-click menu offers, and reachable there too — this is a
- * second route to the same dialogs rather than the only one.
- */
-export type ActionId = "tags" | "match" | "art" | "rename" | "clean" | "quick";
-
-/** What each action is called, and the key that does the same thing. */
-export const ACTIONS: { id: ActionId; label: string; key?: string }[] = [
-  { id: "tags", label: "Edit metadata", key: "f2" },
-  { id: "match", label: "Find metadata online" },
-  { id: "art", label: "Find album art" },
-  { id: "rename", label: "Rename" },
-  { id: "clean", label: "Clean up" },
-  { id: "quick", label: "Quick tag", key: "t" },
-];
-
 export type Settings = {
   wave: { shape: WaveShape; colour: WaveColour };
   quick: QuickGroup[];

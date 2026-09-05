@@ -1786,16 +1786,41 @@ body.resizing * {
 }
 
 /* ── Track actions ────────────────────────────────────────────────────────
-   One button rather than a row of them. Everything behind it is in the
-   right-click menu as well, so this is a shorter route rather than the only
-   one, and it costs the path bar a single icon. */
-.gearbtn.caret {
-  gap: 3px;
-  width: auto;
-  padding: 0 5px;
+   Shortcuts to the right-click menu, in the path bar. Disabled rather than
+   hidden without a selection: buttons that appear and disappear as rows are
+   clicked are harder to aim at than ones that stay put. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 8px;
+  padding-right: 8px;
+  border-right: 1px solid var(--hair2);
 }
-.gearbtn.caret svg:last-child {
+.toolbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg3);
+  cursor: pointer;
+}
+.toolbtn:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--fg);
+}
+.toolbtn.on {
+  color: var(--acc);
+  background: var(--raise);
+}
+.toolbtn:disabled {
   color: var(--fg4);
+  cursor: default;
 }
 
 /* ── Cover art offered with a match ────────────────────────────────────────

@@ -46,15 +46,10 @@ import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
+import Toolbar, { type ActionId } from "./Toolbar";
 import Titlebar from "./Titlebar";
-import { CaretIcon, SettingsIcon, TagIcon } from "./icons";
-import {
-  ACTIONS,
-  loadSettings,
-  saveSettings,
-  type ActionId,
-  type Settings as SettingsState,
-} from "./settings";
+import { SettingsIcon } from "./icons";
+import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import {
   DEFAULT_COLUMNS,
   cellText,
@@ -587,31 +582,6 @@ export default function App() {
     setMenu({ row, x: e.clientX, y: e.clientY });
   }
 
-  // Where the track-actions button was, or null when its menu is closed.
-  const [actionMenu, setActionMenu] = createSignal<{ x: number; y: number } | null>(
-    null,
-  );
-
-  /**
-   * The track actions, as menu entries.
-   *
-   * The whole list every time, with the ones that need a selection greyed out
-   * rather than missing. A menu whose entries come and go teaches nothing about
-   * what the app can do — and "why is it not there" is a worse question than
-   * "why is it grey".
-   */
-  function actionItems(): MenuItem[] {
-    const count = audioSelection().length;
-    return ACTIONS.map(({ id, label, key }) => ({
-      kind: "item" as const,
-      label: count > 1 && id !== "quick" ? `${label} — ${count} tracks` : label,
-      hint: key,
-      checked: id === "quick" ? quickOpen() : undefined,
-      disabled: id !== "quick" && count === 0,
-      run: () => runAction(id),
-    }));
-  }
-
   // Where the column chooser was opened from, or null when it is closed.
   const [columnMenu, setColumnMenu] = createSignal<{ x: number; y: number } | null>(
     null,
@@ -1106,21 +1076,11 @@ export default function App() {
         </Show>
 
         <span class="grow" />
-        {/* One button rather than a row of them. Everything behind it is in
-            the right-click menu too; this is the same list for anyone who
-            would rather not hunt for the row first. */}
-        <button
-          class={`gearbtn caret ${actionMenu() ? "on" : ""}`}
-          title="Track actions"
-          aria-label="Track actions"
-          onClick={(e) => {
-            const box = e.currentTarget.getBoundingClientRect();
-            setActionMenu(actionMenu() ? null : { x: box.left, y: box.bottom + 3 });
-          }}
-        >
-          <TagIcon />
-          <CaretIcon />
-        </button>
+        <Toolbar
+          count={audioSelection().length}
+          quickOpen={quickOpen()}
+          onRun={runAction}
+        />
         <div class="sizes" role="group" aria-label="Cover art size">
           <For each={ART_SIZES}>
             {(size) => (
@@ -1341,15 +1301,6 @@ export default function App() {
           y={menu()!.y}
           items={rowMenuItems(menu()!.row)}
           onClose={() => setMenu(null)}
-        />
-      </Show>
-
-      <Show when={actionMenu()}>
-        <Menu
-          x={actionMenu()!.x}
-          y={actionMenu()!.y}
-          items={actionItems()}
-          onClose={() => setActionMenu(null)}
         />
       </Show>
 
