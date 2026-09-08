@@ -47,6 +47,7 @@ import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
 import Toolbar, { type ActionId } from "./Toolbar";
+import Quality from "./Quality";
 import Titlebar from "./Titlebar";
 import { SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -255,6 +256,9 @@ export default function App() {
       case "clean":
         setCleaning(ids);
         break;
+      case "quality":
+        setChecking(ids);
+        break;
     }
   }
 
@@ -279,6 +283,8 @@ export default function App() {
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
+  /** Files the quality report is open on, or null when it is closed. */
+  const [checking, setChecking] = createSignal<number[] | null>(null);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -710,6 +716,14 @@ export default function App() {
         label: many ? `Clean up ${selection().size} tracks…` : "Clean up…",
         disabled: row.kind !== 1,
         run: () => setCleaning([...selection()]),
+      },
+      {
+        kind: "item",
+        label: many
+          ? `Check quality of ${selection().size} tracks…`
+          : "Check quality…",
+        disabled: row.kind !== 1,
+        run: () => setChecking([...selection()]),
       },
       {
         kind: "item",
@@ -1379,6 +1393,10 @@ export default function App() {
             onChanged={() => refetchListing()}
           />
         )}
+      </Show>
+
+      <Show when={checking()}>
+        {(ids) => <Quality fileIds={ids()} onClose={() => setChecking(null)} />}
       </Show>
 
       <Show when={matching()}>

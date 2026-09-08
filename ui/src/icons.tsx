@@ -177,6 +177,15 @@ export function BroomIcon() {
   );
 }
 
+/** Bars falling away to the right: a spectrum that stops. */
+export function SpectrumIcon() {
+  return (
+    <Icon>
+      <path d="M2.6 12.4V8M5.3 12.4V4.4M8 12.4V6M10.7 12.4v-3.6M13.4 12.4v-1.4" />
+    </Icon>
+  );
+}
+
 export function StarIcon() {
   return (
     <Icon>

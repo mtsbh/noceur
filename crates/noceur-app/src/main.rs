@@ -15,6 +15,7 @@ mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod quality;
 mod renamer;
 mod shellmenu;
 mod state;
@@ -117,6 +118,7 @@ fn main() {
             renamer::apply_rename,
             config::preserve_dates,
             config::set_preserve_dates,
+            quality::analyse_quality,
             cleanup::cleanup_rules,
             cleanup::preview_cleanup,
             cleanup::apply_cleanup,

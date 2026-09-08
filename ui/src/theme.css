@@ -19,6 +19,12 @@
   --acc-fill: rgba(232, 165, 95, 0.16);
   --acc-line: rgba(232, 165, 95, 0.42);
   --row-h: 26px;
+  /* Verdict colours for the quality report. Green and red rather than the
+     accent, because "this file is not what it says" is the one place in this
+     interface that wants the conventional reading rather than a house one. */
+  --qual-good: #86c46a;
+  --qual-bad: #e2685e;
+  --qual-meh: #9aa0a6;
 }
 
 * {
@@ -2044,6 +2050,88 @@ label.artoffer:hover {
 .artoffertitle input {
   accent-color: var(--acc);
   cursor: pointer;
+}
+
+/* ── Quality report ────────────────────────────────────────────────────────
+   A verdict per file, worst first. The colours are the only fast way to read a
+   report of two hundred rows, so they carry the meaning and the text explains
+   it rather than the other way round. */
+.renamer.wide {
+  width: 900px;
+}
+.qualsummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.qualtally {
+  padding: 2px 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--fg2);
+}
+.qualtally.upscaled,
+.qualtally.transcoded {
+  color: var(--qual-bad);
+  border-color: var(--qual-bad);
+}
+.qualtally.genuine {
+  color: var(--qual-good);
+  border-color: var(--qual-good);
+}
+
+.quallist {
+  border-top: 1px solid var(--hair);
+}
+.qualrow {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1.4fr) 58px 68px minmax(0, 1.6fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hair);
+}
+/* A bar of the verdict's colour down the left, which is what makes a long
+   report scannable without reading a word of it. */
+.qualmark {
+  align-self: stretch;
+  border-radius: 1px;
+  background: var(--fg4);
+}
+.qualmark.upscaled,
+.qualmark.transcoded {
+  background: var(--qual-bad);
+}
+.qualmark.genuine {
+  background: var(--qual-good);
+}
+.qualmark.unsure,
+.qualmark.unreadable {
+  background: var(--qual-meh);
+}
+.qualname,
+.qualwhy {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qualname {
+  color: var(--fg);
+}
+.qualclaim,
+.qualcut {
+  color: var(--fg2);
+  text-align: right;
+}
+.qualwhy {
+  color: var(--fg3);
+  font-size: 11px;
+}
+.qualrow.upscaled .qualname,
+.qualrow.transcoded .qualname {
+  color: var(--qual-bad);
 }
 
 /* ── Clean up ──────────────────────────────────────────────────────────────

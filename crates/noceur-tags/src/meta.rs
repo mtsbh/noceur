@@ -44,6 +44,15 @@ pub struct TrackMeta {
     pub sample_rate: Option<u32>,
     pub channels: Option<u8>,
     pub bit_depth: Option<u8>,
+    /// Bitrate in kbps, as the container reports it. `None` when it will not say.
+    pub bitrate_kbps: Option<u32>,
+    /// Whether the container stores the audio losslessly.
+    ///
+    /// Kept apart from the bitrate because "no bitrate" is ambiguous otherwise:
+    /// a FLAC has none because there is nothing to claim, while an MP3 with a
+    /// broken header has one and it is unknown. Treating those alike would
+    /// accuse ordinary files of being transcodes.
+    pub lossless: bool,
     /// Whether the file carries embedded artwork. The bytes are not loaded here.
     pub has_artwork: bool,
 }
@@ -66,6 +75,8 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
         sample_rate: props.sample_rate(),
         channels: props.channels(),
         bit_depth: props.bit_depth(),
+        bitrate_kbps: props.audio_bitrate(),
+        lossless: is_lossless(tagged.file_type()),
         ..Default::default()
     };
 
@@ -123,6 +134,18 @@ pub struct Artwork {
     /// The container's declared MIME type, when it declares one.
     pub mime: Option<String>,
     pub data: Vec<u8>,
+}
+
+/// Whether a container stores its audio without loss.
+///
+/// By container rather than by extension: `.m4a` is ALAC or AAC depending on
+/// what is inside it, and the difference is exactly the one being asked about.
+pub fn is_lossless(file_type: lofty::file::FileType) -> bool {
+    use lofty::file::FileType;
+    matches!(
+        file_type,
+        FileType::Flac | FileType::Wav | FileType::Aiff | FileType::Ape | FileType::WavPack
+    )
 }
 
 /// Reads the front cover out of a file, if it has one.

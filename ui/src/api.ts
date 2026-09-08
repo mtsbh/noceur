@@ -542,6 +542,32 @@ export function setPreserveDates(keep: boolean): Promise<boolean> {
   return invoke<boolean>("set_preserve_dates", { keep });
 }
 
+/** What one file turned out to be. */
+export type QualityRow = {
+  fileId: number;
+  name: string;
+  /** genuine · upscaled · transcoded · unsure · unreadable */
+  verdict: string;
+  claimedKbps: number | null;
+  impliedKbps: number | null;
+  cutoffKhz: number;
+  sampleRate: number;
+  lossless: boolean;
+  reason: string;
+};
+
+/**
+ * Measures what a batch of files really is.
+ *
+ * A batch rather than a selection: analysis decodes each track and costs about
+ * half a second, so the caller walks its selection a few at a time and shows
+ * progress. One command for a whole folder would be a command that appears to
+ * hang.
+ */
+export function analyseQuality(fileIds: number[]): Promise<QualityRow[]> {
+  return invoke<QualityRow[]>("analyse_quality", { fileIds });
+}
+
 /** One cleanup rule, as the back end describes it. */
 export type CleanRule = { slug: string; label: string; hint: string };
 

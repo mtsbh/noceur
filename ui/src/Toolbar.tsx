@@ -4,12 +4,20 @@ import {
   GlobeIcon,
   ImageIcon,
   RenameIcon,
+  SpectrumIcon,
   StarIcon,
   TagIcon,
 } from "./icons";
 
 /** A thing the toolbar can do to the selection. */
-export type ActionId = "tags" | "match" | "art" | "rename" | "clean" | "quick";
+export type ActionId =
+  | "tags"
+  | "match"
+  | "art"
+  | "rename"
+  | "clean"
+  | "quality"
+  | "quick";
 
 /**
  * The buttons, in order.
@@ -29,6 +37,7 @@ const BUTTONS: {
   { id: "art", label: "Find album art", icon: ImageIcon },
   { id: "rename", label: "Rename", icon: RenameIcon },
   { id: "clean", label: "Clean up", icon: BroomIcon },
+  { id: "quality", label: "Check quality", icon: SpectrumIcon },
   { id: "quick", label: "Quick tag", icon: StarIcon },
 ];
 
