@@ -204,29 +204,29 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>) {
                     });
 
                     match open(&path, sink.mixer(), volume) {
-                    Ok((new_player, duration)) => {
-                        if !play {
-                            new_player.pause();
+                        Ok((new_player, duration)) => {
+                            if !play {
+                                new_player.pause();
+                            }
+                            player = Some(new_player);
+                            set(&state, |s| {
+                                s.path = Some(path.display().to_string());
+                                s.playing = play;
+                                s.position_ms = 0;
+                                s.duration_ms = duration;
+                                s.error = None;
+                            });
                         }
-                        player = Some(new_player);
-                        set(&state, |s| {
-                            s.path = Some(path.display().to_string());
-                            s.playing = play;
-                            s.position_ms = 0;
-                            s.duration_ms = duration;
-                            s.error = None;
-                        });
-                    }
-                    Err(e) => {
-                        player = None;
-                        set(&state, |s| {
-                            s.path = None;
-                            s.playing = false;
-                            s.position_ms = 0;
-                            s.duration_ms = None;
-                            s.error = Some(e.to_string());
-                        });
-                    }
+                        Err(e) => {
+                            player = None;
+                            set(&state, |s| {
+                                s.path = None;
+                                s.playing = false;
+                                s.position_ms = 0;
+                                s.duration_ms = None;
+                                s.error = Some(e.to_string());
+                            });
+                        }
                     }
                 }
                 Cmd::Resume => {

@@ -408,7 +408,10 @@ mod tests {
         assert_eq!(run("Rev8617 (original mix)", &r), "Rev8617");
         assert_eq!(run("Rev8617 (Original)", &r), "Rev8617");
         assert_eq!(run("Rev8617 - Original Mix", &r), "Rev8617");
-        assert_eq!(run("Artist - Rev8617 (Original Mix)", &r), "Artist - Rev8617");
+        assert_eq!(
+            run("Artist - Rev8617 (Original Mix)", &r),
+            "Artist - Rev8617"
+        );
     }
 
     /// The rule has to know the difference between "this is not a remix" and

@@ -7,6 +7,7 @@ pub mod kind;
 pub mod order;
 pub mod path;
 pub mod rename;
+pub mod titlefmt;
 
 pub use entry::FsEntry;
 pub use enumerate::{read_dir, DirListing, EnumerateError, SkippedEntry};
