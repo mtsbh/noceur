@@ -163,7 +163,7 @@ export default function Settings(props: {
                 All four read the same three frequency bands and only differ in
                 how they draw them. <b>RGB</b> blends bass, body and air into one
                 colour, as Traktor and Virtual DJ do. <b>3-band</b> draws them as
-                separate shapes — blue bass, orange body, pale highs — the way a
+                separate shapes - blue bass, orange body, pale highs - the way a
                 CDJ does. <b>Blue</b> is one colour that pales where the hats
                 are. <b>Mono</b> uses the app's own accent.
               </p>
@@ -230,15 +230,15 @@ export default function Settings(props: {
                 <p>
                   Rows of values you can apply to the playing track by keyboard.
                   Every library has its own vocabulary, so the field names are
-                  yours too — <code>ENERGY</code> and <code>MOOD</code> are only
+                  yours too - <code>ENERGY</code> and <code>MOOD</code> are only
                   defaults.
                 </p>
                 <p>
                   A name a format already knows goes to its proper home:{" "}
                   <code>MOOD</code> becomes ID3's <code>TMOO</code> frame.
-                  Anything else becomes a user-defined field — <code>TXXX</code>{" "}
+                  Anything else becomes a user-defined field - <code>TXXX</code>{" "}
                   in MP3, WAV and AIFF, a plain key in FLAC, an iTunes atom in
-                  M4A — which is where Mp3tag, OneTagger and Serato look.
+                  M4A - which is where Mp3tag, OneTagger and Serato look.
                 </p>
                 <p>
                   Rekordbox displays only a handful of fields, so for something
@@ -247,7 +247,7 @@ export default function Settings(props: {
                   rating is separate and always goes where Rekordbox reads it.
                 </p>
                 <p>
-                  A field name of exactly four capitals — <code>VIBE</code> — is
+                  A field name of exactly four capitals - <code>VIBE</code> - is
                   refused: ID3 reads any four capitals as a frame identifier, so
                   it would be written as something no reader understands.
                 </p>
@@ -262,7 +262,7 @@ export default function Settings(props: {
                   checked={props.settings.quickRating}
                   onChange={(e) => patch({ quickRating: e.currentTarget.checked })}
                 />
-                <span>offer a 1–5 rating row (shift+1 … shift+5)</span>
+                <span>1-5 rating</span>
               </label>
             </div>
             <For each={props.settings.quick}>
@@ -297,7 +297,7 @@ export default function Settings(props: {
                           editGroup(row(), { multi: e.currentTarget.checked })
                         }
                       />
-                      <span>many</span>
+                      <span>multiple</span>
                     </label>
 
                   </div>
@@ -416,7 +416,7 @@ export default function Settings(props: {
                   patch({ quick: [...props.settings.quick, { ...NEW_QUICK_GROUP }] })
                 }
               >
-                Add a row
+                New custom tag
               </button>
             </Show>
 
@@ -474,7 +474,6 @@ export default function Settings(props: {
               >
                 Generate one on Discogs
               </a>
-              , then paste it here.
             </p>
           </Section>
 
@@ -503,7 +502,7 @@ export default function Settings(props: {
                     setPreserveDates(want).then(setKeepDates).catch(() => {});
                   }}
                 />
-                <span>keep each file's modified date when editing its tags</span>
+                <span>Preserve file modification time when retagging</span>
               </label>
             </div>
           </Section>
@@ -538,8 +537,7 @@ export default function Settings(props: {
             title="Columns"
             info={
               <p>
-                Right-clicking the list header opens the same list. Drag a
-                heading to move it, or its right edge to change its width.
+                Right-clicking the list header opens the same list.
               </p>
             }
           >
