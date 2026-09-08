@@ -1,6 +1,12 @@
 import { For, Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
 import { CloseIcon } from "./icons";
-import { credentials, openUrl, setDiscogsToken } from "./api";
+import {
+  credentials,
+  openUrl,
+  preserveDates,
+  setDiscogsToken,
+  setPreserveDates,
+} from "./api";
 import type { Column } from "./columns";
 import {
   NEW_QUICK_GROUP,
@@ -92,6 +98,12 @@ export default function Settings(props: {
       ),
     });
   }
+
+  const [keepDates, setKeepDates] = createSignal(true);
+
+  createEffect(() => {
+    preserveDates().then(setKeepDates).catch(() => {});
+  });
 
   const [token, setToken] = createSignal("");
   const [hasDiscogs, setHasDiscogs] = createSignal(false);
@@ -376,6 +388,36 @@ export default function Settings(props: {
               </a>
               , then paste it here.
             </p>
+          </Section>
+
+          <Section
+            title="Files"
+            info={
+              <p>
+                Writing a tag rewrites the file, and the filesystem stamps it
+                with the time it was rewritten. For a music library that is
+                destructive in a quiet way: "date modified" is what you sort by
+                to find what arrived last week, and retagging a folder moves
+                every track in it to the top of that sort at once. The old dates
+                are not recoverable, which is why this starts on.
+              </p>
+            }
+          >
+            <div class="setrow">
+              <span class="setlabel">Dates</span>
+              <label class="setcheck">
+                <input
+                  type="checkbox"
+                  checked={keepDates()}
+                  onChange={(e) => {
+                    const want = e.currentTarget.checked;
+                    setKeepDates(want);
+                    setPreserveDates(want).then(setKeepDates).catch(() => {});
+                  }}
+                />
+                <span>keep each file's modified date when editing its tags</span>
+              </label>
+            </div>
           </Section>
 
           <Section title="List">

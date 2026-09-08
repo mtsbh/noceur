@@ -212,6 +212,11 @@ pub async fn apply_cleanup(
     items: Vec<CleanApply>,
 ) -> Result<WriteReport, String> {
     let db = state.db.clone();
+    // Read once per command rather than per file: it cannot change mid-write,
+    // and reading it two hundred times would be two hundred file reads to
+    // answer the same question.
+    let keep_dates =
+        crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;
 
     tauri::async_runtime::spawn_blocking(move || {
         let targets: Vec<(CleanApply, PathBuf)> = {
@@ -249,7 +254,10 @@ pub async fn apply_cleanup(
 
             let mut failed = false;
             if !edit.is_empty() {
-                if let Err(e) = noceur_tags::edit::write(&path, &edit) {
+                let written = crate::timestamp::preserving(&path, keep_dates, || {
+                    noceur_tags::edit::write(&path, &edit)
+                });
+                if let Err(e) = written {
                     report.failures.push(WriteFailure {
                         name: file_name(&path),
                         reason: e.to_string(),

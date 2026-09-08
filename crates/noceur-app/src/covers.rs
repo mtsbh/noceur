@@ -75,6 +75,11 @@ pub async fn apply_cover(
     url: String,
 ) -> Result<WriteReport, String> {
     let db = state.db.clone();
+    // Read once per command rather than per file: it cannot change mid-write,
+    // and reading it two hundred times would be two hundred file reads to
+    // answer the same question.
+    let keep_dates =
+        crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;
 
     tauri::async_runtime::spawn_blocking(move || {
         let image = noceur_online::fetch_image(&url).map_err(|e| e.to_string())?;
@@ -112,7 +117,9 @@ pub async fn apply_cover(
         };
 
         for (file_id, path) in targets {
-            match noceur_tags::edit::set_front_cover(&path, &image) {
+            match crate::timestamp::preserving(&path, keep_dates, || {
+                noceur_tags::edit::set_front_cover(&path, &image)
+            }) {
                 Ok(()) => {
                     report.written += 1;
                     written.push(file_id);
@@ -158,6 +165,11 @@ pub async fn remove_cover(
     file_ids: Vec<i64>,
 ) -> Result<WriteReport, String> {
     let db = state.db.clone();
+    // Read once per command rather than per file: it cannot change mid-write,
+    // and reading it two hundred times would be two hundred file reads to
+    // answer the same question.
+    let keep_dates =
+        crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;
 
     tauri::async_runtime::spawn_blocking(move || {
         let targets: Vec<(i64, PathBuf)> = {
@@ -195,7 +207,9 @@ pub async fn remove_cover(
         let mut written = Vec::new();
 
         for (file_id, path) in targets {
-            match noceur_tags::edit::remove_pictures(&path) {
+            match crate::timestamp::preserving(&path, keep_dates, || {
+                noceur_tags::edit::remove_pictures(&path)
+            }) {
                 Ok(()) => {
                     report.written += 1;
                     written.push(file_id);

@@ -528,6 +528,20 @@ export function applyRename(renames: [number, string][]): Promise<WriteReport> {
   return invoke<WriteReport>("apply_rename", { renames });
 }
 
+/**
+ * Whether tag writes put the file's modified date back afterwards.
+ *
+ * Stored beside the app rather than in the browser, because the writes that
+ * obey it happen in Rust.
+ */
+export function preserveDates(): Promise<boolean> {
+  return invoke<boolean>("preserve_dates");
+}
+
+export function setPreserveDates(keep: boolean): Promise<boolean> {
+  return invoke<boolean>("set_preserve_dates", { keep });
+}
+
 /** One cleanup rule, as the back end describes it. */
 export type CleanRule = { slug: string; label: string; hint: string };
 

@@ -77,6 +77,11 @@ pub async fn write_tags(
     edit: TagEdit,
 ) -> Result<WriteReport, String> {
     let db = state.db.clone();
+    // Read once per command rather than per file: it cannot change mid-write,
+    // and reading it two hundred times would be two hundred file reads to
+    // answer the same question.
+    let keep_dates =
+        crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;
 
     tauri::async_runtime::spawn_blocking(move || {
         let change = noceur_tags::Edit {
@@ -126,7 +131,9 @@ pub async fn write_tags(
         let mut written = Vec::new();
 
         for (file_id, path) in targets {
-            match noceur_tags::edit::write(&path, &change) {
+            match crate::timestamp::preserving(&path, keep_dates, || {
+                noceur_tags::edit::write(&path, &change)
+            }) {
                 Ok(()) => {
                     report.written += 1;
                     written.push(file_id);

@@ -19,6 +19,7 @@ mod renamer;
 mod shellmenu;
 mod state;
 mod tagedit;
+mod timestamp;
 
 use state::AppState;
 
@@ -114,6 +115,8 @@ fn main() {
             autotag::set_discogs_token,
             renamer::preview_rename,
             renamer::apply_rename,
+            config::preserve_dates,
+            config::set_preserve_dates,
             cleanup::cleanup_rules,
             cleanup::preview_cleanup,
             cleanup::apply_cleanup,
