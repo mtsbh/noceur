@@ -244,7 +244,23 @@ Sorting works across all three states. The distinction exists because analysed v
 - Single pane default; `Ctrl+\` splits, `Tab` moves focus, `Ctrl+\` again collapses.
 - Both panes are the same list component; split is a container concern.
 - Independent tabs per pane. Back/forward history per pane, `Alt+←/→`.
-- Full session — panes, tabs, paths, history, column layout, sort — restored on launch.
+- Full session — panes, tabs, paths, column layout, sort — restored on launch.
+
+Built as specified, with three notes on what shipped:
+
+- **Two panes, not a tree of them.** A recursive split is what a text editor needs. A file
+  browser needs the folder you are filing *into* beside the one you are filing *out of*, and past
+  two the panes are narrower than a filename.
+- **Sort is per tab; columns stay global.** Sort belongs to the tab because the reason to hold two
+  folders open is usually that they differ. Which columns exist, how wide and in what order, is
+  one answer to "what is a track" and is edited in one settings panel — per-pane column widths in
+  a half-width pane would be a second layout to maintain and no better to read.
+- **History is restored as a path, not as a stack.** A tab comes back where it was, with its back
+  button empty. Restoring the walk that got you somewhere last week is remembering a route nobody
+  is still on.
+- **Tabs drag**, to reorder or across the divider, and are drop targets for files: dropping a
+  selection on a tab files it into that tab's folder without going there. Not in the original
+  spec; it is the shortest route from the split to the reason for the split.
 
 ### 9.5 Keyboard
 
@@ -254,14 +270,23 @@ Sorting works across all three states. The distinction exists because analysed v
 | `Ctrl+\` | Split / unsplit |
 | `Tab` | Focus other pane |
 | `Ctrl+T` | New tab at current folder |
+| `Ctrl+W` | Close tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `Ctrl+1…9` | Jump to tab, `9` being the last |
 | `Space` | Play / pause selected |
+| `T` | Quick tag |
+| `F2` | Edit metadata |
+| `Del` | Recycle selection |
 | `Ctrl+R` | Rename from template |
 | `F5` / `F6` | Copy / move to other pane |
 | `Ctrl+M` | Move-to popover |
 | `Alt+←` / `Alt+→` | Back / forward (per pane) |
 | `Ctrl+D` | Pin current folder |
-| `Ctrl+1…9` | Jump to favourite |
 | `Ctrl+Z` | Undo last file operation |
+
+`Ctrl+1…9` was originally "jump to favourite". It went to the tabs instead: it is what the key
+means in every application with a tab strip, and a pinned folder is one click away in the tree
+whereas a tab behind eleven others is not.
 
 ---
 

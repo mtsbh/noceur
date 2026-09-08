@@ -235,3 +235,28 @@ export function StarIcon() {
     </Icon>
   );
 }
+
+/**
+ * The split: one rectangle divided, drawn the way the panes actually sit.
+ *
+ * Two icons rather than one that rotates, because the button both toggles the
+ * split and says which way it would go — a single glyph would have to mean
+ * "split" and "the other orientation" at once.
+ */
+export function SplitColsIcon() {
+  return (
+    <Icon>
+      <rect x="2" y="3" width="12" height="10" rx="1.1" />
+      <path d="M8 3v10" />
+    </Icon>
+  );
+}
+
+export function SplitRowsIcon() {
+  return (
+    <Icon>
+      <rect x="2" y="3" width="12" height="10" rx="1.1" />
+      <path d="M2 8h12" />
+    </Icon>
+  );
+}
