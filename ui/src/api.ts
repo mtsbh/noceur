@@ -574,6 +574,10 @@ export type QualityRow = {
   cutoffKhz: number;
   sampleRate: number;
   lossless: boolean;
+  /** Portion of samples pinned to full scale, as a percentage. */
+  clipPercent: number;
+  /** Longest unbroken run of full-scale samples. */
+  clipRun: number;
   reason: string;
 };
 

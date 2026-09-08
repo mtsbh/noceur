@@ -29,6 +29,10 @@ pub struct QualityRow {
     pub cutoff_khz: f32,
     pub sample_rate: u32,
     pub lossless: bool,
+    /// Portion of samples pinned to full scale, as a percentage.
+    pub clip_percent: f32,
+    /// Longest unbroken run of full-scale samples.
+    pub clip_run: u32,
     pub reason: String,
 }
 
@@ -92,6 +96,8 @@ pub async fn analyse_quality(
                         cutoff_khz: report.cutoff_hz / 1000.0,
                         sample_rate: report.sample_rate,
                         lossless,
+                        clip_percent: report.clipping.percent,
+                        clip_run: report.clipping.longest_run,
                         reason: report.reason,
                     });
                 }
@@ -104,6 +110,8 @@ pub async fn analyse_quality(
                     cutoff_khz: 0.0,
                     sample_rate: meta.and_then(|m| m.sample_rate).unwrap_or(0),
                     lossless,
+                    clip_percent: 0.0,
+                    clip_run: 0,
                     reason: e.to_string(),
                 }),
             }

@@ -91,6 +91,16 @@ export default function Quality(props: {
   const suspect = () =>
     count("upscaled") + count("transcoded") + count("upsampled");
 
+  /**
+   * Whether a file clips enough to be worth mentioning.
+   *
+   * Both conditions, because either alone misleads. A track can touch full
+   * scale on a hundredth of a percent of its samples and be badly distorted if
+   * those are one long run; and a run of three is a rounding artefact unless
+   * there are many of them.
+   */
+  const clipped = (r: QualityRow) => r.clipRun >= 8 && r.clipPercent >= 0.01;
+
   /** What the file says it is, for the left-hand column. */
   const claim = (r: QualityRow) => {
     if (r.lossless) return "lossless";
@@ -143,6 +153,11 @@ export default function Quality(props: {
                       <Show when={r.cutoffKhz > 0} fallback="—">
                         {r.cutoffKhz.toFixed(1)} kHz
                       </Show>
+                    </span>
+                    {/* Only when there is something to say. A column of "0.0%"
+                        down a report of clean files is noise. */}
+                    <span class={`qualclip mono ${clipped(r) ? "bad" : ""}`}>
+                      <Show when={clipped(r)}>{r.clipPercent.toFixed(2)}%</Show>
                     </span>
                     <span class="qualwhy">{r.reason}</span>
                   </div>

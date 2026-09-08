@@ -2137,7 +2137,7 @@ label.artoffer:hover {
 }
 .qualrow {
   display: grid;
-  grid-template-columns: 6px minmax(0, 1.4fr) 58px 68px minmax(0, 1.6fr);
+  grid-template-columns: 6px minmax(0, 1.4fr) 58px 68px 54px minmax(0, 1.5fr);
   gap: 8px;
   align-items: baseline;
   padding: 4px 0;
@@ -2183,9 +2183,13 @@ label.artoffer:hover {
   color: var(--fg);
 }
 .qualclaim,
-.qualcut {
+.qualcut,
+.qualclip {
   color: var(--fg2);
   text-align: right;
+}
+.qualclip.bad {
+  color: var(--qual-bad);
 }
 .qualwhy {
   color: var(--fg3);

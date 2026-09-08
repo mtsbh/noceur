@@ -44,6 +44,34 @@ const FRAMES: usize = 240;
 /// that a wall is still a wall rather than a slope spread over several bands.
 const BAND_HZ: f32 = 200.0;
 
+/// Level at which a sample counts as pinned to full scale.
+///
+/// Not exactly 1.0: a decoder that resamples, or one that converts from 16-bit
+/// integers through a gain stage, lands a hair under it and would hide every
+/// clipped sample in the file behind a rounding error.
+const CLIP_LEVEL: f32 = 0.9985;
+
+/// Consecutive full-scale samples before it counts as clipping.
+///
+/// A single sample touching full scale is a loud peak that happened to land
+/// there, and a mastered track has thousands of them. Three in a row is a
+/// waveform with its top cut off, which is a different thing and the thing worth
+/// reporting.
+const CLIP_RUN: u32 = 3;
+
+/// How much of a file is pinned to full scale.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Clipping {
+    /// Portion of all samples inside a clipped run, as a percentage.
+    pub percent: f32,
+    /// Longest unbroken run of full-scale samples, in samples.
+    ///
+    /// The more telling of the two: a track can clip on a thousand isolated
+    /// transients and sound fine, while one run of two hundred samples is
+    /// audible distortion.
+    pub longest_run: u32,
+}
+
 /// What the spectrum of a file looks like.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spectrum {
@@ -52,6 +80,52 @@ pub struct Spectrum {
     pub bins_db: Vec<f32>,
     /// Frames that had enough signal in them to be worth measuring.
     pub frames: usize,
+    /// Measured across every sample, not the sampled windows the spectrum uses.
+    pub clipping: Clipping,
+}
+
+/// Counts full-scale runs as samples arrive.
+///
+/// Per channel and on the raw samples rather than the downmix: averaging two
+/// channels together pulls a clipped one back under full scale and hides exactly
+/// what this is looking for.
+#[derive(Default)]
+struct ClipCounter {
+    total: u64,
+    clipped: u64,
+    run: u32,
+    longest: u32,
+}
+
+impl ClipCounter {
+    fn push(&mut self, sample: f32) {
+        self.total += 1;
+        if sample.abs() < CLIP_LEVEL {
+            self.run = 0;
+            return;
+        }
+
+        self.run += 1;
+        self.longest = self.longest.max(self.run);
+        // The run only becomes clipping once it is long enough, and the samples
+        // that led up to it count too.
+        match self.run.cmp(&CLIP_RUN) {
+            std::cmp::Ordering::Less => {}
+            std::cmp::Ordering::Equal => self.clipped += u64::from(CLIP_RUN),
+            std::cmp::Ordering::Greater => self.clipped += 1,
+        }
+    }
+
+    fn finish(self) -> Clipping {
+        Clipping {
+            percent: if self.total == 0 {
+                0.0
+            } else {
+                self.clipped as f32 / self.total as f32 * 100.0
+            },
+            longest_run: self.longest,
+        }
+    }
 }
 
 impl Spectrum {
@@ -282,6 +356,7 @@ pub struct Report {
     /// The bitrate that cutoff is typical of, when it is typical of one.
     pub implied_kbps: Option<u32>,
     pub brickwalled: bool,
+    pub clipping: Clipping,
     pub verdict: Verdict,
     /// Why, in one line, for the interface to show as it is.
     pub reason: String,
@@ -341,6 +416,7 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
         cutoff_hz: cutoff,
         implied_kbps: implied,
         brickwalled,
+        clipping: spectrum.clipping,
         verdict: Verdict::Unsure,
         reason: String::new(),
     };
@@ -495,7 +571,12 @@ pub fn spectrum(mono: &[f32], sample_rate: u32) -> Spectrum {
         }
     }
 
-    finish(power, frames, sample_rate)
+    let mut clips = ClipCounter::default();
+    for sample in mono {
+        clips.push(*sample);
+    }
+
+    finish(power, frames, sample_rate, clips.finish())
 }
 
 /// Measures the spectrum of a file.
@@ -545,8 +626,14 @@ pub fn analyse(path: &Path) -> Result<Spectrum, AudioError> {
     let mut at = 0usize;
     let mut sum = 0f32;
     let mut in_frame = 0usize;
+    let mut clips = ClipCounter::default();
 
     for sample in decoder {
+        // Every sample, unlike the spectrum, which is measured from windows
+        // spread across the file. Clipping is rare and local: sampling for it
+        // would miss most of it.
+        clips.push(sample);
+
         // Down-mixed as it arrives: the spectrum of the sum is what a listener
         // hears, and analysing one channel would miss anything panned away.
         sum += sample;
@@ -572,7 +659,7 @@ pub fn analyse(path: &Path) -> Result<Spectrum, AudioError> {
         }
     }
 
-    Ok(finish(power, frames, rate))
+    Ok(finish(power, frames, rate, clips.finish()))
 }
 
 /// Adds one block's power to the running total, unless it is silence.
@@ -593,7 +680,7 @@ fn accumulate(block: &[f32], window: &[f32], power: &mut [f64], frames: &mut usi
 }
 
 /// Turns accumulated power into a spectrum in dB relative to its own peak.
-fn finish(power: Vec<f64>, frames: usize, sample_rate: u32) -> Spectrum {
+fn finish(power: Vec<f64>, frames: usize, sample_rate: u32, clipping: Clipping) -> Spectrum {
     let bins_db = if frames == 0 {
         vec![-200.0; FFT_SIZE / 2]
     } else {
@@ -608,6 +695,7 @@ fn finish(power: Vec<f64>, frames: usize, sample_rate: u32) -> Spectrum {
         sample_rate,
         bins_db,
         frames,
+        clipping,
     }
 }
 
@@ -898,6 +986,51 @@ mod tests {
         assert_eq!(upsampled_from(96_000, 23_500.0), Some(48_000));
         // Well below any standard Nyquist: that is an encoder, not a resample.
         assert_eq!(upsampled_from(48_000, 16_000.0), None);
+    }
+
+    // ── Clipping ──────────────────────────────────────────────────────────
+
+    /// A mastered track touches full scale on thousands of transients and
+    /// sounds perfect. Counting those as clipping would flag every loud record
+    /// ever made.
+    #[test]
+    fn isolated_peaks_at_full_scale_are_not_clipping() {
+        let mut samples = vec![0.2f32; 10_000];
+        for i in (0..10_000).step_by(50) {
+            samples[i] = 1.0;
+        }
+        let c = measured(&samples).clipping;
+        assert_eq!(c.percent, 0.0);
+        assert_eq!(c.longest_run, 1);
+    }
+
+    /// A run is a waveform with its top cut off, which is the thing worth
+    /// reporting.
+    #[test]
+    fn a_flat_topped_waveform_is_clipping() {
+        let mut samples = vec![0.2f32; 10_000];
+        samples[100..140].fill(1.0);
+        samples[500..520].fill(-1.0);
+
+        let c = measured(&samples).clipping;
+        assert_eq!(c.longest_run, 40, "the longest run, in samples");
+        // Sixty of ten thousand samples.
+        assert!((c.percent - 0.6).abs() < 0.01, "got {}", c.percent);
+    }
+
+    #[test]
+    fn a_clean_file_reports_nothing() {
+        let c = measured(&shaped(None)).clipping;
+        assert_eq!(c.percent, 0.0);
+    }
+
+    /// Decoders land a hair under 1.0 after resampling or a gain stage, and an
+    /// exact comparison would hide every clipped sample behind a rounding error.
+    #[test]
+    fn samples_just_under_full_scale_still_count() {
+        let mut samples = vec![0.2f32; 1000];
+        samples[10..30].fill(0.999);
+        assert_eq!(measured(&samples).clipping.longest_run, 20);
     }
 
     // ── Refusing to guess ─────────────────────────────────────────────────
