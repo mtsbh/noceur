@@ -12,7 +12,7 @@ license.workspace = true
 #
 # The Tauri CLI turns this on for `tauri build`; a plain `cargo build --release`
 # does not, so every release build here has to pass `--features custom-protocol`.
-# See `docs/superpowers/notes/building.md`.
+# See `docs/building.md`.
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]

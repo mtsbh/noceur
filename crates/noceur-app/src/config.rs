@@ -35,6 +35,13 @@ pub struct Config {
     /// `tauri.conf.json` a first-run default rather than a permanent one.
     #[serde(default)]
     pub window: Option<crate::placement::Placement>,
+    /// Buttons the user has defined.
+    ///
+    /// Full of one person's drive letters and installed programs, which is
+    /// exactly why they live here — beside the executable, never in the
+    /// repository.
+    #[serde(default)]
+    pub actions: Vec<crate::actions::Action>,
 }
 
 fn yes() -> bool {
@@ -47,6 +54,7 @@ impl Default for Config {
             discogs_token: String::new(),
             preserve_dates: true,
             window: None,
+            actions: Vec::new(),
         }
     }
 }

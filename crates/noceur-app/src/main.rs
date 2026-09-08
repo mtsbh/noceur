@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod actions;
 mod art;
 mod autotag;
 mod cleanup;
@@ -140,6 +141,10 @@ fn main() {
             config::preserve_dates,
             config::set_preserve_dates,
             quality::analyse_quality,
+            actions::actions,
+            actions::set_actions,
+            actions::preview_action,
+            actions::run_action,
             cleanup::cleanup_rules,
             cleanup::preview_cleanup,
             cleanup::apply_cleanup,
