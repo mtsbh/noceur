@@ -9,6 +9,7 @@ tempfile = "3"
 # Only for the ignored real-library check, which needs to know what each file
 # claims before it can say whether the claim is true.
 lofty = "0.22"
+noceur-tags = { path = "../noceur-tags" }
 
 [dependencies]
 thiserror.workspace = true

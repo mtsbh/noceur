@@ -218,6 +218,16 @@ export function BoltIcon() {
   );
 }
 
+/** Duplicates: two overlapping squares, the ordinary sign for a copy. */
+export function CopiesIcon() {
+  return (
+    <Icon>
+      <rect x="2.4" y="2.4" width="8.2" height="8.2" rx="1.1" />
+      <path d="M5.4 13.6h7.1a1.1 1.1 0 0 0 1.1-1.1V5.4" />
+    </Icon>
+  );
+}
+
 export function StarIcon() {
   return (
     <Icon>

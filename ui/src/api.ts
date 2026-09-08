@@ -607,6 +607,44 @@ export function analyseQuality(fileIds: number[]): Promise<QualityRow[]> {
   return invoke<QualityRow[]>("analyse_quality", { fileIds });
 }
 
+/** One file in a set of copies. */
+export type DuplicateCopy = {
+  fileId: number;
+  name: string;
+  folder: string;
+  size: string;
+  modified: string;
+};
+
+/** A set of files holding identical audio. */
+export type DuplicateGroup = {
+  hash: string;
+  files: DuplicateCopy[];
+  /** What keeping one of them would give back. */
+  wasted: string;
+};
+
+/**
+ * Measures what a batch of files is, and remembers it.
+ *
+ * A full decode each, so the caller walks its selection a few at a time. Files
+ * already measured are skipped — their bytes cannot have changed without
+ * becoming different content.
+ */
+export function identify(fileIds: number[]): Promise<number> {
+  return invoke<number>("identify", { fileIds });
+}
+
+/**
+ * Every set of measured files that hold the same audio.
+ *
+ * Files nobody has measured are absent rather than reported as unique: not
+ * knowing and knowing there is no copy are different answers.
+ */
+export function duplicates(scopes: string[]): Promise<DuplicateGroup[]> {
+  return invoke<DuplicateGroup[]>("duplicates", { scopes });
+}
+
 /** What a user-defined action does. */
 export type ActionKind = "tag" | "rename" | "open" | "url" | "copy" | "move";
 

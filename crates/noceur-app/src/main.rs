@@ -16,6 +16,7 @@ mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod identity;
 mod placement;
 mod quality;
 mod renamer;
@@ -141,6 +142,8 @@ fn main() {
             config::preserve_dates,
             config::set_preserve_dates,
             quality::analyse_quality,
+            identity::identify,
+            identity::duplicates,
             actions::actions,
             actions::set_actions,
             actions::preview_action,

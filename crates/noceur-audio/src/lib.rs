@@ -6,6 +6,7 @@
 
 pub mod biquad;
 pub mod fft;
+pub mod identity;
 pub mod quality;
 pub mod source;
 pub mod spectrogram;

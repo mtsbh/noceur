@@ -1,6 +1,7 @@
 import { For } from "solid-js";
 import {
   BroomIcon,
+  CopiesIcon,
   GlobeIcon,
   ImageIcon,
   RenameIcon,
@@ -17,6 +18,7 @@ export type ActionId =
   | "rename"
   | "clean"
   | "quality"
+  | "copies"
   | "quick";
 
 /**
@@ -38,6 +40,7 @@ const BUTTONS: {
   { id: "rename", label: "Rename", icon: RenameIcon },
   { id: "clean", label: "Clean up", icon: BroomIcon },
   { id: "quality", label: "Check quality", icon: SpectrumIcon },
+  { id: "copies", label: "Find duplicates", icon: CopiesIcon },
   { id: "quick", label: "Quick tag", icon: StarIcon },
 ];
 

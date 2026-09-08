@@ -55,6 +55,7 @@ import Toolbar, { type ActionId } from "./Toolbar";
 import Quality from "./Quality";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
+import Duplicates from "./Duplicates";
 import Titlebar from "./Titlebar";
 import { BoltIcon, PigIcon, SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
@@ -266,6 +267,9 @@ export default function App() {
       case "quality":
         setChecking(ids);
         break;
+      case "copies":
+        setComparing(ids);
+        break;
     }
   }
 
@@ -305,6 +309,8 @@ export default function App() {
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
   const [checking, setChecking] = createSignal<number[] | null>(null);
+  /** Files the duplicate finder is measuring, or null when it is closed. */
+  const [comparing, setComparing] = createSignal<number[] | null>(null);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -806,6 +812,14 @@ export default function App() {
           : "Check quality…",
         disabled: row.kind !== 1,
         run: () => setChecking([...selection()]),
+      },
+      {
+        kind: "item",
+        label: many
+          ? `Find duplicates of ${selection().size} tracks…`
+          : "Find duplicates…",
+        disabled: row.kind !== 1,
+        run: () => setComparing([...selection()]),
       },
       {
         kind: "item",
@@ -1520,6 +1534,18 @@ export default function App() {
 
       <Show when={checking()}>
         {(ids) => <Quality fileIds={ids()} onClose={() => setChecking(null)} />}
+      </Show>
+
+      <Show when={comparing()}>
+        {(ids) => (
+          <Duplicates
+            fileIds={ids()}
+            // Reported across the pinned folders as well as this one: a copy
+            // matters precisely when it is somewhere else.
+            scopes={[...storedPins(), current()]}
+            onClose={() => setComparing(null)}
+          />
+        )}
       </Show>
 
       <Show when={matching()}>

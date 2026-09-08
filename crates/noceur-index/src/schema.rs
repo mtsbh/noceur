@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 6;
+pub const SCHEMA_VERSION: i32 = 7;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -183,4 +183,21 @@ CREATE TABLE spectrogram (
     data       BLOB,                         -- NULL when miss = 1
     miss       INTEGER NOT NULL DEFAULT 0
 );
+"#;
+
+/// What a track is, regardless of its tags.
+///
+/// A side table rather than the `audio_hash` column reserved for it in V1: that
+/// column is `UNIQUE`, which is precisely wrong for a value copies are supposed
+/// to share. Rebuilding `content` to drop the constraint would mean dropping a
+/// table four others cascade from, with foreign keys on, to change one index —
+/// so the reserved column stays unused and this sits beside the thumbnail,
+/// envelope and spectrogram caches, keyed the same way they are.
+const V7: &str = r#"
+CREATE TABLE audio_identity (
+    content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    hash       TEXT NOT NULL
+);
+
+CREATE INDEX idx_audio_identity_hash ON audio_identity(hash);
 "#;

@@ -2346,6 +2346,58 @@ label.artoffer:hover {
   color: var(--qual-bad);
 }
 
+/* ── Duplicates ────────────────────────────────────────────────────────────
+   Grouped rather than listed: the useful unit is the recording, and which of
+   its copies to keep is a comparison between them. */
+.dupgroup {
+  margin-bottom: 12px;
+  border-left: 2px solid var(--hair2);
+  padding-left: 9px;
+}
+.duphead {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-bottom: 3px;
+}
+.duphash {
+  color: var(--fg4);
+  font-size: 10px;
+}
+.duphead .sethint {
+  margin: 0;
+}
+.duprow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) 74px 118px;
+  gap: 9px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--hair);
+  cursor: pointer;
+}
+.duprow:hover {
+  background: var(--hover);
+}
+.dupname,
+.dupfolder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dupname {
+  color: var(--fg);
+}
+.dupfolder {
+  color: var(--fg3);
+  font-size: 11px;
+}
+.dupsize,
+.dupdate {
+  color: var(--fg2);
+  text-align: right;
+}
+
 /* ── Clean up ──────────────────────────────────────────────────────────────
    Shares the rename dialog's shell and its before-and-after list, because it
    is the same promise: nothing is written until every result has been seen. */
