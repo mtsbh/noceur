@@ -7,6 +7,7 @@ pub mod quickkey;
 pub mod scan;
 pub mod schema;
 pub mod search;
+pub mod spectrogram;
 pub mod thumb;
 pub mod volume;
 

@@ -434,6 +434,7 @@ pub async fn play(state: State<'_, AppState>, file_id: i64) -> Result<Transport,
         np.bpm = format::bpm(tags.bpm, format::BpmSource::Tag);
         np.key = format::key(tags.key_norm, tags.key_tag.as_deref(), KeyNotation::Camelot);
         np.key_norm = tags.key_norm;
+        np.sample_rate = tags.sample_rate.unwrap_or(0).max(0) as u32;
     }
 
     // Waited for, because `load` only hands the path to the audio thread. Until
@@ -537,6 +538,7 @@ fn transport(state: &AppState) -> Transport {
         },
         error: p.error.unwrap_or_default(),
         file_id: if loaded { np.file_id } else { 0 },
+        sample_rate: if loaded { np.sample_rate } else { 0 },
         artist: if loaded { np.artist } else { String::new() },
         title: if loaded { np.title } else { String::new() },
         bpm: if loaded { np.bpm } else { String::new() },
@@ -883,6 +885,68 @@ fn open_in_browser(url: &str) -> Result<(), String> {
 #[cfg(not(windows))]
 fn open_in_browser(_url: &str) -> Result<(), String> {
     Err("opening links is only implemented on Windows".into())
+}
+
+/// The spectrogram of one file: time across, frequency up, loudness as a byte.
+///
+/// Cached like the envelope and for stronger reasons — measuring one is a full
+/// decode plus several thousand transforms. Unlike the envelope it is never
+/// computed during a scan, only for a track somebody has asked to look at.
+///
+/// Returns an empty vector rather than an error when there is nothing to draw,
+/// which is what a directory, an unreadable file and a file with no content row
+/// all amount to from the front end's side.
+#[tauri::command]
+pub async fn spectrogram(state: State<'_, AppState>, file_id: i64) -> Result<Vec<u8>, String> {
+    let db = state.db.clone();
+
+    // Three short holds of the lock rather than one long one, exactly as the
+    // envelope does: measuring decodes the whole track, and holding the index
+    // across that would freeze every listing and thumbnail for the duration.
+    tauri::async_runtime::spawn_blocking(move || {
+        let columns = noceur_audio::spectrogram::COLUMNS;
+        let bands = noceur_audio::spectrogram::BANDS;
+
+        let found = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            noceur_index::thumb::locate(&db, file_id).map_err(|e| e.to_string())?
+        };
+        let Some(found) = found.filter(|f| f.kind == 1) else {
+            return Ok(Vec::new());
+        };
+
+        // Without a linked content there is nowhere to cache the result, so it
+        // is measured and handed back uncached rather than refused.
+        let Some(content_id) = found.content_id else {
+            return Ok(
+                noceur_audio::spectrogram::spectrogram(&found.path, columns, bands)
+                    .unwrap_or_default(),
+            );
+        };
+
+        {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            match noceur_index::spectrogram::get(&db, content_id, columns, bands)
+                .map_err(|e| e.to_string())?
+            {
+                noceur_index::spectrogram::Cached::Grid(data) => return Ok(data),
+                noceur_index::spectrogram::Cached::Miss => return Ok(Vec::new()),
+                noceur_index::spectrogram::Cached::Unknown => {}
+            }
+        }
+
+        let measured = noceur_audio::spectrogram::spectrogram(&found.path, columns, bands).ok();
+
+        {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            noceur_index::spectrogram::put(&db, content_id, columns, bands, measured.as_deref())
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(measured.unwrap_or_default())
+    })
+    .await
+    .map_err(|e| format!("spectrogram task failed: {e}"))?
 }
 
 /// The amplitude envelope of one file, for the waveform.

@@ -222,6 +222,8 @@ pub struct Tags {
     pub bpm: Option<f64>,
     pub key_norm: Option<i64>,
     pub key_tag: Option<String>,
+    /// From the container rather than the tags, for the spectrogram's axis.
+    pub sample_rate: Option<i64>,
 }
 
 /// Reads the tags of one file.
@@ -235,8 +237,10 @@ pub fn tags_of(db: &Db, file_id: i64) -> Result<Tags, IndexError> {
     Ok(db
         .conn()
         .query_row(
-            "SELECT ct.artist, ct.title, ct.bpm_tag, ct.key_norm, ct.key_tag
+            "SELECT ct.artist, ct.title, ct.bpm_tag, ct.key_norm, ct.key_tag,
+                    c.sample_rate
              FROM file f
+             LEFT JOIN content     c  ON c.id  = f.content_id
              LEFT JOIN content_tag ct ON ct.content_id = f.content_id
              WHERE f.id = ?1",
             params![file_id],
@@ -247,6 +251,7 @@ pub fn tags_of(db: &Db, file_id: i64) -> Result<Tags, IndexError> {
                     bpm: r.get(2)?,
                     key_norm: r.get(3)?,
                     key_tag: r.get(4)?,
+                    sample_rate: r.get(5)?,
                 })
             },
         )

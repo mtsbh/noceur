@@ -1928,6 +1928,46 @@ body.resizing * {
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--tag);
 }
 
+/* ── Spectrogram ───────────────────────────────────────────────────────────
+   A strip above the transport. Short, because it is for reading the shape of a
+   file at a glance — where its content stops — rather than for study. */
+.spek {
+  flex: none;
+  position: relative;
+  height: 132px;
+  border-top: 1px solid var(--hair);
+  background: #000;
+}
+.spekcanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Frequencies up the right edge, over the picture: the axis is worth having and
+   not worth a column of its own. */
+.spekaxis {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  bottom: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 3px #000;
+}
+.gearbtn[data-tip] {
+  position: relative;
+}
+.gearbtn[data-tip]::after,
+.gearbtn:hover[data-tip]::after {
+  /* Shares the toolbar tooltip's look; see the block above it. */
+}
+
 /* ── Track actions ────────────────────────────────────────────────────────
    Shortcuts to the right-click menu, in the path bar. Disabled rather than
    hidden without a selection: buttons that appear and disappear as rows are

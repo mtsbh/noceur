@@ -17,6 +17,7 @@ import {
   parentOf,
   thumbUrl,
   probeBatch,
+  spectrogram,
   play,
   transportCmd,
   reveal,
@@ -48,8 +49,9 @@ import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
 import Toolbar, { type ActionId } from "./Toolbar";
 import Quality from "./Quality";
+import Spectrogram from "./Spectrogram";
 import Titlebar from "./Titlebar";
-import { SettingsIcon } from "./icons";
+import { SettingsIcon, SpectrumIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import {
   DEFAULT_COLUMNS,
@@ -280,6 +282,9 @@ export default function App() {
   const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [quickOpen, setQuickOpen] = createSignal(false);
+  /** Whether the spectrogram strip is showing. */
+  const [spekOpen, setSpekOpen] = createSignal(false);
+  const [spek, setSpek] = createSignal<Uint8Array>(new Uint8Array());
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
@@ -471,6 +476,26 @@ export default function App() {
 
   const [finding, setFinding] = createSignal(false);
   const [transport, setTransport] = createSignal<TransportState | null>(null);
+
+  // Measured only while the strip is open — a full decode per track is not
+  // something to do for a panel nobody is looking at. Keyed on the file id
+  // rather than on the transport, which is replaced ten times a second while
+  // something plays.
+  createEffect<string>((previous) => {
+    const id = spekOpen() ? (transport()?.fileId ?? 0) : 0;
+    const key = `${spekOpen()}:${id}`;
+    if (key === previous) return key;
+
+    setSpek(new Uint8Array());
+    if (id > 0) {
+      spectrogram(id)
+        .then((grid) => {
+          if ((transport()?.fileId ?? 0) === id) setSpek(grid);
+        })
+        .catch(() => {});
+    }
+    return key;
+  }, "");
 
   /** Loads a row into the player. Non-audio rows have nothing to play. */
   function playRow(row: RowDisplay) {
@@ -1158,6 +1183,14 @@ export default function App() {
           </For>
         </div>
         <button
+          class={`gearbtn ${spekOpen() ? "on" : ""}`}
+          data-tip="Spectrogram of the playing track"
+          aria-label="Spectrogram"
+          onClick={() => setSpekOpen((open) => !open)}
+        >
+          <SpectrumIcon />
+        </button>
+        <button
           class={`gearbtn ${settingsOpen() ? "on" : ""}`}
           title="Settings"
           onClick={() => setSettingsOpen((open) => !open)}
@@ -1460,6 +1493,18 @@ export default function App() {
           columns={columns()}
           onToggleColumn={(key: string) => toggleColumn(key as SortColumn)}
           onClose={() => setSettingsOpen(false)}
+        />
+      </Show>
+
+      <Show when={spekOpen()}>
+        <Spectrogram
+          grid={spek()}
+          progress={
+            (transport()?.durationMs ?? 0) > 0
+              ? (transport()!.positionMs ?? 0) / transport()!.durationMs
+              : 0
+          }
+          sampleRate={transport()?.sampleRate ?? 0}
         />
       </Show>
 

@@ -125,6 +125,7 @@ fn main() {
             commands::shell_menu,
             commands::open_url,
             commands::envelope,
+            commands::spectrogram,
             tagedit::read_tags,
             tagedit::write_tags,
             tagedit::quick_fields,

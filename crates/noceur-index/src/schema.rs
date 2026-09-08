@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 5;
+pub const SCHEMA_VERSION: i32 = 6;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -161,6 +161,25 @@ const V5: &str = r#"
 CREATE TABLE envelope (
     content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
     buckets    INTEGER NOT NULL,
+    data       BLOB,                         -- NULL when miss = 1
+    miss       INTEGER NOT NULL DEFAULT 0
+);
+"#;
+
+/// Spectrogram cache.
+///
+/// Keyed by content and by shape, like the envelope beside it and for the same
+/// reason: a grid stored at one size cannot be drawn at another without
+/// inventing detail, so a build that changes either number must miss rather than
+/// stretch what it finds.
+///
+/// Far larger than an envelope — sixty kilobytes against eight — so this is only
+/// ever written for tracks somebody actually looked at, never during a scan.
+const V6: &str = r#"
+CREATE TABLE spectrogram (
+    content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    columns    INTEGER NOT NULL,
+    bands      INTEGER NOT NULL,
     data       BLOB,                         -- NULL when miss = 1
     miss       INTEGER NOT NULL DEFAULT 0
 );

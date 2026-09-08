@@ -8,6 +8,7 @@ pub mod biquad;
 pub mod fft;
 pub mod quality;
 pub mod source;
+pub mod spectrogram;
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};

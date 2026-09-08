@@ -226,6 +226,8 @@ export type Transport = {
   error: string;
   /** The row being played, so the bar can show its art. 0 when nothing is loaded. */
   fileId: number;
+  /** Of the loaded track, for the spectrogram's frequency axis. 0 when unknown. */
+  sampleRate: number;
   artist: string;
   title: string;
   bpm: string;
@@ -561,6 +563,18 @@ export function preserveDates(): Promise<boolean> {
 
 export function setPreserveDates(keep: boolean): Promise<boolean> {
   return invoke<boolean>("set_preserve_dates", { keep });
+}
+
+/**
+ * The spectrogram of a track: `columns * 128` bytes, column by column.
+ *
+ * Empty when there is nothing to draw. Measuring one is a full decode, so this
+ * is cached against the file's content and only ever asked for on demand.
+ */
+export function spectrogram(fileId: number): Promise<Uint8Array> {
+  return invoke<number[]>("spectrogram", { fileId }).then(
+    (bytes) => new Uint8Array(bytes),
+  );
 }
 
 /** What one file turned out to be. */

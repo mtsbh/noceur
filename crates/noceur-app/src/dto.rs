@@ -149,6 +149,8 @@ pub struct Transport {
     pub error: String,
     /// The row being played, so the bar can show its art and tags.
     pub file_id: i64,
+    /// Of the loaded track, for the spectrogram's frequency axis. 0 when unknown.
+    pub sample_rate: u32,
     pub artist: String,
     pub title: String,
     pub bpm: String,

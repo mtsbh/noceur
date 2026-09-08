@@ -31,6 +31,8 @@ pub struct NowPlaying {
     pub bpm: String,
     pub key: String,
     pub key_norm: Option<i64>,
+    /// Of the loaded track, so the spectrogram can label its frequency axis.
+    pub sample_rate: u32,
     /// 0..100. Held here because the audio thread has no reason to report it
     /// back and the UI needs the slider to survive a reload.
     pub volume: u32,
