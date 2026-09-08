@@ -15,6 +15,7 @@ mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod placement;
 mod quality;
 mod renamer;
 mod shellmenu;
@@ -71,6 +72,25 @@ fn main() {
 
     if let Err(e) = tauri::Builder::default()
         .manage(app_state)
+        // The window opens at whatever size it was closed at. Restored in
+        // `setup` rather than through the configuration, because the saved
+        // position has to be checked against the monitors that are actually
+        // attached before it is used.
+        .setup(|app| {
+            use tauri::Manager;
+            if let Some(view) = app.get_webview_window("main") {
+                placement::restore(&view.as_ref().window());
+            }
+            Ok(())
+        })
+        // Saved on the way out rather than on every drag: a window being moved
+        // across a screen would otherwise write the config file a hundred times
+        // on the way.
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                placement::remember(window);
+            }
+        })
         // Cover art is served as images the web view fetches by URL rather than
         // as command results, so scrolling does not push megabytes of base64
         // through the IPC bridge. `register_asynchronous_*` keeps the decode off

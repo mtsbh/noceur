@@ -29,6 +29,12 @@ pub struct Config {
     /// reverse is not available once the dates have moved.
     #[serde(default = "yes")]
     pub preserve_dates: bool,
+    /// Where the window was when it was last closed.
+    ///
+    /// `None` until it has been closed once, which is what makes the size in
+    /// `tauri.conf.json` a first-run default rather than a permanent one.
+    #[serde(default)]
+    pub window: Option<crate::placement::Placement>,
 }
 
 fn yes() -> bool {
@@ -40,6 +46,7 @@ impl Default for Config {
         Config {
             discogs_token: String::new(),
             preserve_dates: true,
+            window: None,
         }
     }
 }

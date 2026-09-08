@@ -1032,7 +1032,8 @@ body.resizing * {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 340px;
+  width: 400px;
+  max-width: 100vw;
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -1669,11 +1670,26 @@ body.resizing * {
   margin-top: 4px;
   font-size: 10px;
 }
-.setquickname {
-  max-width: 110px;
-}
+/* Both shrink rather than overflow: this row also carries a checkbox, and a
+   fixed width for each turned the labels into "Energ" and "ENERG". */
+.setquickname,
 .setquickfield {
-  max-width: 96px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* The swatches sit on the row below, beside the key list. They were on the
+   line with the two inputs and left neither of them room to show a word. */
+.setquick .swatches {
+  margin-left: 0;
+}
+.setquickfoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+}
+.setquickfoot .sethint {
+  margin: 0;
 }
 .sethint code {
   color: var(--fg2);

@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { RATING_FIELD, quickFields, writeTags } from "./api";
-import { QUICK_KEYS, colourOf, type QuickGroup } from "./settings";
+import { QUICK_KEYS, colourOf, valueColour, type QuickGroup } from "./settings";
 
 /**
  * How long after the last keypress the changes are written.
@@ -207,9 +207,10 @@ export default function QuickTag(props: {
           </div>
         </Show>
 
-        {/* A row's colour is handed down as a custom property rather than as a
-            class, so a palette entry stays one place rather than seven CSS
-            rules that have to be kept in step with it. */}
+        {/* Colours are handed down as custom properties rather than as classes,
+            so a palette entry stays one place rather than seven CSS rules that
+            have to be kept in step with it. Each value gets its own, because a
+            row where every value looks alike is a row you have to read. */}
         <For each={props.groups}>
           {(g, row) => (
             <div
@@ -224,6 +225,10 @@ export default function QuickTag(props: {
                 {(value, i) => (
                   <button
                     class={`quickbtn ${isOn(g, value) ? "on" : ""}`}
+                    style={{
+                      "--tag": valueColour(g, i()).line,
+                      "--tag-fill": valueColour(g, i()).fill,
+                    }}
                     disabled={props.fileId <= 0}
                     onClick={() => toggle(g, value)}
                     title={`${g.field} = ${value}`}

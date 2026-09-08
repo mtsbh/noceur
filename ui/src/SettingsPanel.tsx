@@ -271,22 +271,6 @@ export default function Settings(props: {
                       <span>many</span>
                     </label>
 
-                    {/* Seven swatches rather than a colour picker: these are
-                        chosen to stay readable on this theme, and the point of
-                        marking a row is telling it apart at a glance. */}
-                    <div class="swatches" role="group" aria-label="Row colour">
-                      <For each={TAG_COLOURS}>
-                        {(c) => (
-                          <button
-                            class={`swatch ${g.colour === c.name ? "on" : ""}`}
-                            style={{ "--tag": c.line }}
-                            data-tip={c.label}
-                            aria-label={c.label}
-                            onClick={() => editGroup(row(), { colour: c.name })}
-                          />
-                        )}
-                      </For>
-                    </div>
                   </div>
                   <div class="setrow">
                     <input
@@ -304,6 +288,27 @@ export default function Settings(props: {
                       }
                     />
                   </div>
+                  {/* On its own line. These were beside the two text boxes and
+                      left neither of them room to show a whole word. */}
+                  <div class="setquickfoot">
+                    <div class="swatches" role="group" aria-label="Row colours">
+                      <For each={TAG_COLOURS}>
+                        {(c) => (
+                          <button
+                            class={`swatch ${g.colour === c.name ? "on" : ""}`}
+                            style={{ "--tag": c.line }}
+                            data-tip={`Start at ${c.label.toLowerCase()}`}
+                            aria-label={c.label}
+                            onClick={() => editGroup(row(), { colour: c.name })}
+                          />
+                        )}
+                      </For>
+                    </div>
+                    <span class="sethint">
+                      each value takes the next colour along
+                    </span>
+                  </div>
+
                   <p class="sethint">
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}
                     <button

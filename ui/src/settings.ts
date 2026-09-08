@@ -26,7 +26,14 @@ export type QuickGroup = {
   values: string[];
   /** Whether a track can carry several of these at once. */
   multi: boolean;
-  /** Which colour this row is marked in, or absent for the app's own accent. */
+  /**
+   * Where this row's colours start.
+   *
+   * Each value takes the next colour along, so a row of six values is six
+   * different colours rather than six of the same one — telling them apart at a
+   * glance is the entire reason for colouring them. This picks which colour the
+   * row begins at, so two rows need not look alike.
+   */
   colour?: ColourName;
 };
 
@@ -64,9 +71,24 @@ export const TAG_COLOURS: {
   { name: "grey", label: "Grey", line: "#9aa0a6", fill: "rgba(154, 160, 166, 0.16)" },
 ];
 
-/** The palette entry for a name, or the accent when there is none. */
+/** The palette entry for a name, or the first when there is none. */
 export function colourOf(name?: ColourName) {
   return TAG_COLOURS.find((c) => c.name === name) ?? TAG_COLOURS[0];
+}
+
+/**
+ * The colour of one value in a row.
+ *
+ * Stepped from the row's own starting colour and wrapped, so every value in a
+ * row differs from its neighbours and a row with more values than the palette
+ * has repeats rather than running out.
+ */
+export function valueColour(group: QuickGroup, index: number) {
+  const start = Math.max(
+    0,
+    TAG_COLOURS.findIndex((c) => c.name === group.colour),
+  );
+  return TAG_COLOURS[(start + index) % TAG_COLOURS.length];
 }
 
 export type Settings = {
