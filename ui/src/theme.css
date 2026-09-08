@@ -1677,24 +1677,48 @@ body.resizing * {
   flex: 1 1 0;
   min-width: 0;
 }
-/* One line per value: its name in its own colour, then the palette. */
-.setquick .swatches {
-  margin-left: auto;
-}
-.setvaluerow {
+/* The values as chips, in the colours they will actually be. One row instead
+   of a strip of seven swatches per value, which turned eleven values into
+   seventy seven coloured dots. */
+.setchips {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
 }
-.setvaluename {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.setchipwrap {
+  position: relative;
+}
+.setchip {
+  padding: 2px 8px;
+  border: 1px solid var(--tag);
+  border-radius: 4px;
+  background: var(--tag-fill);
   color: var(--tag);
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
+}
+.setchip:hover {
+  filter: brightness(1.25);
+}
+/* The palette, under the chip that opened it. */
+.chippop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 5px);
+  left: 0;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--hair2);
+  border-radius: 5px;
+  background: var(--raise);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.chippop .swatch {
+  width: 15px;
+  height: 15px;
 }
 .sethint code {
   color: var(--fg2);
@@ -1940,6 +1964,7 @@ body.resizing * {
    its tooltip — that is exactly when the reason matters. */
 .toolbtn[data-tip]::after,
 .setinfo[data-tip]::after,
+.setchip[data-tip]::after,
 .swatch[data-tip]::after {
   content: attr(data-tip);
   position: absolute;
@@ -1964,6 +1989,7 @@ body.resizing * {
 }
 .toolbtn:hover[data-tip]::after,
 .setinfo:hover[data-tip]::after,
+.setchip:hover[data-tip]::after,
 .swatch:hover[data-tip]::after {
   opacity: 1;
   visibility: visible;
@@ -1978,6 +2004,7 @@ body.resizing * {
 }
 /* These need the positioning context their tooltip is placed against. */
 .setinfo,
+.setchip,
 .swatch {
   position: relative;
 }
@@ -1985,6 +2012,7 @@ body.resizing * {
    hanging over a dialog it just launched is the browser's habit, not ours. */
 .toolbtn:active[data-tip]::after,
 .setinfo:active[data-tip]::after,
+.setchip:active[data-tip]::after,
 .swatch:active[data-tip]::after {
   opacity: 0;
   visibility: hidden;

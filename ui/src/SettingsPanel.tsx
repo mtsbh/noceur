@@ -83,7 +83,8 @@ export default function Settings(props: {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        props.onClose();
+        if (picking()) setPicking(null);
+        else props.onClose();
       }
     };
     window.addEventListener("keydown", onKey, true);
@@ -100,6 +101,11 @@ export default function Settings(props: {
       ),
     });
   }
+
+  /** The value whose colour is being chosen, or null when none is. */
+  const [picking, setPicking] = createSignal<{ row: number; at: number } | null>(
+    null,
+  );
 
   const [keepDates, setKeepDates] = createSignal(true);
 
@@ -128,7 +134,16 @@ export default function Settings(props: {
           </button>
         </header>
 
-        <div class="setbody">
+        {/* A click anywhere else puts the palette away, which is what anyone
+            expects of something that opened over the page. */}
+        <div
+          class="setbody"
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest(".setchipwrap")) {
+              setPicking(null);
+            }
+          }}
+        >
           <Section
             title="Waveform"
             info={
@@ -292,47 +307,66 @@ export default function Settings(props: {
                     />
                   </div>
 
-                  {/* A colour per value, chosen rather than assigned: which
-                      colour means "dark" is a judgement only the person tagging
-                      can make. */}
-                  <For each={g.values}>
-                    {(entry, at) => (
-                      <div class="setvaluerow">
-                        <span
-                          class="setvaluename"
-                          style={{ "--tag": valueColour(entry, at()).line }}
-                          title={entry.value}
-                        >
-                          {entry.value}
+                  {/* The values as they will actually look, one row of them.
+                      Clicking one opens the palette under it — a chip that is
+                      already the colour it sets needs no label saying so, and a
+                      swatch strip per value turned eleven values into seventy
+                      seven coloured dots. */}
+                  <div class="setchips">
+                    <For each={g.values}>
+                      {(entry, at) => (
+                        <span class="setchipwrap">
+                          <button
+                            class="setchip"
+                            style={{
+                              "--tag": valueColour(entry, at()).line,
+                              "--tag-fill": valueColour(entry, at()).fill,
+                            }}
+                            data-tip="Change colour"
+                            onClick={() =>
+                              setPicking(
+                                picking()?.row === row() && picking()?.at === at()
+                                  ? null
+                                  : { row: row(), at: at() },
+                              )
+                            }
+                          >
+                            {entry.value}
+                          </button>
+
+                          <Show
+                            when={
+                              picking()?.row === row() && picking()?.at === at()
+                            }
+                          >
+                            <span class="chippop">
+                              <For each={TAG_COLOURS}>
+                                {(c) => (
+                                  <button
+                                    class={`swatch ${
+                                      valueColour(entry, at()).name === c.name
+                                        ? "on"
+                                        : ""
+                                    }`}
+                                    style={{ "--tag": c.line }}
+                                    aria-label={c.label}
+                                    onClick={() => {
+                                      editGroup(row(), {
+                                        values: g.values.map((v, i) =>
+                                          i === at() ? { ...v, colour: c.name } : v,
+                                        ),
+                                      });
+                                      setPicking(null);
+                                    }}
+                                  />
+                                )}
+                              </For>
+                            </span>
+                          </Show>
                         </span>
-                        <div
-                          class="swatches"
-                          role="group"
-                          aria-label={`Colour for ${entry.value}`}
-                        >
-                          <For each={TAG_COLOURS}>
-                            {(c) => (
-                              <button
-                                class={`swatch ${
-                                  valueColour(entry, at()).name === c.name ? "on" : ""
-                                }`}
-                                style={{ "--tag": c.line }}
-                                data-tip={c.label}
-                                aria-label={`${entry.value}: ${c.label}`}
-                                onClick={() =>
-                                  editGroup(row(), {
-                                    values: g.values.map((v, i) =>
-                                      i === at() ? { ...v, colour: c.name } : v,
-                                    ),
-                                  })
-                                }
-                              />
-                            )}
-                          </For>
-                        </div>
-                      </div>
-                    )}
-                  </For>
+                      )}
+                    </For>
+                  </div>
 
                   <p class="sethint">
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}
