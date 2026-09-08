@@ -1953,6 +1953,7 @@ body.resizing * {
 .spekgrid {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 48px 1fr 62px;
   grid-template-rows: 1fr 15px;
@@ -1980,10 +1981,20 @@ body.resizing * {
   grid-row: 1;
   position: relative;
   min-width: 0;
+  /* Both are load-bearing. A grid item's min-content height is its content's,
+     and the canvas carries a `height` attribute set to the measured pixel
+     height — so without this the canvas raised the row, which raised the
+     measurement, which raised the canvas, and the strip grew until it pushed
+     the transport off the bottom of the window. */
+  min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--hair2);
   background: #000;
 }
+/* Out of flow entirely, so it can never contribute a height to anything. */
 .spekplot canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
