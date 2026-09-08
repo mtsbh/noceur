@@ -12,6 +12,8 @@ import {
   NEW_QUICK_GROUP,
   QUICK_KEYS,
   TAG_COLOURS,
+  valueColour,
+  valuesFrom,
   type QuickGroup,
   type Settings as S,
 } from "./settings";
@@ -272,42 +274,65 @@ export default function Settings(props: {
                     </label>
 
                   </div>
+                  {/* The whole list at once, because typing five values is far
+                      quicker than adding them one at a time. Colours survive an
+                      edit here by name, so reordering or inserting a value keeps
+                      the rest of the row as it was. */}
                   <div class="setrow">
                     <input
                       type="text"
-                      value={g.values.join(", ")}
+                      value={g.values.map((v) => v.value).join(", ")}
                       placeholder="comma separated values"
                       spellcheck={false}
                       onChange={(e) =>
                         editGroup(row(), {
-                          values: e.currentTarget.value
-                            .split(",")
-                            .map((v) => v.trim())
-                            .filter(Boolean),
+                          values: valuesFrom(e.currentTarget.value, g.values),
                         })
                       }
                     />
                   </div>
-                  {/* On its own line. These were beside the two text boxes and
-                      left neither of them room to show a whole word. */}
-                  <div class="setquickfoot">
-                    <div class="swatches" role="group" aria-label="Row colours">
-                      <For each={TAG_COLOURS}>
-                        {(c) => (
-                          <button
-                            class={`swatch ${g.colour === c.name ? "on" : ""}`}
-                            style={{ "--tag": c.line }}
-                            data-tip={`Start at ${c.label.toLowerCase()}`}
-                            aria-label={c.label}
-                            onClick={() => editGroup(row(), { colour: c.name })}
-                          />
-                        )}
-                      </For>
-                    </div>
-                    <span class="sethint">
-                      each value takes the next colour along
-                    </span>
-                  </div>
+
+                  {/* A colour per value, chosen rather than assigned: which
+                      colour means "dark" is a judgement only the person tagging
+                      can make. */}
+                  <For each={g.values}>
+                    {(entry, at) => (
+                      <div class="setvaluerow">
+                        <span
+                          class="setvaluename"
+                          style={{ "--tag": valueColour(entry, at()).line }}
+                          title={entry.value}
+                        >
+                          {entry.value}
+                        </span>
+                        <div
+                          class="swatches"
+                          role="group"
+                          aria-label={`Colour for ${entry.value}`}
+                        >
+                          <For each={TAG_COLOURS}>
+                            {(c) => (
+                              <button
+                                class={`swatch ${
+                                  valueColour(entry, at()).name === c.name ? "on" : ""
+                                }`}
+                                style={{ "--tag": c.line }}
+                                data-tip={c.label}
+                                aria-label={`${entry.value}: ${c.label}`}
+                                onClick={() =>
+                                  editGroup(row(), {
+                                    values: g.values.map((v, i) =>
+                                      i === at() ? { ...v, colour: c.name } : v,
+                                    ),
+                                  })
+                                }
+                              />
+                            )}
+                          </For>
+                        </div>
+                      </div>
+                    )}
+                  </For>
 
                   <p class="sethint">
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}

@@ -19,22 +19,26 @@ import type { WaveColour, WaveShape } from "./Waveform";
  * the first value takes the first key of the group's row — so adding a value
  * never silently rebinds the others past it.
  */
+/**
+ * One value, and the colour it is shown in.
+ *
+ * The colour belongs to the value rather than to the row. A row painted one
+ * colour makes six moods into six identical buttons, which is the opposite of
+ * the point — and which colour means "dark" is a judgement only the person
+ * tagging can make.
+ */
+export type QuickValue = {
+  value: string;
+  colour?: ColourName;
+};
+
 export type QuickGroup = {
   label: string;
   /** Tag field written to: `ENERGY`, `MOOD`, `GENRE`, or anything else. */
   field: string;
-  values: string[];
+  values: QuickValue[];
   /** Whether a track can carry several of these at once. */
   multi: boolean;
-  /**
-   * Where this row's colours start.
-   *
-   * Each value takes the next colour along, so a row of six values is six
-   * different colours rather than six of the same one — telling them apart at a
-   * glance is the entire reason for colouring them. This picks which colour the
-   * row begins at, so two rows need not look alike.
-   */
-  colour?: ColourName;
 };
 
 export type ColourName =
@@ -77,18 +81,39 @@ export function colourOf(name?: ColourName) {
 }
 
 /**
- * The colour of one value in a row.
+ * The colour one value is shown in.
  *
- * Stepped from the row's own starting colour and wrapped, so every value in a
- * row differs from its neighbours and a row with more values than the palette
- * has repeats rather than running out.
+ * Falls back to the palette position rather than to a single default, so values
+ * nobody has chosen a colour for still differ from each other — which is what
+ * makes the feature useful before it has been configured.
  */
-export function valueColour(group: QuickGroup, index: number) {
-  const start = Math.max(
-    0,
-    TAG_COLOURS.findIndex((c) => c.name === group.colour),
+export function valueColour(value: QuickValue, index: number) {
+  return (
+    TAG_COLOURS.find((c) => c.name === value.colour) ??
+    TAG_COLOURS[index % TAG_COLOURS.length]
   );
-  return TAG_COLOURS[(start + index) % TAG_COLOURS.length];
+}
+
+/**
+ * Rebuilds a row's values from the comma-separated box, keeping colours.
+ *
+ * Matched by name, so renaming a value loses its colour and reordering or
+ * inserting one does not. Typing the list is far quicker than adding values one
+ * at a time; having that discard every colour in the row would not be.
+ */
+export function valuesFrom(text: string, previous: QuickValue[]): QuickValue[] {
+  const kept = new Map(previous.map((v) => [v.value.toLowerCase(), v.colour]));
+
+  return text
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((value, index) => ({
+      value,
+      colour:
+        kept.get(value.toLowerCase()) ??
+        TAG_COLOURS[index % TAG_COLOURS.length].name,
+    }));
 }
 
 export type Settings = {
@@ -130,16 +155,29 @@ export const DEFAULT_QUICK: QuickGroup[] = [
   {
     label: "Energy",
     field: "ENERGY",
-    values: ["1", "2", "3", "4", "5"],
+    // Cool to warm, because energy has a direction and the colours should read
+    // in the same one.
+    values: [
+      { value: "1", colour: "blue" },
+      { value: "2", colour: "teal" },
+      { value: "3", colour: "green" },
+      { value: "4", colour: "amber" },
+      { value: "5", colour: "red" },
+    ],
     multi: false,
-    colour: "amber",
   },
   {
     label: "Mood",
     field: "MOOD",
-    values: ["Dark", "Rolling", "Peak", "Deep", "Uplifting", "Weird"],
+    values: [
+      { value: "Dark", colour: "violet" },
+      { value: "Rolling", colour: "blue" },
+      { value: "Peak", colour: "red" },
+      { value: "Deep", colour: "teal" },
+      { value: "Uplifting", colour: "amber" },
+      { value: "Weird", colour: "green" },
+    ],
     multi: true,
-    colour: "violet",
   },
 ];
 
@@ -174,7 +212,7 @@ export function loadSettings(): Settings {
         colour: colour && COLOURS.includes(colour) ? colour : DEFAULTS.wave.colour,
       },
       quick: Array.isArray(parsed.quick)
-        ? parsed.quick.filter(isGroup).map(withKnownColour)
+        ? parsed.quick.filter(isGroup).map(readGroup)
         : DEFAULT_QUICK,
       quickRating: parsed.quickRating !== false,
     };
@@ -185,29 +223,40 @@ export function loadSettings(): Settings {
 
 /** Guards a stored group, since this file is editable by hand. */
 function isGroup(g: unknown): g is QuickGroup {
-  const q = g as QuickGroup;
+  const q = g as { label?: unknown; field?: unknown; values?: unknown };
   return (
     Boolean(q) &&
     typeof q.label === "string" &&
     typeof q.field === "string" &&
-    Array.isArray(q.values) &&
-    q.values.every((v) => typeof v === "string")
+    Array.isArray(q.values)
   );
 }
 
 /**
- * Drops a colour that names nothing.
+ * Brings a stored row up to date.
  *
- * The row keeps its field and its values and simply loses the marking — a
- * palette that shrank between builds must not take somebody's tag vocabulary
- * with it.
+ * Values used to be plain strings and are now values with colours, so settings
+ * written by an earlier build arrive as an array of strings. They are converted
+ * rather than discarded: losing somebody's tag vocabulary to a change in how it
+ * is stored would be the worst possible reason to lose it.
+ *
+ * A colour naming nothing is dropped and the value keeps its place.
  */
-function withKnownColour(g: QuickGroup): QuickGroup {
-  if (g.colour && !TAG_COLOURS.some((c) => c.name === g.colour)) {
-    const { colour: _dropped, ...rest } = g;
-    return rest;
-  }
-  return g;
+function readGroup(g: QuickGroup): QuickGroup {
+  const values: QuickValue[] = (g.values as unknown[])
+    .map((v, index) => {
+      if (typeof v === "string") {
+        return { value: v, colour: TAG_COLOURS[index % TAG_COLOURS.length].name };
+      }
+      const entry = v as QuickValue;
+      if (!entry || typeof entry.value !== "string") return null;
+      return TAG_COLOURS.some((c) => c.name === entry.colour)
+        ? entry
+        : { value: entry.value };
+    })
+    .filter((v): v is QuickValue => v !== null);
+
+  return { ...g, values };
 }
 
 export function saveSettings(settings: Settings): void {

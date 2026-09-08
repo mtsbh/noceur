@@ -1677,19 +1677,24 @@ body.resizing * {
   flex: 1 1 0;
   min-width: 0;
 }
-/* The swatches sit on the row below, beside the key list. They were on the
-   line with the two inputs and left neither of them room to show a word. */
+/* One line per value: its name in its own colour, then the palette. */
 .setquick .swatches {
-  margin-left: 0;
+  margin-left: auto;
 }
-.setquickfoot {
+.setvaluerow {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 5px;
+  padding: 2px 0;
 }
-.setquickfoot .sethint {
-  margin: 0;
+.setvaluename {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tag);
+  font-size: 11px;
 }
 .sethint code {
   color: var(--fg2);

@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { RATING_FIELD, quickFields, writeTags } from "./api";
-import { QUICK_KEYS, colourOf, valueColour, type QuickGroup } from "./settings";
+import { QUICK_KEYS, valueColour, type QuickGroup } from "./settings";
 
 /**
  * How long after the last keypress the changes are written.
@@ -177,7 +177,7 @@ export default function QuickTag(props: {
           // while these do not: a digit means energy in this mode, not
           // something the list should act on.
           e.stopPropagation();
-          toggle(g, g.values[index]);
+          toggle(g, g.values[index].value);
         }
       });
     };
@@ -213,28 +213,22 @@ export default function QuickTag(props: {
             row where every value looks alike is a row you have to read. */}
         <For each={props.groups}>
           {(g, row) => (
-            <div
-              class="quickrow"
-              style={{
-                "--tag": colourOf(g.colour).line,
-                "--tag-fill": colourOf(g.colour).fill,
-              }}
-            >
+            <div class="quickrow">
               <span class="quicklabel">{g.label}</span>
               <For each={g.values}>
-                {(value, i) => (
+                {(entry, i) => (
                   <button
-                    class={`quickbtn ${isOn(g, value) ? "on" : ""}`}
+                    class={`quickbtn ${isOn(g, entry.value) ? "on" : ""}`}
                     style={{
-                      "--tag": valueColour(g, i()).line,
-                      "--tag-fill": valueColour(g, i()).fill,
+                      "--tag": valueColour(entry, i()).line,
+                      "--tag-fill": valueColour(entry, i()).fill,
                     }}
                     disabled={props.fileId <= 0}
-                    onClick={() => toggle(g, value)}
-                    title={`${g.field} = ${value}`}
+                    onClick={() => toggle(g, entry.value)}
+                    title={`${g.field} = ${entry.value}`}
                   >
                     <span class="quickkey">{QUICK_KEYS[row()]?.[i()] ?? ""}</span>
-                    {value}
+                    {entry.value}
                   </button>
                 )}
               </For>
