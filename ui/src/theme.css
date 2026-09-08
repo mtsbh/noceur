@@ -2111,6 +2111,18 @@ label.artoffer:hover {
 .qualmark.unreadable {
   background: var(--qual-meh);
 }
+/* Amber rather than red: a resampled file is not a lie about its bitrate, it
+   is simply bigger than its content. Worth knowing, not worth alarm. */
+.qualmark.upsampled {
+  background: var(--acc);
+}
+.qualtally.upsampled {
+  color: var(--acc);
+  border-color: var(--acc-line);
+}
+.qualrow.upsampled .qualname {
+  color: var(--acc);
+}
 .qualname,
 .qualwhy {
   overflow: hidden;

@@ -12,7 +12,14 @@ import { analyseQuality, type QualityRow } from "./api";
 const BATCH = 4;
 
 /** The order verdicts are worth reading in: the problems first. */
-const ORDER = ["upscaled", "transcoded", "unsure", "unreadable", "genuine"];
+const ORDER = [
+  "upscaled",
+  "transcoded",
+  "upsampled",
+  "unsure",
+  "unreadable",
+  "genuine",
+];
 
 /**
  * What a selection of files actually is.
@@ -81,7 +88,8 @@ export default function Quality(props: {
   const count = (verdict: string) =>
     rows().filter((r) => r.verdict === verdict).length;
 
-  const suspect = () => count("upscaled") + count("transcoded");
+  const suspect = () =>
+    count("upscaled") + count("transcoded") + count("upsampled");
 
   /** What the file says it is, for the left-hand column. */
   const claim = (r: QualityRow) => {

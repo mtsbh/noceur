@@ -167,6 +167,8 @@ pub enum Verdict {
     Upscaled,
     /// Lossless container, lossy history.
     Transcoded,
+    /// Converted up from a lower sample rate, which adds no detail.
+    Upsampled,
     /// Measured, but not confidently enough to accuse anyone.
     Unsure,
 }
@@ -177,6 +179,7 @@ impl Verdict {
             Verdict::Genuine => "genuine",
             Verdict::Upscaled => "upscaled",
             Verdict::Transcoded => "transcoded",
+            Verdict::Upsampled => "upsampled",
             Verdict::Unsure => "unsure",
         }
     }
@@ -270,6 +273,22 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
     // lossy encoder at any useful bitrate.
     let reaches_top = cutoff > nyquist * 0.92;
 
+    // Checked before anything else, because it explains a wall that sits above
+    // every lossy cutoff — which would otherwise be reported as "too high for a
+    // transcode, too low for lossless", the least useful thing to be told.
+    if brickwalled {
+        if let Some(source) = upsampled_from(spectrum.sample_rate, cutoff) {
+            report.verdict = Verdict::Upsampled;
+            report.implied_kbps = None;
+            report.reason = format!(
+                "stops at {:.1} kHz — resampled up from {:.1} kHz, no detail added",
+                cutoff / 1000.0,
+                source as f32 / 1000.0
+            );
+            return report;
+        }
+    }
+
     match claim {
         // ── A lossy file whose header would not say ───────────────────────
         Claim::Lossy(None) => {
@@ -334,6 +353,30 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
     }
 
     report
+}
+
+/// The sample rate a file appears to have been converted up from.
+///
+/// A 48 kHz file whose content stops dead at 21.4 kHz was 44.1 kHz before
+/// somebody resampled it: that is where 44.1's own Nyquist sits, and no 48 kHz
+/// recording has a reason to stop just short of 22.05. Resampling adds no
+/// detail, so the file is larger than its content and nothing more.
+///
+/// Only 44.1 and above are considered as sources. 32 kHz would put a candidate
+/// at 16 kHz, which is exactly where a 128 kbps MP3 stops — and calling that an
+/// upsample rather than a low bitrate would be the wrong answer to the more
+/// important question.
+fn upsampled_from(sample_rate: u32, wall_hz: f32) -> Option<u32> {
+    for source in [88_200u32, 48_000, 44_100] {
+        if source >= sample_rate {
+            continue;
+        }
+        let nyquist = source as f32 / 2.0;
+        if wall_hz > nyquist * 0.95 && wall_hz <= nyquist + 300.0 {
+            return Some(source);
+        }
+    }
+    None
 }
 
 /// Where a genuine file at this bitrate should stop.
@@ -538,13 +581,20 @@ mod tests {
     /// music sits. White noise would be flat to Nyquist and would make the top
     /// of the spectrum as loud as the middle, which no recording is.
     fn shaped(top_hz: Option<f32>) -> Vec<f32> {
+        shaped_at(RATE, top_hz)
+    }
+
+    /// The same, for a file at some other sample rate. The rate decides what
+    /// frequency each bin stands for, so a signal built for one rate and read at
+    /// another has its wall in the wrong place.
+    fn shaped_at(rate: u32, top_hz: Option<f32>) -> Vec<f32> {
         let mut re = noise(N);
         let mut im = vec![0f32; N];
         crate::fft::fft(&mut re, &mut im);
 
         let half = N / 2;
         for bin in 0..=half {
-            let hz = bin as f32 * RATE as f32 / N as f32;
+            let hz = bin as f32 * rate as f32 / N as f32;
             let pink = if hz < 20.0 { 0.0 } else { (20.0 / hz).sqrt() };
             let gain = match top_hz {
                 Some(top) if hz > top => 0.0,
@@ -650,6 +700,52 @@ mod tests {
     fn a_file_slightly_below_its_band_is_not_accused() {
         let r = judge(&measured(&shaped(Some(19_500.0))), Claim::Lossy(Some(320)));
         assert_eq!(r.verdict, Verdict::Genuine, "{}", r.reason);
+    }
+
+    // ── Resampled up from a lower rate ────────────────────────────────────
+
+    /// A 48 kHz file stopping just short of 22.05 kHz was 44.1 kHz before
+    /// somebody resampled it. That is a real finding, and reporting it as "too
+    /// high for a transcode, too low for lossless" was the least useful thing
+    /// the analysis could have said about it.
+    #[test]
+    fn a_file_resampled_up_from_44_1_is_named_as_such() {
+        // Built at 44.1 with content to its own Nyquist, then measured as
+        // though the file were 48 kHz — which is exactly what resampling
+        // produces: the old Nyquist sitting inside the new one.
+        let samples = shaped_at(48_000, Some(21_400.0));
+        let s = spectrum(&samples, 48_000);
+        let r = judge(&s, Claim::Lossless);
+
+        assert_eq!(r.verdict, Verdict::Upsampled, "{}", r.reason);
+        assert!(r.reason.contains("44.1"), "{}", r.reason);
+        assert_eq!(r.implied_kbps, None, "no bitrate to imply");
+    }
+
+    /// The candidate rates deliberately stop at 44.1. Allowing 32 kHz would put
+    /// a candidate at 16 kHz, which is where a 128 kbps MP3 stops — and that is
+    /// the more important answer.
+    #[test]
+    fn a_low_bitrate_mp3_is_not_called_an_upsample() {
+        let r = judge(&measured(&shaped(Some(16_000.0))), Claim::Lossy(Some(320)));
+        assert_eq!(r.verdict, Verdict::Upscaled, "{}", r.reason);
+    }
+
+    #[test]
+    fn a_genuine_48k_file_is_left_alone() {
+        let s = spectrum(&shaped_at(48_000, None), 48_000);
+        let r = judge(&s, Claim::Lossless);
+        assert_eq!(r.verdict, Verdict::Genuine, "{}", r.reason);
+    }
+
+    /// A 44.1 kHz file cannot have been resampled up from 44.1 kHz.
+    #[test]
+    fn a_file_at_the_source_rate_is_not_a_candidate() {
+        assert_eq!(upsampled_from(44_100, 21_400.0), None);
+        assert_eq!(upsampled_from(48_000, 21_400.0), Some(44_100));
+        assert_eq!(upsampled_from(96_000, 23_500.0), Some(48_000));
+        // Well below any standard Nyquist: that is an encoder, not a resample.
+        assert_eq!(upsampled_from(48_000, 16_000.0), None);
     }
 
     // ── Refusing to guess ─────────────────────────────────────────────────
