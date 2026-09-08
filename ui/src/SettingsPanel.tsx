@@ -1,11 +1,15 @@
 import { For, Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
 import { CloseIcon } from "./icons";
 import {
+  actions,
   credentials,
   openUrl,
   preserveDates,
+  setActions,
   setDiscogsToken,
   setPreserveDates,
+  type Action,
+  type ActionKind,
 } from "./api";
 import type { Column } from "./columns";
 import {
@@ -19,6 +23,34 @@ import {
 } from "./settings";
 
 export type ArtSize = "small" | "medium" | "large";
+
+/**
+ * The kinds of button, and what each one's two boxes are for.
+ *
+ * An empty `target` means the kind has nothing to point at — a rename and a
+ * search are entirely their expression — and the box is not shown for it.
+ */
+const KINDS: {
+  kind: ActionKind;
+  label: string;
+  target: string;
+  script: string;
+}[] = [
+  { kind: "tag", label: "Set tag", target: "field", script: "$caps2(%artist%)" },
+  { kind: "rename", label: "Rename", target: "", script: "%artist% - %title%" },
+  { kind: "open", label: "Open with", target: "program", script: "\"%_path%\"" },
+  {
+    kind: "url",
+    label: "Search",
+    target: "",
+    script: "https://www.google.com/search?q=%artist%+%title%",
+  },
+  { kind: "copy", label: "Copy to", target: "folder", script: "" },
+  { kind: "move", label: "Move to", target: "folder", script: "" },
+];
+
+const kindOf = (kind: ActionKind) =>
+  KINDS.find((k) => k.kind === kind) ?? KINDS[0];
 
 /**
  * Width of the colour palette, in pixels.
@@ -118,6 +150,30 @@ export default function Settings(props: {
     /** Opens leftwards from the chip's right edge, for chips near the panel's. */
     flip: boolean;
   } | null>(null);
+
+  const [buttons, setButtons] = createSignal<Action[]>([]);
+  const [actionError, setActionError] = createSignal("");
+
+  createEffect(() => {
+    actions().then(setButtons).catch(() => {});
+  });
+
+  /**
+   * Saves the list, keeping what is on screen either way.
+   *
+   * A refusal means one expression will not parse. Clearing the editor because
+   * of that would throw away the work rather than the mistake, so the list stays
+   * as typed and the reason is shown under it.
+   */
+  function saveActions(next: Action[]) {
+    setButtons(next);
+    setActions(next)
+      .then(() => setActionError(""))
+      .catch((e) => setActionError(String(e)));
+  }
+
+  const editAction = (at: number, change: Partial<Action>) =>
+    saveActions(buttons().map((a, i) => (i === at ? { ...a, ...change } : a)));
 
   const [keepDates, setKeepDates] = createSignal(true);
 
@@ -420,6 +476,134 @@ export default function Settings(props: {
               </button>
             </Show>
 
+          </Section>
+
+          <Section
+            title="Buttons"
+            info={
+              <>
+                <p>
+                  Your own actions, run on the selection from the lightning
+                  button in the path bar. Each one is a kind, something to point
+                  it at, and an expression evaluated once per file.
+                </p>
+                <p>
+                  The expressions are foobar2000's, so anything you already have
+                  for foobar, Mp3tag or OneTagger works as written:{" "}
+                  <code>$caps2(%artist%)</code>, <code>$left(%date%,4)</code>,{" "}
+                  <code>$trim(%title%)</code>. Fields are the tags plus{" "}
+                  <code>%_path%</code>, <code>%filename%</code>,{" "}
+                  <code>%filename_ext%</code>, <code>%directoryname%</code> and{" "}
+                  <code>%ext%</code>.
+                </p>
+                <p>
+                  <code>$replace</code> is literal and takes pairs, exactly as in
+                  foobar2000. It does not take a regular expression, and one
+                  written as a pattern matches nothing.
+                </p>
+                <p>
+                  Anything that changes a file lists every result before it runs.
+                  Opening a program passes your expression as its arguments and
+                  never through a shell, so a track named after a command is an
+                  argument and nothing else.
+                </p>
+              </>
+            }
+          >
+            <For each={buttons()}>
+              {(a, at) => (
+                <div class="setquick">
+                  <div class="setrow">
+                    <input
+                      type="text"
+                      class="setquickname"
+                      value={a.label}
+                      placeholder="Name"
+                      spellcheck={false}
+                      onChange={(e) =>
+                        editAction(at(), { label: e.currentTarget.value })
+                      }
+                    />
+                    <select
+                      class="setselect"
+                      value={a.kind}
+                      onChange={(e) =>
+                        editAction(at(), {
+                          kind: e.currentTarget.value as ActionKind,
+                        })
+                      }
+                    >
+                      <For each={KINDS}>
+                        {(k) => <option value={k.kind}>{k.label}</option>}
+                      </For>
+                    </select>
+                    <button
+                      class="setremove"
+                      title="Remove this button"
+                      onClick={() =>
+                        saveActions(buttons().filter((_, i) => i !== at()))
+                      }
+                    >
+                      remove
+                    </button>
+                  </div>
+
+                  <Show when={kindOf(a.kind).target}>
+                    <div class="setrow">
+                      <input
+                        type="text"
+                        class="mono"
+                        value={a.target}
+                        placeholder={kindOf(a.kind).target}
+                        spellcheck={false}
+                        onChange={(e) =>
+                          editAction(at(), { target: e.currentTarget.value })
+                        }
+                      />
+                    </div>
+                  </Show>
+
+                  {/* A folder is the whole instruction for copy and move: there
+                      is nothing per-file left to work out. */}
+                  <Show when={a.kind !== "copy" && a.kind !== "move"}>
+                    <div class="setrow">
+                      <input
+                        type="text"
+                        class="mono"
+                        value={a.script}
+                        placeholder={kindOf(a.kind).script}
+                        spellcheck={false}
+                        onChange={(e) =>
+                          editAction(at(), { script: e.currentTarget.value })
+                        }
+                      />
+                    </div>
+                  </Show>
+                </div>
+              )}
+            </For>
+
+            <Show when={actionError()}>
+              <p class="tagerror">{actionError()}</p>
+            </Show>
+
+            <button
+              class="btn"
+              onClick={() =>
+                saveActions([
+                  ...buttons(),
+                  {
+                    id: `a${Date.now()}`,
+                    label: "New button",
+                    kind: "tag",
+                    target: "title",
+                    script: "%title%",
+                  },
+                ])
+              }
+            >
+              New button
+            </button>
           </Section>
 
           <Section

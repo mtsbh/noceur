@@ -2061,6 +2061,19 @@ body.resizing * {
   transform: translateY(-100%);
 }
 
+/* Kind picker for a user-defined button. */
+.setselect {
+  flex: none;
+  padding: 4px 6px;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
 /* ── Track actions ────────────────────────────────────────────────────────
    Shortcuts to the right-click menu, in the path bar. Disabled rather than
    hidden without a selection: buttons that appear and disappear as rows are

@@ -607,6 +607,64 @@ export function analyseQuality(fileIds: number[]): Promise<QualityRow[]> {
   return invoke<QualityRow[]>("analyse_quality", { fileIds });
 }
 
+/** What a user-defined action does. */
+export type ActionKind = "tag" | "rename" | "open" | "url" | "copy" | "move";
+
+/** One user-defined button. */
+export type Action = {
+  id: string;
+  label: string;
+  kind: ActionKind;
+  /** Tag field, program path, or destination folder, depending on the kind. */
+  target: string;
+  /** The title-formatting expression, run once per file. */
+  script: string;
+};
+
+/** What an action would do to one file. */
+export type ActionPreview = {
+  fileId: number;
+  name: string;
+  result: string;
+  problem: string;
+};
+
+/** Whether a kind changes files, and so is worth previewing first. */
+export function actionWrites(kind: ActionKind): boolean {
+  return kind !== "open" && kind !== "url";
+}
+
+/** The actions the user has defined. Stored beside the app, never in the repo. */
+export function actions(): Promise<Action[]> {
+  return invoke<Action[]>("actions");
+}
+
+/**
+ * Replaces the whole list.
+ *
+ * Refused as a whole if any expression will not parse, so a typo is reported
+ * while it is being written rather than after it has renamed a folder.
+ */
+export function setActions(list: Action[]): Promise<Action[]> {
+  return invoke<Action[]>("set_actions", { actions: list });
+}
+
+/** Works out what an action would do. Changes nothing. */
+export function previewAction(
+  action: Action,
+  fileIds: number[],
+): Promise<ActionPreview[]> {
+  return invoke<ActionPreview[]>("preview_action", { action, fileIds });
+}
+
+/** Runs an action over a selection. */
+export function runAction(
+  action: Action,
+  fileIds: number[],
+): Promise<WriteReport> {
+  return invoke<WriteReport>("run_action", { action, fileIds });
+}
+
 /** One cleanup rule, as the back end describes it. */
 export type CleanRule = { slug: string; label: string; hint: string };
 

@@ -28,7 +28,11 @@ import {
   dropEffect,
   shellMenu,
   type TagField,
+  actions,
+  runAction as runUserAction,
+  actionWrites,
   openUrl,
+  type Action,
   type Transport as TransportState,
   type ArtSize,
   type Order,
@@ -50,8 +54,9 @@ import Cleanup from "./Cleanup";
 import Toolbar, { type ActionId } from "./Toolbar";
 import Quality from "./Quality";
 import Spectrogram from "./Spectrogram";
+import ActionRunner from "./ActionRunner";
 import Titlebar from "./Titlebar";
-import { PigIcon, SettingsIcon } from "./icons";
+import { BoltIcon, PigIcon, SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import {
   DEFAULT_COLUMNS,
@@ -282,6 +287,16 @@ export default function App() {
   const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [quickOpen, setQuickOpen] = createSignal(false);
+  /** The user's own buttons, and the one being run. */
+  const [buttons, setButtons] = createSignal<Action[]>([]);
+  const [running, setRunning] = createSignal<{
+    action: Action;
+    fileIds: number[];
+  } | null>(null);
+  const [actionMenu, setActionMenu] = createSignal<{ x: number; y: number } | null>(
+    null,
+  );
+
   /** Whether the spectrogram strip is showing. */
   const [spekOpen, setSpekOpen] = createSignal(false);
   const [spek, setSpek] = createSignal<Uint8Array>(new Uint8Array());
@@ -496,6 +511,48 @@ export default function App() {
     }
     return key;
   }, "");
+
+  // Re-read whenever the settings panel closes, which is the only place they
+  // are edited.
+  createEffect(() => {
+    if (settingsOpen()) return;
+    actions().then(setButtons).catch(() => {});
+  });
+
+  /**
+   * The user's buttons, as menu entries.
+   *
+   * Anything that changes a file opens its preview; opening a program or a link
+   * changes nothing and simply runs, because a dialog asking permission to do
+   * what was just clicked is a dialog nobody reads.
+   */
+  function buttonItems(): MenuItem[] {
+    const ids = audioSelection();
+    if (buttons().length === 0) {
+      return [
+        {
+          kind: "item",
+          label: "No buttons yet — add them in Settings",
+          disabled: true,
+          run: () => {},
+        },
+      ];
+    }
+
+    return buttons().map((action) => ({
+      kind: "item" as const,
+      label:
+        ids.length > 1 ? `${action.label} — ${ids.length} tracks` : action.label,
+      disabled: ids.length === 0,
+      run: () => {
+        if (actionWrites(action.kind)) {
+          setRunning({ action, fileIds: ids });
+          return;
+        }
+        runUserAction(action, ids).catch(() => {});
+      },
+    }));
+  }
 
   /** Loads a row into the player. Non-audio rows have nothing to play. */
   function playRow(row: RowDisplay) {
@@ -1183,6 +1240,19 @@ export default function App() {
           </For>
         </div>
         <button
+          class={`gearbtn ${actionMenu() ? "on" : ""}`}
+          data-tip="Your buttons"
+          aria-label="Your buttons"
+          onClick={(e) => {
+            const box = e.currentTarget.getBoundingClientRect();
+            setActionMenu(
+              actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 },
+            );
+          }}
+        >
+          <BoltIcon />
+        </button>
+        <button
           class={`gearbtn ${spekOpen() ? "on" : ""}`}
           data-tip="Spectrogram of the playing track"
           aria-label="Spectrogram"
@@ -1424,6 +1494,26 @@ export default function App() {
             fileIds={ids()}
             onClose={() => setCleaning(null)}
             onChanged={() => refetchListing()}
+          />
+        )}
+      </Show>
+
+      <Show when={actionMenu()}>
+        <Menu
+          x={actionMenu()!.x}
+          y={actionMenu()!.y}
+          items={buttonItems()}
+          onClose={() => setActionMenu(null)}
+        />
+      </Show>
+
+      <Show when={running()}>
+        {(target) => (
+          <ActionRunner
+            action={target().action}
+            fileIds={target().fileIds}
+            onClose={() => setRunning(null)}
+            onDone={() => refetchListing()}
           />
         )}
       </Show>

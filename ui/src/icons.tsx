@@ -209,6 +209,15 @@ export function PigIcon() {
   );
 }
 
+/** User-defined buttons: a bolt, for "do the thing I set up". */
+export function BoltIcon() {
+  return (
+    <Icon>
+      <path d="M8.9 1.9 3.6 9.1h3.7l-.9 5 5.3-7.2H8l.9-5Z" />
+    </Icon>
+  );
+}
+
 export function StarIcon() {
   return (
     <Icon>
