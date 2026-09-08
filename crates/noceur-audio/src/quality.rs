@@ -102,15 +102,88 @@ impl Spectrum {
         }
     }
 
-    /// The highest frequency the file carries real signal at.
+    /// The level of the flat shelf at the top of the spectrum, if there is one.
     ///
-    /// The wall when there is one, and Nyquist when there is not — a spectrum
-    /// that simply keeps going has no cutoff to report.
-    pub fn cutoff_hz(&self) -> f32 {
-        self.wall_hz().unwrap_or(self.sample_rate as f32 / 2.0)
+    /// This is the other half of the measurement, and the half a cliff detector
+    /// misses. Not every lossy file leaves a cliff: a gentle encoder lowpass, or
+    /// a resample after decoding, turns the wall into a slope three kilohertz
+    /// wide. What survives either way is what lies *above* the slope — a region
+    /// that is perfectly flat, because it holds dither and nothing else.
+    ///
+    /// Real music never does that. Music at 20 kHz varies with the music; a
+    /// stretch of spectrum sitting within a few dB of itself across two and a
+    /// half kilohertz is digital silence, and it means the content stopped
+    /// somewhere below.
+    pub fn shelf_db(&self) -> Option<f32> {
+        let bands = self.bands();
+        let nyquist = self.sample_rate as f32 / 2.0;
+        // The last few hundred hertz are left out: the final bands sit against
+        // the edge of the transform and misbehave there.
+        let from = ((nyquist - 2_800.0) / BAND_HZ) as usize;
+        let to = (((nyquist - 700.0) / BAND_HZ) as usize).min(bands.len());
+        if to <= from + 3 {
+            return None;
+        }
+
+        let region = &bands[from..to];
+        let low = region.iter().cloned().fold(f32::MAX, f32::min);
+        let high = region.iter().cloned().fold(f32::MIN, f32::max);
+
+        // Three decibels across two kilohertz, after averaging a couple of
+        // hundred frames. Dither holds that flat; music does not come close,
+        // even where it is quiet — a first attempt allowed five and mistook the
+        // gentle taper of a genuine full-band record for a floor, then reported
+        // its content as ending at 14.6 kHz.
+        if high - low < 3.0 {
+            Some(mean(region))
+        } else {
+            None
+        }
     }
 
-    /// Whether the spectrum stops dead rather than tapering.
+    /// The highest frequency carrying signal above the file's own noise floor.
+    ///
+    /// Only meaningful when there is a shelf to measure against — without one,
+    /// walking down from the top finds the taper rather than the end of the
+    /// content, which is the mistake that made the first version of this report
+    /// a cutoff somewhere in the midrange.
+    pub fn rolloff_hz(&self) -> Option<f32> {
+        let shelf = self.shelf_db()?;
+        // And it has to be far below the music. A true dither floor sits sixty
+        // decibels or more under the midrange; anything nearer is signal, however
+        // flat it happens to look across one stretch.
+        if self.reference_db() - shelf < 40.0 {
+            return None;
+        }
+
+        let bands = self.bands();
+        let nyquist = self.sample_rate as f32 / 2.0;
+        let start = (((nyquist - 700.0) / BAND_HZ) as usize).min(bands.len());
+        // Ten dB clear of the floor: enough to be signal rather than the ripple
+        // in the dither, low enough to catch the tail of a gentle rolloff.
+        let threshold = shelf + 10.0;
+
+        (0..start)
+            .rev()
+            .find_map(|i| (bands[i] > threshold).then_some(i as f32 * BAND_HZ))
+    }
+
+    /// The highest frequency the file carries real signal at.
+    ///
+    /// A cliff when there is one, the end of a rolloff when there is not, and
+    /// Nyquist when the spectrum simply keeps going.
+    pub fn cutoff_hz(&self) -> f32 {
+        self.wall_hz()
+            .or_else(|| self.rolloff_hz())
+            .unwrap_or(self.sample_rate as f32 / 2.0)
+    }
+
+    /// Whether the content ends somewhere below Nyquist, by either shape.
+    pub fn ends_early(&self) -> bool {
+        self.wall_hz().is_some() || self.rolloff_hz().is_some()
+    }
+
+    /// Whether the spectrum stops dead rather than sloping away.
     pub fn brickwalled(&self) -> bool {
         self.wall_hz().is_some()
     }
@@ -251,6 +324,14 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
     };
     let cutoff = spectrum.cutoff_hz();
     let brickwalled = spectrum.brickwalled();
+    let ends_early = spectrum.ends_early();
+    // How the content ends, for the wording. A cliff and a slope carry the same
+    // conclusion and deserve different confidence in how it is put.
+    let stops = if brickwalled {
+        "stops dead at"
+    } else {
+        "falls away to nothing by"
+    };
     let nyquist = spectrum.sample_rate as f32 / 2.0;
     let implied = implied_kbps(cutoff);
 
@@ -276,12 +357,12 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
     // Checked before anything else, because it explains a wall that sits above
     // every lossy cutoff — which would otherwise be reported as "too high for a
     // transcode, too low for lossless", the least useful thing to be told.
-    if brickwalled {
+    if ends_early {
         if let Some(source) = upsampled_from(spectrum.sample_rate, cutoff) {
             report.verdict = Verdict::Upsampled;
             report.implied_kbps = None;
             report.reason = format!(
-                "stops at {:.1} kHz — resampled up from {:.1} kHz, no detail added",
+                "{stops} {:.1} kHz — resampled up from {:.1} kHz, no detail added",
                 cutoff / 1000.0,
                 source as f32 / 1000.0
             );
@@ -304,17 +385,17 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
 
         // ── Lossless ──────────────────────────────────────────────────────
         Claim::Lossless => {
-            if reaches_top || !brickwalled {
+            if reaches_top || !ends_early {
                 report.verdict = Verdict::Genuine;
                 report.reason = format!("content to {:.1} kHz, no cutoff", cutoff / 1000.0);
             } else if cutoff < 19_000.0 {
                 report.verdict = Verdict::Transcoded;
                 report.reason = match implied {
                     Some(kbps) => format!(
-                        "hard cutoff at {:.1} kHz — was lossy, about {kbps} kbps",
+                        "{stops} {:.1} kHz — was lossy, about {kbps} kbps",
                         cutoff / 1000.0
                     ),
-                    None => format!("hard cutoff at {:.1} kHz", cutoff / 1000.0),
+                    None => format!("{stops} {:.1} kHz", cutoff / 1000.0),
                 };
             } else {
                 report.verdict = Verdict::Unsure;
@@ -642,6 +723,77 @@ mod tests {
             let found = measured(&shaped(Some(hz))).cutoff_hz();
             assert!((found - hz).abs() < 800.0, "cut at {hz}, measured {found}");
         }
+    }
+
+    /// Music that rolls away gently into a real dither floor, which is what a
+    /// decoded lossy file looks like once something has resampled it: the cliff
+    /// is gone and only the empty space above it survives.
+    fn rolled_off(top_hz: f32) -> Vec<f32> {
+        let mut re = noise(N);
+        let mut im = vec![0f32; N];
+        crate::fft::fft(&mut re, &mut im);
+
+        let half = N / 2;
+        for bin in 0..=half {
+            let hz = bin as f32 * RATE as f32 / N as f32;
+            let pink = if hz < 20.0 { 0.0 } else { (20.0 / hz).sqrt() };
+            // Fifteen decibels per kilohertz above the corner, which is about
+            // what a real decoded-and-resampled file shows: steep enough to
+            // reach the floor within a couple of kilohertz, gentle enough that
+            // no single band shows the step a cliff does.
+            let slope = if hz > top_hz {
+                10f32.powf(-1.5 * (hz - top_hz) / 1000.0)
+            } else {
+                1.0
+            };
+            let gain = pink * slope;
+            re[bin] *= gain;
+            im[bin] *= gain;
+            if bin > 0 && bin < half {
+                re[N - bin] *= gain;
+                im[N - bin] *= gain;
+            }
+        }
+
+        for v in im.iter_mut() {
+            *v = -*v;
+        }
+        crate::fft::fft(&mut re, &mut im);
+        let scale = 1.0 / N as f32;
+        let signal: Vec<f32> = re.iter().map(|v| v * scale).collect();
+
+        // Dither: flat, and far below the music. This is the floor the rolloff
+        // is measured against, and without it there is nothing to measure.
+        let peak = signal.iter().fold(0f32, |m, v| m.max(v.abs())).max(1e-9);
+        let dither = noise(N);
+        signal
+            .iter()
+            .zip(&dither)
+            .map(|(s, d)| s + d * peak * 3e-3)
+            .collect()
+    }
+
+    /// The bug this test exists for: a genuine full-band record tapers into its
+    /// own quiet top end, and a floor-relative rule read that taper as a floor
+    /// and reported the content as ending at 14.6 kHz. A taper has no floor, and
+    /// inventing one is worse than finding nothing.
+    #[test]
+    fn a_tapering_spectrum_is_not_reported_as_ending() {
+        let s = measured(&shaped(None));
+        assert_eq!(s.rolloff_hz(), None, "a taper is not a floor");
+        assert!(!s.ends_early());
+    }
+
+    /// The other half, and the case a cliff detector alone misses: a lossy file
+    /// whose wall has been smoothed into a slope still leaves the empty space
+    /// above it, and that space is flat in a way music never is.
+    #[test]
+    fn a_gentle_rolloff_into_a_floor_is_still_found() {
+        let s = measured(&rolled_off(17_000.0));
+        assert!(s.ends_early(), "it plainly ends");
+
+        let found = s.rolloff_hz().expect("a rolloff point");
+        assert!((found - 17_000.0).abs() < 1_500.0, "got {found}");
     }
 
     #[test]
