@@ -2183,6 +2183,7 @@ dependencies = [
 name = "noceur-audio"
 version = "0.1.0"
 dependencies = [
+ "lofty",
  "noceur-fsmodel",
  "rodio",
  "tempfile",

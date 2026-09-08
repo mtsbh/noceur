@@ -5,6 +5,9 @@
 //! browser sub-project because a seekable waveform needs a player underneath it.
 
 pub mod biquad;
+pub mod fft;
+pub mod quality;
+pub mod source;
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
@@ -296,19 +299,14 @@ fn open(
     volume: f32,
 ) -> Result<(rodio::Player, Option<u64>), AudioError> {
     let full = noceur_extended(path);
-    let file = std::fs::File::open(&full).map_err(|source| AudioError::Open {
+    let opened = source::open(&full).map_err(|source| AudioError::Open {
         path: path.display().to_string(),
         source,
     })?;
-
-    // Length in bytes, which seeking needs as much as the seekable flag does.
-    // A WAV seeks on frame arithmetic and manages without it; FLAC binary-searches
-    // the stream and cannot, so leaving it out gives a player that plays FLACs
-    // and refuses to seek them.
-    let byte_len = file.metadata().ok().map(|m| m.len());
+    let byte_len = opened.byte_len;
 
     let mut builder = rodio::Decoder::builder()
-        .with_data(std::io::BufReader::new(file))
+        .with_data(opened.reader)
         .with_seekable(true);
     if let Some(len) = byte_len {
         builder = builder.with_byte_len(len);
@@ -383,13 +381,13 @@ pub const BAND_HIGH: usize = 3;
 pub fn envelope(path: &Path, buckets: usize) -> Result<Vec<u8>, AudioError> {
     let buckets = buckets.max(1);
     let full = noceur_extended(path);
-    let file = std::fs::File::open(&full).map_err(|source| AudioError::Open {
+    let opened = source::open(&full).map_err(|source| AudioError::Open {
         path: path.display().to_string(),
         source,
     })?;
-    let byte_len = file.metadata().ok().map(|m| m.len());
+    let byte_len = opened.byte_len;
 
-    let mut builder = rodio::Decoder::builder().with_data(std::io::BufReader::new(file));
+    let mut builder = rodio::Decoder::builder().with_data(opened.reader);
     if let Some(len) = byte_len {
         builder = builder.with_byte_len(len);
     }
