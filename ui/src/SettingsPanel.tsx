@@ -21,6 +21,15 @@ import {
 export type ArtSize = "small" | "medium" | "large";
 
 /**
+ * Width of the colour palette, in pixels.
+ *
+ * Only needs to be close: it decides which side of a chip the palette opens
+ * from, and being a few pixels out moves that decision for one chip near the
+ * boundary rather than breaking anything.
+ */
+const POPOVER = 150;
+
+/**
  * One settings section, with its explanation behind a question mark.
  *
  * The panel used to carry its prose in the open — several paragraphs per
@@ -103,9 +112,12 @@ export default function Settings(props: {
   }
 
   /** The value whose colour is being chosen, or null when none is. */
-  const [picking, setPicking] = createSignal<{ row: number; at: number } | null>(
-    null,
-  );
+  const [picking, setPicking] = createSignal<{
+    row: number;
+    at: number;
+    /** Opens leftwards from the chip's right edge, for chips near the panel's. */
+    flip: boolean;
+  } | null>(null);
 
   const [keepDates, setKeepDates] = createSignal(true);
 
@@ -323,13 +335,23 @@ export default function Settings(props: {
                               "--tag-fill": valueColour(entry, at()).fill,
                             }}
                             data-tip="Change colour"
-                            onClick={() =>
-                              setPicking(
-                                picking()?.row === row() && picking()?.at === at()
-                                  ? null
-                                  : { row: row(), at: at() },
-                              )
-                            }
+                            onClick={(e) => {
+                              if (
+                                picking()?.row === row() &&
+                                picking()?.at === at()
+                              ) {
+                                setPicking(null);
+                                return;
+                              }
+                              // The panel scrolls, so anything hanging off its
+                              // right edge is clipped rather than merely ugly.
+                              const box = e.currentTarget.getBoundingClientRect();
+                              setPicking({
+                                row: row(),
+                                at: at(),
+                                flip: box.left + POPOVER > window.innerWidth - 14,
+                              });
+                            }}
                           >
                             {entry.value}
                           </button>
@@ -339,7 +361,9 @@ export default function Settings(props: {
                               picking()?.row === row() && picking()?.at === at()
                             }
                           >
-                            <span class="chippop">
+                            <span
+                              class={`chippop ${picking()?.flip ? "flip" : ""}`}
+                            >
                               <For each={TAG_COLOURS}>
                                 {(c) => (
                                   <button

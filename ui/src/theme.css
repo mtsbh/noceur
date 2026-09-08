@@ -1716,6 +1716,12 @@ body.resizing * {
   background: var(--raise);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
+/* Opened from the chip's right edge instead, so the last chip in a row does
+   not put its palette through the side of the panel. */
+.chippop.flip {
+  left: auto;
+  right: 0;
+}
 .chippop .swatch {
   width: 15px;
   height: 15px;
