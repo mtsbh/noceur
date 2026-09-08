@@ -186,6 +186,22 @@ export function SpectrumIcon() {
   );
 }
 
+/**
+ * The spectrogram toggle: a framed plot whose content thins towards the top.
+ *
+ * Deliberately not the falling bars — that is the quality check's icon, and two
+ * buttons in the same bar wearing the same glyph is worse than either being
+ * slightly less apt.
+ */
+export function SpekIcon() {
+  return (
+    <Icon>
+      <rect x="2.3" y="3" width="11.4" height="10" rx="1.2" />
+      <path d="M4.3 10.8h7.4M4.3 8.6h7.4M4.3 6.4h4.6" />
+    </Icon>
+  );
+}
+
 export function StarIcon() {
   return (
     <Icon>

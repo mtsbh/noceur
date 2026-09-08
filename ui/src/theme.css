@@ -1955,7 +1955,7 @@ body.resizing * {
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 48px 1fr 62px;
+  grid-template-columns: 56px 1fr 62px;
   grid-template-rows: 1fr 15px;
   column-gap: 5px;
 }
@@ -1974,6 +1974,14 @@ body.resizing * {
   color: var(--fg3);
   font-size: 9px;
   white-space: nowrap;
+}
+/* The two ends are pulled inside the plot rather than centred on their own
+   value: centred, half of each sat outside the box and was clipped away. */
+.spekfreq span:first-child {
+  transform: none;
+}
+.spekfreq span:last-child {
+  transform: translateY(100%);
 }
 
 .spekplot {
@@ -2045,6 +2053,12 @@ body.resizing * {
   color: var(--fg3);
   font-size: 9px;
   white-space: nowrap;
+}
+.spekdb span:first-child {
+  transform: none;
+}
+.spekdb span:last-child {
+  transform: translateY(-100%);
 }
 
 /* ── Track actions ────────────────────────────────────────────────────────

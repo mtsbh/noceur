@@ -1,7 +1,7 @@
 import { For, createEffect, createSignal, onCleanup } from "solid-js";
 
 /** Bands up the height. Must match `BANDS` in `noceur-audio`. */
-const BANDS = 128;
+const BANDS = 256;
 
 /**
  * Quietest level drawn, in dB below the track's own peak.

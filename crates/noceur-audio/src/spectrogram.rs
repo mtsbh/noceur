@@ -16,18 +16,22 @@ use std::path::Path;
 
 /// Columns across the width of the image.
 ///
-/// One per second and a half of a six-minute track, which is finer than any
-/// strip a transport bar can show and coarse enough to stay small enough to
-/// cache.
-pub const COLUMNS: usize = 480;
+/// Roughly one per pixel of the strip at a normal window width, so the picture
+/// is drawn at about its own resolution rather than stretched to two and a half
+/// times it — which is what made it look soft.
+pub const COLUMNS: usize = 1024;
 
 /// Frequency bands up the height.
+///
+/// Eight of the transform's own bins each, which is as fine as a 4096-point
+/// window has to give. Taller than the strip, so the picture is scaled down
+/// rather than up and a cutoff lands on a sharp edge instead of a gradient.
 ///
 /// Linear rather than logarithmic, deliberately. A log axis is better for
 /// reading music and worse for the thing this is for: an encoder's cutoff is a
 /// straight horizontal line on a linear axis, and log scaling squeezes the top
 /// of the spectrum — exactly where the answer is — into a few pixels.
-pub const BANDS: usize = 128;
+pub const BANDS: usize = 256;
 
 /// Transform size. Matches the quality analysis, so both read the same detail.
 const FFT_SIZE: usize = 4096;
