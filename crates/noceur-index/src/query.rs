@@ -15,11 +15,20 @@ pub enum SortColumn {
     Artist,
     Title,
     Album,
+    AlbumArtist,
+    Genre,
+    Year,
+    TrackNo,
+    Comment,
+    Isrc,
+    SampleRate,
+    BitDepth,
+    Codec,
 }
 
 impl SortColumn {
     /// Every column, in the order the list shows them.
-    pub fn all() -> [SortColumn; 9] {
+    pub fn all() -> [SortColumn; 18] {
         [
             SortColumn::Name,
             SortColumn::Bpm,
@@ -28,6 +37,15 @@ impl SortColumn {
             SortColumn::Artist,
             SortColumn::Title,
             SortColumn::Album,
+            SortColumn::AlbumArtist,
+            SortColumn::Genre,
+            SortColumn::Year,
+            SortColumn::TrackNo,
+            SortColumn::Comment,
+            SortColumn::Isrc,
+            SortColumn::SampleRate,
+            SortColumn::BitDepth,
+            SortColumn::Codec,
             SortColumn::Size,
             SortColumn::Modified,
         ]
@@ -45,6 +63,15 @@ impl SortColumn {
             SortColumn::Artist => "artist",
             SortColumn::Title => "title",
             SortColumn::Album => "album",
+            SortColumn::AlbumArtist => "albumArtist",
+            SortColumn::Genre => "genre",
+            SortColumn::Year => "year",
+            SortColumn::TrackNo => "trackNo",
+            SortColumn::Comment => "comment",
+            SortColumn::Isrc => "isrc",
+            SortColumn::SampleRate => "sampleRate",
+            SortColumn::BitDepth => "bitDepth",
+            SortColumn::Codec => "codec",
         }
     }
 
@@ -69,6 +96,15 @@ impl SortColumn {
             SortColumn::Artist => "ct.artist COLLATE NOCASE",
             SortColumn::Title => "ct.title COLLATE NOCASE",
             SortColumn::Album => "ct.album COLLATE NOCASE",
+            SortColumn::AlbumArtist => "ct.album_artist COLLATE NOCASE",
+            SortColumn::Genre => "ct.genre COLLATE NOCASE",
+            SortColumn::Year => "ct.year",
+            SortColumn::TrackNo => "ct.track_no",
+            SortColumn::Comment => "ct.comment COLLATE NOCASE",
+            SortColumn::Isrc => "ct.isrc COLLATE NOCASE",
+            SortColumn::SampleRate => "c.sample_rate",
+            SortColumn::BitDepth => "c.bit_depth",
+            SortColumn::Codec => "c.codec COLLATE NOCASE",
         }
     }
 }
@@ -115,6 +151,15 @@ pub struct ListRow {
     pub key_tag: Option<String>,
     pub key_norm: Option<i64>,
     pub duration_ms: Option<i64>,
+    pub album_artist: Option<String>,
+    pub genre: Option<String>,
+    pub year: Option<i64>,
+    pub track_no: Option<i64>,
+    pub comment: Option<String>,
+    pub isrc: Option<String>,
+    pub sample_rate: Option<i64>,
+    pub bit_depth: Option<i64>,
+    pub codec: Option<String>,
     /// Whether the file carries embedded cover art, from the last probe.
     pub has_artwork: bool,
 }
@@ -122,7 +167,9 @@ pub struct ListRow {
 const SELECT: &str = "
 SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        ct.artist, ct.title, ct.album, ct.bpm_tag, ct.key_tag, ct.key_norm,
-       c.duration_ms, COALESCE(ct.has_artwork, 0)
+       c.duration_ms, COALESCE(ct.has_artwork, 0),
+       ct.album_artist, ct.genre, ct.year, ct.track_no, ct.comment, ct.isrc,
+       c.sample_rate, c.bit_depth, c.codec
 FROM file f
 LEFT JOIN content     c  ON c.id  = f.content_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
@@ -164,6 +211,15 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
             key_norm: r.get(12)?,
             duration_ms: r.get(13)?,
             has_artwork: r.get::<_, i64>(14)? != 0,
+            album_artist: r.get(15)?,
+            genre: r.get(16)?,
+            year: r.get(17)?,
+            track_no: r.get(18)?,
+            comment: r.get(19)?,
+            isrc: r.get(20)?,
+            sample_rate: r.get(21)?,
+            bit_depth: r.get(22)?,
+            codec: r.get(23)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)

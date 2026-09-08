@@ -36,6 +36,15 @@ export const DEFAULT_COLUMNS: Column[] = [
   { key: "artist", label: "Artist", width: 180, dim: true, visible: true },
   { key: "title", label: "Title", width: 180, dim: true, visible: false },
   { key: "album", label: "Album", width: 180, dim: true, visible: false },
+  { key: "albumArtist", label: "Album artist", width: 160, dim: true, visible: false },
+  { key: "genre", label: "Genre", width: 120, dim: true, visible: false },
+  { key: "year", label: "Year", width: 56, num: true, visible: false },
+  { key: "trackNo", label: "Track", width: 52, num: true, visible: false },
+  { key: "comment", label: "Comment", width: 200, dim: true, visible: false },
+  { key: "isrc", label: "ISRC", width: 116, dim: true, visible: false },
+  { key: "sampleRate", label: "Rate", width: 74, num: true, visible: false },
+  { key: "bitDepth", label: "Depth", width: 62, num: true, visible: false },
+  { key: "codec", label: "Codec", width: 78, dim: true, visible: false },
   { key: "size", label: "Size", width: 88, num: true, visible: true },
   { key: "modified", label: "Date", width: 120, num: true, visible: false },
 ];
@@ -127,6 +136,24 @@ export function cellText(row: RowDisplay, key: SortColumn): string {
       return row.title;
     case "album":
       return row.album;
+    case "albumArtist":
+      return row.albumArtist;
+    case "genre":
+      return row.genre;
+    case "year":
+      return row.year;
+    case "trackNo":
+      return row.trackNo;
+    case "comment":
+      return row.comment;
+    case "isrc":
+      return row.isrc;
+    case "sampleRate":
+      return row.sampleRate;
+    case "bitDepth":
+      return row.bitDepth;
+    case "codec":
+      return row.codec;
     case "size":
       return row.size;
     case "modified":

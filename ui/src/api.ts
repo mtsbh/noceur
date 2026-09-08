@@ -12,8 +12,20 @@ export type RowDisplay = {
   artist: string;
   title: string;
   album: string;
+  albumArtist: string;
+  genre: string;
+  /** Release year from the tags, not the file's date on disk. */
+  year: string;
+  trackNo: string;
+  comment: string;
+  isrc: string;
+  /** `44.1 kHz`, or empty. */
+  sampleRate: string;
+  /** `16 bit`, or empty for formats with no bit depth. */
+  bitDepth: string;
+  codec: string;
   size: string;
-  /** `YYYY-MM-DD HH:MM` in UTC. */
+  /** `YYYY-MM-DD HH:MM` in UTC — when the file changed, not when it was released. */
   modified: string;
   state: string;
   /** True only for audio files the last probe found a picture in. */
@@ -88,6 +100,15 @@ export type SortColumn =
   | "artist"
   | "title"
   | "album"
+  | "albumArtist"
+  | "genre"
+  | "year"
+  | "trackNo"
+  | "comment"
+  | "isrc"
+  | "sampleRate"
+  | "bitDepth"
+  | "codec"
   | "size"
   | "modified";
 

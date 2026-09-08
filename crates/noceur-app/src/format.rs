@@ -44,12 +44,50 @@ pub struct RowDisplay {
     pub size: String,
     /// `YYYY-MM-DD HH:MM` in UTC.
     pub modified: String,
+    pub album_artist: String,
+    pub genre: String,
+    /// Release year from the tags, not the file's date on disk.
+    pub year: String,
+    pub track_no: String,
+    pub comment: String,
+    pub isrc: String,
+    /// `44.1 kHz`, or empty.
+    pub sample_rate: String,
+    /// `16 bit`, or empty for formats that do not have one.
+    pub bit_depth: String,
+    pub codec: String,
     /// Empty when the file is fine; otherwise the reason it is not.
     pub state: String,
     /// Whether this row has an image worth requesting — embedded cover art for
     /// audio, the shell's own icon for a directory. Files with neither are left
     /// alone, so a folder of untagged tracks issues no requests at all.
     pub has_art: bool,
+}
+
+/// `44.1 kHz`, or nothing when the container did not say.
+///
+/// One decimal, and no trailing `.0`: 44.1 and 48 are the two numbers anyone
+/// reads here, and `48.0 kHz` is noise in a narrow column.
+pub fn rate(hz: Option<i64>) -> String {
+    match hz {
+        Some(hz) if hz > 0 => {
+            let khz = hz as f64 / 1000.0;
+            if (khz.fract()).abs() < 0.05 {
+                format!("{khz:.0} kHz")
+            } else {
+                format!("{khz:.1} kHz")
+            }
+        }
+        _ => String::new(),
+    }
+}
+
+/// `16 bit`, or nothing — lossy formats have no bit depth to report.
+pub fn depth(bits: Option<i64>) -> String {
+    match bits {
+        Some(b) if b > 0 => format!("{b} bit"),
+        _ => String::new(),
+    }
 }
 
 /// `mm:ss`, or [`ABSENT`].
@@ -238,6 +276,35 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         artist: row.artist.clone().unwrap_or_default(),
         title: row.title.clone().unwrap_or_default(),
         album: row.album.clone().unwrap_or_default(),
+        album_artist: row.album_artist.clone().unwrap_or_default(),
+        genre: row.genre.clone().unwrap_or_default(),
+        year: row
+            .year
+            .filter(|y| *y > 0)
+            .map(|y| y.to_string())
+            .unwrap_or_default(),
+        track_no: row
+            .track_no
+            .filter(|n| *n > 0)
+            .map(|n| n.to_string())
+            .unwrap_or_default(),
+        comment: row.comment.clone().unwrap_or_default(),
+        isrc: row.isrc.clone().unwrap_or_default(),
+        sample_rate: if is_audio {
+            rate(row.sample_rate)
+        } else {
+            blank.clone()
+        },
+        bit_depth: if is_audio {
+            depth(row.bit_depth)
+        } else {
+            blank.clone()
+        },
+        codec: if is_audio {
+            row.codec.clone().unwrap_or_default()
+        } else {
+            blank.clone()
+        },
         size: if row.kind == 0 { blank } else { size(row.size) },
         modified: modified(row.mtime),
         state: if row.state == "ok" {
@@ -270,6 +337,15 @@ mod tests {
             key_tag: Some("8A".into()),
             key_norm: Some(14),
             duration_ms: Some(671_000),
+            album_artist: None,
+            genre: Some("Techno".into()),
+            year: Some(2016),
+            track_no: Some(3),
+            comment: None,
+            isrc: None,
+            sample_rate: Some(44_100),
+            bit_depth: Some(16),
+            codec: Some("pcm_s16le".into()),
             has_artwork: true,
         }
     }

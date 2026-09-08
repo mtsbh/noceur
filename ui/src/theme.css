@@ -1589,12 +1589,17 @@ body.resizing * {
   flex-wrap: wrap;
 }
 .quicklabel {
-  width: 52px;
+  width: 68px;
   flex: none;
   color: var(--fg3);
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  /* Long field names wrapped onto a second line and pushed the row into the one
+     under it. There is room to the right; there is none downwards. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .quickbtn {
   display: flex;
@@ -1622,16 +1627,6 @@ body.resizing * {
 }
 /* A dot of the row's colour beside its name, so a glance finds the row before
    reading which values are lit. */
-.quickrow .quicklabel::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: var(--tag, var(--acc));
-  vertical-align: middle;
-}
 .quickbtn:disabled {
   color: var(--fg4);
   cursor: default;

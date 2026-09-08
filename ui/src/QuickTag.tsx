@@ -63,8 +63,15 @@ export default function QuickTag(props: {
   // Re-read whenever the playing track changes. Any edits still pending belong
   // to the track that is leaving and are written to it first, not to the one
   // arriving — that mistake would silently tag the wrong file.
-  createEffect(() => {
+  //
+  // Keyed on the id rather than simply on the transport, which is replaced ten
+  // times a second while a track plays. Without the check this cleared the panel
+  // and re-read the file on every one of those, and the buttons visibly blinked
+  // the whole time something was playing.
+  createEffect<number>((previous) => {
     const id = props.fileId;
+    if (id === previous) return id;
+
     flush();
     owner = id;
     setCurrent({});
@@ -75,7 +82,8 @@ export default function QuickTag(props: {
         })
         .catch(() => {});
     }
-  });
+    return id;
+  }, 0);
 
   onCleanup(() => flush());
 
