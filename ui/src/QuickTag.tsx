@@ -85,7 +85,7 @@ export default function QuickTag(props: {
     return id;
   }, 0);
 
-  onCleanup(() => flush());
+  onCleanup(() => flush(true));
 
   /** Values currently set for a group. */
   const valuesOf = (g: QuickGroup): string[] =>
@@ -125,13 +125,26 @@ export default function QuickTag(props: {
     timer = window.setTimeout(flush, FLUSH_MS);
   }
 
-  /** Writes what is pending to the track it belongs to. */
-  function flush() {
+  /**
+   * Writes what is pending to the track it belongs to.
+   *
+   * Held back while the player still has that file open. Writing a tag rewrites
+   * the whole file, and on a long lossless track that is real work happening
+   * underneath a decoder that is reading it — which stalled playback and
+   * sometimes stopped it outright. Waiting costs nothing: the edits are already
+   * on screen, and the moment the player moves to another track this runs.
+   *
+   * `force` is for closing the panel, where holding on would mean losing them.
+   * One rewrite of a file that happens to be playing is a far better outcome
+   * than discarding what somebody just tagged.
+   */
+  function flush(force = false) {
     if (timer) {
       window.clearTimeout(timer);
       timer = undefined;
     }
     if (!pending() || owner <= 0) return;
+    if (!force && owner === props.fileId) return;
 
     const custom: Record<string, string> = {};
     for (const g of props.groups) {
@@ -246,12 +259,11 @@ export default function QuickTag(props: {
       </div>
 
       <span class="quickstate">
-        <Show
-          when={props.fileId > 0}
-          fallback="Play a track to tag it"
-        >
+        <Show when={props.fileId > 0} fallback="Play a track to tag it">
           <Show when={pending()} fallback="Saved">
-            Saving…
+            {/* Said plainly, because a panel that shows edits and reports
+                nothing written invites pressing the keys again. */}
+            Saves when the track changes
           </Show>
         </Show>
       </span>
