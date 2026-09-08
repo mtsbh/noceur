@@ -139,6 +139,75 @@ pub fn run(
     Ok(())
 }
 
+/// Copies or moves files, each to its own folder and name.
+///
+/// The batch form above puts everything in one place under the names it already
+/// has, which is what a drag does. This is for filing a selection *apart* — a
+/// folder per release, a name per track — and it is one shell operation for the
+/// same reasons: one progress dialog, one entry on the undo stack, and
+/// Explorer's own handling of a name that is already taken.
+///
+/// Destination folders must exist; the shell will not make them, and creating
+/// them is the caller's business because the caller is the one that knows which
+/// ones its pattern implied.
+#[cfg(windows)]
+pub fn run_each(
+    hwnd: isize,
+    op: Operation,
+    items: &[(std::path::PathBuf, std::path::PathBuf, String)],
+) -> Result<(), String> {
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    let _apartment = Apartment::enter();
+
+    // SAFETY: as `run` above — every interface is created here and released by
+    // its Drop impl, and the operation is not shared across threads.
+    unsafe {
+        let operation: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_ALL)
+            .map_err(|e| format!("cannot start a file operation: {e}"))?;
+
+        operation
+            .SetOwnerWindow(HWND(hwnd as *mut _))
+            .map_err(|e| format!("cannot parent the file dialog: {e}"))?;
+        operation
+            .SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR)
+            .map_err(|e| format!("cannot configure the file operation: {e}"))?;
+
+        for (source, folder, name) in items {
+            let item = shell_item(source)?;
+            let into = shell_item(folder)?;
+            let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+            let renamed = windows::core::PCWSTR(wide.as_ptr());
+
+            let queued = match op {
+                Operation::Copy => operation.CopyItem(&item, &into, renamed, None),
+                Operation::Move => operation.MoveItem(&item, &into, renamed, None),
+                Operation::Delete => {
+                    return Err("deleting takes no destination".into());
+                }
+            };
+            queued.map_err(|e| format!("cannot queue {}: {e}", source.display()))?;
+        }
+
+        operation
+            .PerformOperations()
+            .map_err(|e| format!("the file operation failed: {e}"))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn run_each(
+    _hwnd: isize,
+    _op: Operation,
+    _items: &[(std::path::PathBuf, std::path::PathBuf, String)],
+) -> Result<(), String> {
+    Err("file operations are only implemented on Windows".into())
+}
+
 /// Whether two paths sit on the same volume.
 ///
 /// Explorer moves within a volume and copies across one, and a drop that does

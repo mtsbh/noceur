@@ -45,8 +45,18 @@ const KINDS: {
     target: "",
     script: "https://www.google.com/search?q=%artist%+%title%",
   },
-  { kind: "copy", label: "Copy to", target: "folder", script: "" },
-  { kind: "move", label: "Move to", target: "folder", script: "" },
+  {
+    kind: "copy",
+    label: "Copy to",
+    target: "folder",
+    script: String.raw`optional: %artist% - %album%\%filename%`,
+  },
+  {
+    kind: "move",
+    label: "Move to",
+    target: "folder",
+    script: String.raw`optional: %artist% - %album%\%filename%`,
+  },
 ];
 
 const kindOf = (kind: ActionKind) =>
@@ -563,22 +573,21 @@ export default function Settings(props: {
                     </div>
                   </Show>
 
-                  {/* A folder is the whole instruction for copy and move: there
-                      is nothing per-file left to work out. */}
-                  <Show when={a.kind !== "copy" && a.kind !== "move"}>
-                    <div class="setrow">
-                      <input
-                        type="text"
-                        class="mono"
-                        value={a.script}
-                        placeholder={kindOf(a.kind).script}
-                        spellcheck={false}
-                        onChange={(e) =>
-                          editAction(at(), { script: e.currentTarget.value })
-                        }
-                      />
-                    </div>
-                  </Show>
+                  {/* Copy and move take an optional pattern: leave it empty and
+                      everything lands in the folder under the name it has; write
+                      one and each file is filed apart, folders and all. */}
+                  <div class="setrow">
+                    <input
+                      type="text"
+                      class="mono"
+                      value={a.script}
+                      placeholder={kindOf(a.kind).script}
+                      spellcheck={false}
+                      onChange={(e) =>
+                        editAction(at(), { script: e.currentTarget.value })
+                      }
+                    />
+                  </div>
                 </div>
               )}
             </For>

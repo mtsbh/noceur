@@ -174,6 +174,42 @@ pub fn fields_of<'a>(meta: &noceur_tags::TrackMeta, path: &Path) -> Fields<'a> {
     f
 }
 
+/// Turns a filed-away path pattern into folders and a file name.
+///
+/// The pattern is relative and may name folders that do not exist yet:
+/// `%artist% - %album% '('%year%')'\%filename%` is a folder per release with the
+/// track inside it. Both separators are accepted, because people write whichever
+/// their other tools took.
+///
+/// Every segment is sanitised on its own, so a slash inside an album name
+/// becomes a dash rather than an extra folder — the pattern decides the shape of
+/// the tree, and a tag's contents must never be able to.
+///
+/// The extension is appended rather than taken from the pattern, exactly as
+/// renaming does: a pattern that changed `.flac` to `.mp3` would produce a file
+/// nothing can open.
+pub fn filed_path(pattern: &str, ext: &str) -> Option<PathBuf> {
+    let segments: Vec<String> = pattern
+        .split(['\\', '/'])
+        .map(|part| noceur_fsmodel::rename::sanitise(part.trim()))
+        // `..` would climb out of the folder the user named, which is the one
+        // thing a pattern must not be able to do.
+        .filter(|part| !part.is_empty() && part != "." && part != "..")
+        .collect();
+
+    let (name, folders) = segments.split_last()?;
+    let mut out = PathBuf::new();
+    for folder in folders {
+        out.push(folder);
+    }
+    out.push(if ext.is_empty() {
+        name.clone()
+    } else {
+        format!("{name}.{ext}")
+    });
+    Some(out)
+}
+
 /// Splits an argument line into arguments, respecting double quotes.
 ///
 /// Deliberately not a shell. A program is launched with these as its argument
@@ -270,9 +306,30 @@ pub async fn preview_action(
                 let meta = noceur_tags::read(&path).unwrap_or_default();
                 let result = script.run(&fields_of(&meta, &path));
 
+                // A copy or move with a pattern is previewed as the path it
+                // would land on, which is the only part worth checking.
+                let result = if matches!(action.kind, Kind::Copy | Kind::Move)
+                    && !action.script.trim().is_empty()
+                {
+                    let ext = path
+                        .extension()
+                        .map(|e| e.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    filed_path(&result, &ext)
+                        .map(|rel| Path::new(&action.target).join(rel).display().to_string())
+                        .unwrap_or_default()
+                } else {
+                    result
+                };
+
                 let problem = match action.kind {
                     Kind::Rename if noceur_fsmodel::rename::sanitise(&result).is_empty() => {
                         "the expression leaves nothing to name it".to_string()
+                    }
+                    Kind::Copy | Kind::Move
+                        if !action.script.trim().is_empty() && result.is_empty() =>
+                    {
+                        "the pattern leaves nothing to name it".to_string()
                     }
                     Kind::Copy | Kind::Move if !Path::new(&action.target).is_dir() => {
                         format!("{} is not a folder", action.target)
@@ -324,18 +381,65 @@ pub async fn run_action(
         let mut report = crate::dto::WriteReport::default();
         let mut touched = Vec::new();
 
-        // Copy and move are handed to the shell in one batch rather than one
-        // file at a time, so they get a single progress dialog, a single undo
-        // entry, and Explorer's own conflict handling.
+        // Copy and move go to the shell in one operation rather than one file at
+        // a time, so they get a single progress dialog, a single undo entry, and
+        // Explorer's own conflict handling.
         if matches!(action.kind, Kind::Copy | Kind::Move) {
-            let paths: Vec<PathBuf> = targets.iter().map(|(_, p)| p.clone()).collect();
             let op = if action.kind == Kind::Copy {
                 crate::fileops::Operation::Copy
             } else {
                 crate::fileops::Operation::Move
             };
-            crate::fileops::run(hwnd, op, &paths, Some(Path::new(&action.target)))?;
-            report.written = paths.len() as i64;
+            let root = Path::new(&action.target);
+
+            if action.script.trim().is_empty() {
+                // No pattern: everything into one folder under the names it
+                // already has, which is what dropping a selection does.
+                let paths: Vec<PathBuf> = targets.iter().map(|(_, p)| p.clone()).collect();
+                crate::fileops::run(hwnd, op, &paths, Some(root))?;
+                report.written = paths.len() as i64;
+            } else {
+                // A pattern files them apart: a folder per release, a name per
+                // track. The folders are made here because the shell will not
+                // make them, and this is what knows which ones were implied.
+                let mut items = Vec::new();
+                for (_, path) in &targets {
+                    let meta = noceur_tags::read(path).unwrap_or_default();
+                    let ext = path
+                        .extension()
+                        .map(|e| e.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+
+                    let Some(relative) = filed_path(&script.run(&fields_of(&meta, path)), &ext)
+                    else {
+                        report.failures.push(crate::dto::WriteFailure {
+                            name: file_name(path),
+                            reason: "the pattern leaves nothing to name it".into(),
+                        });
+                        continue;
+                    };
+
+                    let full = root.join(&relative);
+                    let (Some(folder), Some(name)) = (full.parent(), full.file_name()) else {
+                        continue;
+                    };
+                    if let Err(e) = std::fs::create_dir_all(folder) {
+                        report.failures.push(crate::dto::WriteFailure {
+                            name: file_name(path),
+                            reason: format!("cannot make {}: {e}", folder.display()),
+                        });
+                        continue;
+                    }
+                    items.push((
+                        path.clone(),
+                        folder.to_path_buf(),
+                        name.to_string_lossy().into_owned(),
+                    ));
+                }
+
+                crate::fileops::run_each(hwnd, op, &items)?;
+                report.written = items.len() as i64;
+            }
 
             if action.kind == Kind::Move {
                 touched.extend(targets.iter().map(|(id, _)| *id));
@@ -534,6 +638,86 @@ mod tests {
     #[test]
     fn nothing_produces_no_arguments() {
         assert!(split_args("   ").is_empty());
+    }
+
+    // ── Filing a selection apart ──────────────────────────────────────────
+
+    /// The pattern this was asked for: a folder per release, the track inside.
+    #[test]
+    fn a_pattern_becomes_folders_and_a_name() {
+        assert_eq!(
+            filed_path(r"Skee Mask - Compro (2016)\Rev8617", "flac"),
+            Some(PathBuf::from(r"Skee Mask - Compro (2016)\Rev8617.flac"))
+        );
+    }
+
+    #[test]
+    fn either_separator_is_accepted() {
+        assert_eq!(
+            filed_path("Ilian Tape/2016/Rev8617", "wav"),
+            Some(PathBuf::from(r"Ilian Tape\2016\Rev8617.wav"))
+        );
+    }
+
+    #[test]
+    fn a_pattern_with_no_folders_is_just_a_name() {
+        assert_eq!(
+            filed_path("Rev8617", "aiff"),
+            Some(PathBuf::from("Rev8617.aiff"))
+        );
+    }
+
+    /// The pattern decides the shape of the tree. A slash inside an album name
+    /// must become part of a name, never another folder.
+    #[test]
+    fn a_separator_from_a_tag_cannot_add_a_folder() {
+        // As it would arrive with the album already substituted in.
+        let built = filed_path(r"AC-DC - Back In Black\Hells Bells", "mp3");
+        assert_eq!(
+            built,
+            Some(PathBuf::from(r"AC-DC - Back In Black\Hells Bells.mp3"))
+        );
+
+        // And the characters Windows refuses are replaced per segment.
+        assert_eq!(
+            filed_path(r"Untitled: Part 2|x\What?", "mp3"),
+            Some(PathBuf::from(r"Untitled - Part 2-x\What.mp3"))
+        );
+    }
+
+    /// The one thing a pattern must not be able to do is climb out of the
+    /// folder the user named.
+    #[test]
+    fn a_pattern_cannot_climb_out_of_its_folder() {
+        assert_eq!(
+            filed_path(r"..\..\windows\system32\evil", "exe"),
+            Some(PathBuf::from(r"windows\system32\evil.exe"))
+        );
+    }
+
+    #[test]
+    fn empty_segments_are_dropped_rather_than_making_empty_folders() {
+        assert_eq!(
+            filed_path(r"Artist\\  \Title", "flac"),
+            Some(PathBuf::from(r"Artist\Title.flac"))
+        );
+    }
+
+    #[test]
+    fn a_pattern_that_empties_produces_nothing() {
+        assert_eq!(filed_path("", "flac"), None);
+        assert_eq!(filed_path(r"  \  ", "flac"), None);
+    }
+
+    /// A pattern that changed the extension would produce a file nothing can
+    /// open, so it is appended rather than read from the pattern.
+    #[test]
+    fn the_extension_is_appended_not_taken_from_the_pattern() {
+        assert_eq!(
+            filed_path("Rev8617.mp3", "flac"),
+            Some(PathBuf::from("Rev8617.mp3.flac"))
+        );
+        assert_eq!(filed_path("Rev8617", ""), Some(PathBuf::from("Rev8617")));
     }
 
     // ── What is refused, and when ─────────────────────────────────────────
