@@ -1505,6 +1505,8 @@ export default function App() {
               : 0
           }
           sampleRate={transport()?.sampleRate ?? 0}
+          durationMs={transport()?.durationMs ?? 0}
+          name={transport()?.path ?? ""}
         />
       </Show>
 

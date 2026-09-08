@@ -570,11 +570,19 @@ pub async fn reveal(state: State<'_, AppState>, file_id: i64) -> Result<(), Stri
 
 #[cfg(windows)]
 fn reveal_in_shell(path: &Path) -> Result<(), String> {
-    // `/select,` takes the path as one argument and Explorer parses it itself,
-    // so it is passed unquoted here; quoting it would make the quotes part of
-    // the path Explorer looks for.
-    std::process::Command::new("explorer")
-        .arg(format!("/select,{}", path.display()))
+    use std::os::windows::process::CommandExt;
+
+    // The command line is built by hand rather than through `arg`, because
+    // Explorer wants the quotes around the *path* and `arg` puts them around the
+    // whole switch: any track whose name has a space in it became
+    // `"/select,E:\...\a b.flac"`, which Explorer cannot parse, so it silently
+    // opened Documents instead of selecting anything.
+    //
+    // `\\?\` is stripped for the same reason — Explorer does not understand the
+    // extended prefix and treats it as a path that does not exist.
+    let shown = simplify(path);
+    std::process::Command::new("explorer.exe")
+        .raw_arg(format!("/select,\"{}\"", shown.display()))
         .spawn()
         .map(|_| ())
         // Explorer returns a non-zero exit code even when it succeeds, so only

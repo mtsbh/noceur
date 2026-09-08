@@ -1,7 +1,16 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { For, createEffect, createSignal, onCleanup } from "solid-js";
 
 /** Bands up the height. Must match `BANDS` in `noceur-audio`. */
 const BANDS = 128;
+
+/**
+ * Quietest level drawn, in dB below the track's own peak.
+ *
+ * Must match `FLOOR_DB` in `noceur-audio`: the bytes arriving are scaled across
+ * exactly this range, and a legend built against a different one would label
+ * every colour wrongly.
+ */
+const FLOOR_DB = -96;
 
 /**
  * The colour ramp, from silence to full.
@@ -39,6 +48,30 @@ const LUT = (() => {
   return out;
 })();
 
+/** The same ramp as a CSS gradient, for the legend beside the picture. */
+const LEGEND = `linear-gradient(to top, ${RAMP.map(
+  (c, i) => `rgb(${c[0]},${c[1]},${c[2]}) ${(i / (RAMP.length - 1)) * 100}%`,
+).join(", ")})`;
+
+/** `m:ss`, for the time axis. */
+function clock(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Seconds between time labels, so a track gets six or so however long it is.
+ *
+ * Chosen from a list of round numbers rather than computed: 30 seconds and a
+ * minute are intervals anyone reads instantly, and 47 seconds is not.
+ */
+function timeStep(total: number): number {
+  for (const step of [10, 15, 30, 60, 120, 300, 600, 900]) {
+    if (total / step <= 8) return step;
+  }
+  return 1800;
+}
+
 /**
  * The spectrogram of the loaded track.
  *
@@ -57,12 +90,52 @@ export default function Spectrogram(props: {
   /** Fraction of the track played, 0..1, for the playhead. */
   progress: number;
   sampleRate: number;
+  durationMs: number;
+  /** Shown above the picture, as Spek does. */
+  name: string;
 }) {
   let canvas: HTMLCanvasElement | undefined;
   const [size, setSize] = createSignal({ w: 0, h: 0 });
 
   const columns = () =>
     props.grid.length > 0 ? Math.floor(props.grid.length / BANDS) : 0;
+
+  /** Top of the picture, in kHz. */
+  const nyquist = () => (props.sampleRate > 0 ? props.sampleRate / 2000 : 0);
+
+  /** Frequency labels, from the top down, at a round interval. */
+  const frequencies = () => {
+    const top = nyquist();
+    if (top <= 0) return [];
+    const step = top > 30 ? 10 : top > 14 ? 5 : 2;
+
+    const marks: number[] = [];
+    for (let khz = 0; khz <= top; khz += step) marks.push(khz);
+    // The very top is worth labelling even when it is not on the interval: it
+    // is where the answer usually is.
+    if (top - marks[marks.length - 1] > step * 0.35) marks.push(top);
+    return marks;
+  };
+
+  const seconds = () => props.durationMs / 1000;
+
+  const times = () => {
+    const total = seconds();
+    if (total <= 0) return [];
+    const step = timeStep(total);
+
+    const marks: number[] = [];
+    for (let at = 0; at < total; at += step) marks.push(at);
+    marks.push(total);
+    return marks;
+  };
+
+  /** The dB scale beside the ramp, in twenties. */
+  const decibels = () => {
+    const marks: number[] = [];
+    for (let db = 0; db >= FLOOR_DB; db -= 20) marks.push(db);
+    return marks;
+  };
 
   // The picture only changes when the track does, so it is drawn to its own
   // canvas once and blitted. The playhead moves ten times a second and must not
@@ -74,6 +147,7 @@ export default function Spectrogram(props: {
     const cols = columns();
     if (cols === 0) {
       image = undefined;
+      draw();
       return;
     }
 
@@ -113,16 +187,19 @@ export default function Spectrogram(props: {
     canvas.height = Math.round(box.h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    ctx.clearRect(0, 0, box.w, box.h);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, box.w, box.h);
     if (!image) return;
 
-    // Smoothing off: this is data, and interpolating it invents levels between
-    // the ones that were measured.
-    ctx.imageSmoothingEnabled = false;
+    // Smoothing off horizontally would show every column edge, and on
+    // vertically would blur the very line being looked for. Columns are far
+    // narrower than the box, rows far taller, so this is the useful way round.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.drawImage(image, 0, 0, box.w, box.h);
 
     const at = Math.round(box.w * Math.min(1, Math.max(0, props.progress)));
-    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.fillRect(at, 0, 1, box.h);
   }
 
@@ -138,16 +215,47 @@ export default function Spectrogram(props: {
     onCleanup(() => observer.disconnect());
   });
 
-  /** Frequency at the top of the picture, for the one label worth having. */
-  const nyquist = () => (props.sampleRate > 0 ? props.sampleRate / 2000 : 0);
-
   return (
     <div class="spek">
-      <canvas ref={(el) => (canvas = el)} class="spekcanvas" />
-      <div class="spekaxis">
-        <span>{nyquist() > 0 ? `${nyquist().toFixed(1)}k` : ""}</span>
-        <span>{nyquist() > 0 ? `${(nyquist() / 2).toFixed(0)}k` : ""}</span>
-        <span>0</span>
+      <div class="spekhead" title={props.name}>
+        {props.name}
+      </div>
+
+      <div class="spekgrid">
+        <div class="spekfreq">
+          <For each={frequencies()}>
+            {(khz) => (
+              <span style={{ bottom: `${(khz / nyquist()) * 100}%` }}>
+                {khz % 1 === 0 ? khz : khz.toFixed(1)} kHz
+              </span>
+            )}
+          </For>
+        </div>
+
+        <div class="spekplot">
+          <canvas ref={(el) => (canvas = el)} />
+        </div>
+
+        <div class="speklegend">
+          <div class="spekramp" style={{ background: LEGEND }} />
+          <div class="spekdb">
+            <For each={decibels()}>
+              {(db) => (
+                <span style={{ top: `${(db / FLOOR_DB) * 100}%` }}>{db} dB</span>
+              )}
+            </For>
+          </div>
+        </div>
+
+        <div class="spektime">
+          <For each={times()}>
+            {(at) => (
+              <span style={{ left: `${(at / seconds()) * 100}%` }}>
+                {clock(at)}
+              </span>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   );

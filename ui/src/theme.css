@@ -1929,43 +1929,111 @@ body.resizing * {
 }
 
 /* ── Spectrogram ───────────────────────────────────────────────────────────
-   A strip above the transport. Short, because it is for reading the shape of a
-   file at a glance — where its content stops — rather than for study. */
+   Laid out like Spek, because Spek's layout is right: the picture is useless
+   without knowing which frequency a line sits at, and a colour is useless
+   without a scale beside it saying what it means. */
 .spek {
   flex: none;
-  position: relative;
-  height: 132px;
+  display: flex;
+  flex-direction: column;
+  height: 230px;
+  padding: 6px 12px 4px;
   border-top: 1px solid var(--hair);
+  background: var(--panel);
+}
+.spekhead {
+  flex: none;
+  margin-bottom: 5px;
+  color: var(--fg2);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.spekgrid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 48px 1fr 62px;
+  grid-template-rows: 1fr 15px;
+  column-gap: 5px;
+}
+
+/* Frequency, up the left. Each label is pinned to its own height, so the
+   spacing is the scale rather than an approximation of it. */
+.spekfreq {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+}
+.spekfreq span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  color: var(--fg3);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.spekplot {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--hair2);
   background: #000;
 }
-.spekcanvas {
+.spekplot canvas {
   display: block;
   width: 100%;
   height: 100%;
 }
-/* Frequencies up the right edge, over the picture: the axis is worth having and
-   not worth a column of its own. */
-.spekaxis {
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  bottom: 3px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  pointer-events: none;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-shadow: 0 0 3px #000;
-}
-.gearbtn[data-tip] {
+
+/* Time, along the bottom. The first and last labels are pulled inside the plot
+   so neither hangs off the end of it. */
+.spektime {
   position: relative;
+  grid-column: 2;
+  grid-row: 2;
 }
-.gearbtn[data-tip]::after,
-.gearbtn:hover[data-tip]::after {
-  /* Shares the toolbar tooltip's look; see the block above it. */
+.spektime span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  color: var(--fg3);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.spektime span:first-child {
+  transform: none;
+}
+.spektime span:last-child {
+  transform: translateX(-100%);
+}
+
+/* The colour scale, so a hue can be read as a level rather than admired. */
+.speklegend {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  gap: 4px;
+}
+.spekramp {
+  flex: none;
+  width: 11px;
+  border: 1px solid var(--hair2);
+}
+.spekdb {
+  position: relative;
+  flex: 1;
+}
+.spekdb span {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  color: var(--fg3);
+  font-size: 9px;
+  white-space: nowrap;
 }
 
 /* ── Track actions ────────────────────────────────────────────────────────
