@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 7;
+pub const SCHEMA_VERSION: i32 = 8;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -200,4 +200,20 @@ CREATE TABLE audio_identity (
 );
 
 CREATE INDEX idx_audio_identity_hash ON audio_identity(hash);
+"#;
+
+/// Re-read the files whose codec was never recorded.
+///
+/// `content.codec` has been in the schema since V1 and nothing ever wrote to it,
+/// so the column the list offers as a column was empty for every row in every
+/// library. The probe fills it now, but a file is only re-probed when its mtime
+/// moves past the time it was last read — and nothing about these files has
+/// changed, only what is asked of them.
+///
+/// Marking them stale is what asks. It costs one tag read each, spread over the
+/// folders as they are opened rather than all at once.
+const V8: &str = r#"
+UPDATE content_tag
+SET read_at = 0
+WHERE content_id IN (SELECT id FROM content WHERE codec IS NULL);
 "#;

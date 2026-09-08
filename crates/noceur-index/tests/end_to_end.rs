@@ -131,3 +131,23 @@ fn key_sort_is_harmonic_not_alphabetical() {
     // Alphabetically "10A" < "2A"; harmonically 2A < 9A < 10A.
     assert_eq!(names, ["y.wav", "z.wav", "x.wav"]);
 }
+
+/// The codec column was declared in the very first migration and never written
+/// to, so the list offered a column that was empty in every library. A probe has
+/// to fill it, and only an end-to-end run proves that it does.
+#[test]
+fn probing_records_what_each_file_actually_is() {
+    let db = Db::open_in_memory().unwrap();
+    let d = TempDir::new().unwrap();
+    let vol = upsert(&db, "u", VolumeKind::Fixed, "t", "/").unwrap();
+    make(d.path(), "a.wav", "Artist", "128", "8A");
+
+    let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+    probe_dir(&db, dir_id).unwrap();
+
+    let codec: Option<String> = db
+        .conn()
+        .query_row("SELECT codec FROM content LIMIT 1", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(codec.as_deref(), Some("WAV"));
+}

@@ -214,13 +214,15 @@ fn probe_target(
     };
 
     db.conn().execute(
-        "INSERT INTO content (quick_key, byte_size, duration_ms, sample_rate, channels, bit_depth)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        "INSERT INTO content (quick_key, byte_size, duration_ms, sample_rate, channels,
+                              bit_depth, codec)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(quick_key) DO UPDATE SET
              duration_ms = excluded.duration_ms,
              sample_rate = excluded.sample_rate,
              channels    = excluded.channels,
-             bit_depth   = excluded.bit_depth",
+             bit_depth   = excluded.bit_depth,
+             codec       = excluded.codec",
         params![
             quick,
             full.metadata().map(|m| m.len() as i64).unwrap_or(0),
@@ -228,6 +230,7 @@ fn probe_target(
             meta.sample_rate.map(|v| v as i64),
             meta.channels.map(|v| v as i64),
             meta.bit_depth.map(|v| v as i64),
+            meta.codec.as_deref(),
         ],
     )?;
 

@@ -46,6 +46,11 @@ pub struct TrackMeta {
     pub bit_depth: Option<u8>,
     /// Bitrate in kbps, as the container reports it. `None` when it will not say.
     pub bitrate_kbps: Option<u32>,
+    /// What the audio is actually encoded as: `MP3`, `FLAC`, `WAV`, `AIFF`.
+    ///
+    /// Sniffed from the container rather than taken from the extension, so a
+    /// `.mp3` that is really a WAV says so.
+    pub codec: Option<String>,
     /// Whether the container stores the audio losslessly.
     ///
     /// Kept apart from the bitrate because "no bitrate" is ambiguous otherwise:
@@ -62,12 +67,20 @@ pub struct TrackMeta {
 /// Returns `Err` only when the file cannot be parsed as audio at all. A valid
 /// audio file with no tags yields a `TrackMeta` with empty fields.
 pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
-    let tagged = Probe::open(path)
-        .and_then(|p| p.read())
-        .map_err(|source| MetaError::Read {
-            path: path.display().to_string(),
-            source,
-        })?;
+    // `guess_file_type` reads the container's own first bytes; without it lofty
+    // takes the extension's word for what the file is, and a `.mp3` that is
+    // really a WAV fails to read at all rather than reading as a WAV. Files
+    // named wrongly are ordinary in a library that has been through several
+    // programs, and refusing them is not a useful answer about them.
+    let fail = |source| MetaError::Read {
+        path: path.display().to_string(),
+        source,
+    };
+    let probe = Probe::open(path)
+        .map_err(fail)?
+        .guess_file_type()
+        .map_err(|e| fail(lofty::error::LoftyError::from(e)))?;
+    let tagged = probe.read().map_err(fail)?;
 
     let props = tagged.properties();
     let mut meta = TrackMeta {
@@ -76,6 +89,7 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
         channels: props.channels(),
         bit_depth: props.bit_depth(),
         bitrate_kbps: props.audio_bitrate(),
+        codec: codec_of(tagged.file_type()),
         lossless: is_lossless(tagged.file_type()),
         ..Default::default()
     };
@@ -134,6 +148,37 @@ pub struct Artwork {
     /// The container's declared MIME type, when it declares one.
     pub mime: Option<String>,
     pub data: Vec<u8>,
+}
+
+/// What a container holds, in the name anyone would use for it.
+///
+/// Read from the container's own bytes rather than from the extension. A file
+/// named `.mp3` that is really a WAV is a thing that happens, and this is the
+/// column that says so.
+///
+/// MP4 is reported as itself rather than guessed at: the same container holds
+/// AAC and ALAC, and telling them apart means parsing the sample description
+/// rather than the header lofty has already read.
+pub fn codec_of(file_type: lofty::file::FileType) -> Option<String> {
+    use lofty::file::FileType;
+    Some(
+        match file_type {
+            FileType::Mpeg => "MP3",
+            FileType::Flac => "FLAC",
+            FileType::Wav => "WAV",
+            FileType::Aiff => "AIFF",
+            FileType::Mp4 => "MP4",
+            FileType::Vorbis => "Vorbis",
+            FileType::Opus => "Opus",
+            FileType::Speex => "Speex",
+            FileType::Ape => "APE",
+            FileType::WavPack => "WavPack",
+            FileType::Mpc => "Musepack",
+            FileType::Aac => "AAC",
+            _ => return None,
+        }
+        .to_string(),
+    )
 }
 
 /// Whether a container stores its audio without loss.
@@ -245,6 +290,7 @@ pub struct Fields {
 mod tests {
     use super::*;
     use lofty::config::WriteOptions;
+    use lofty::file::FileType;
     use lofty::picture::{MimeType, Picture, PictureType};
     use lofty::prelude::{Accessor, ItemKey, TagExt};
     use lofty::probe::Probe;
@@ -747,5 +793,41 @@ mod tests {
         assert_eq!(meta.title.as_deref(), Some("Rev8617"));
         assert_eq!(meta.bpm, Some(143.0));
         assert_eq!(read_fields(&path, &[]).unwrap().rating, Some(5));
+    }
+
+    /// The column this exists for was empty in every library for months: the
+    /// schema declared it and nothing ever wrote to it.
+    #[test]
+    fn every_container_worth_naming_has_a_name() {
+        for (kind, name) in [
+            (FileType::Mpeg, "MP3"),
+            (FileType::Flac, "FLAC"),
+            (FileType::Wav, "WAV"),
+            (FileType::Aiff, "AIFF"),
+            (FileType::Vorbis, "Vorbis"),
+            (FileType::Ape, "APE"),
+        ] {
+            assert_eq!(codec_of(kind).as_deref(), Some(name), "{kind:?}");
+        }
+    }
+
+    /// Read from the bytes rather than the extension, which is the only reason
+    /// it is worth a column at all: a file named `.mp3` that is really a WAV
+    /// says WAV.
+    #[test]
+    fn the_codec_comes_from_the_container_not_the_name() {
+        let dir = TempDir::new().unwrap();
+        let lying = dir.path().join("actually-a-wav.mp3");
+        write_wav(&lying);
+
+        let meta = read(&lying).unwrap();
+        assert_eq!(meta.codec.as_deref(), Some("WAV"));
+    }
+
+    /// MP4 holds AAC and ALAC alike, and saying which would mean parsing more
+    /// than the header. Naming the container is honest; guessing is not.
+    #[test]
+    fn mp4_is_named_as_the_container_it_is() {
+        assert_eq!(codec_of(FileType::Mp4).as_deref(), Some("MP4"));
     }
 }
