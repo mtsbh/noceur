@@ -187,17 +187,24 @@ export function SpectrumIcon() {
 }
 
 /**
- * The spectrogram toggle: a framed plot whose content thins towards the top.
+ * The spectrogram toggle: a pig, because Spek's is.
  *
- * Deliberately not the falling bars — that is the quality check's icon, and two
- * buttons in the same bar wearing the same glyph is worse than either being
- * slightly less apt.
+ * Not the falling bars — those belong to the quality check, and two buttons in
+ * the same bar wearing one glyph is worse than either being less literal. A face
+ * is also the easier thing to pick out of a row of abstract marks, which is what
+ * a toolbar mostly is.
  */
-export function SpekIcon() {
+export function PigIcon() {
   return (
     <Icon>
-      <rect x="2.3" y="3" width="11.4" height="10" rx="1.2" />
-      <path d="M4.3 10.8h7.4M4.3 8.6h7.4M4.3 6.4h4.6" />
+      {/* Ears first, so the head's outline draws over their base. */}
+      <path d="M5.2 4.3 3.6 2.7l.2 2.5M10.8 4.3l1.6-1.6-.2 2.5" />
+      <path d="M8 3.7c2.85 0 5.1 1.9 5.1 4.45S10.85 12.9 8 12.9 2.9 10.7 2.9 8.15 5.15 3.7 8 3.7Z" />
+      <ellipse cx="8" cy="9.2" rx="2" ry="1.45" />
+      <circle cx="7.35" cy="9.2" r="0.42" fill="currentColor" stroke="none" />
+      <circle cx="8.65" cy="9.2" r="0.42" fill="currentColor" stroke="none" />
+      <circle cx="6" cy="6.6" r="0.5" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="6.6" r="0.5" fill="currentColor" stroke="none" />
     </Icon>
   );
 }

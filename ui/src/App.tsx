@@ -51,7 +51,7 @@ import Toolbar, { type ActionId } from "./Toolbar";
 import Quality from "./Quality";
 import Spectrogram from "./Spectrogram";
 import Titlebar from "./Titlebar";
-import { SettingsIcon, SpekIcon } from "./icons";
+import { PigIcon, SettingsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import {
   DEFAULT_COLUMNS,
@@ -1188,7 +1188,7 @@ export default function App() {
           aria-label="Spectrogram"
           onClick={() => setSpekOpen((open) => !open)}
         >
-          <SpekIcon />
+          <PigIcon />
         </button>
         <button
           class={`gearbtn ${settingsOpen() ? "on" : ""}`}
