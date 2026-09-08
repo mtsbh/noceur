@@ -1605,10 +1605,25 @@ body.resizing * {
   background: var(--raise);
   color: var(--fg);
 }
+/* A marked row uses its own colour when set, and the app's accent otherwise —
+   the fallbacks here are what make the colour optional per row rather than a
+   thing every row has to declare. */
 .quickbtn.on {
-  border-color: var(--acc-line);
-  background: var(--acc-fill);
-  color: var(--acc);
+  border-color: var(--tag, var(--acc-line));
+  background: var(--tag-fill, var(--acc-fill));
+  color: var(--tag, var(--acc));
+}
+/* A dot of the row's colour beside its name, so a glance finds the row before
+   reading which values are lit. */
+.quickrow .quicklabel::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--tag, var(--acc));
+  vertical-align: middle;
 }
 .quickbtn:disabled {
   color: var(--fg4);
@@ -1791,6 +1806,76 @@ body.resizing * {
   color: var(--acc);
 }
 
+/* ── Settings: the question mark that holds each section's explanation ─────
+   The prose used to sit permanently under the controls it described, which is
+   text you read once and scroll past forever. */
+.setgroup h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.setinfo {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 50%;
+  background: none;
+  color: var(--fg3);
+  font: inherit;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+.setinfo:hover {
+  color: var(--fg);
+  border-color: var(--fg3);
+}
+.setinfo.on {
+  color: var(--acc);
+  border-color: var(--acc-line);
+}
+.setabout {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border-left: 2px solid var(--acc-line);
+  border-radius: 0 4px 4px 0;
+  background: var(--bg);
+  color: var(--fg2);
+  font-size: 11px;
+}
+.setabout p {
+  margin: 0 0 7px;
+}
+.setabout p:last-child {
+  margin-bottom: 0;
+}
+
+/* Row colours for quick tag. */
+.swatches {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+.swatch {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--tag);
+  opacity: 0.5;
+  cursor: pointer;
+}
+.swatch:hover {
+  opacity: 0.85;
+}
+.swatch.on {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--tag);
+}
+
 /* ── Track actions ────────────────────────────────────────────────────────
    Shortcuts to the right-click menu, in the path bar. Disabled rather than
    hidden without a selection: buttons that appear and disappear as rows are
@@ -1826,7 +1911,9 @@ body.resizing * {
    does not set off six of them, short enough to answer "what is this one"
    before anyone gives up and clicks it to find out. A disabled button keeps
    its tooltip — that is exactly when the reason matters. */
-.toolbtn[data-tip]::after {
+.toolbtn[data-tip]::after,
+.setinfo[data-tip]::after,
+.swatch[data-tip]::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 7px);
@@ -1848,20 +1935,30 @@ body.resizing * {
     opacity 0.08s ease 0.4s,
     visibility 0s linear 0.4s;
 }
-.toolbtn:hover[data-tip]::after {
+.toolbtn:hover[data-tip]::after,
+.setinfo:hover[data-tip]::after,
+.swatch:hover[data-tip]::after {
   opacity: 1;
   visibility: visible;
 }
-/* The last button is closest to the window edge, so its tooltip grows leftwards
-   from it rather than centring and running off the screen. */
-.toolbtn:last-child[data-tip]::after {
+/* The last of a row is closest to the window edge, so its tooltip grows
+   leftwards from it rather than centring and running off the screen. */
+.toolbtn:last-child[data-tip]::after,
+.swatch:last-child[data-tip]::after {
   left: auto;
   right: 0;
   transform: none;
 }
+/* These need the positioning context their tooltip is placed against. */
+.setinfo,
+.swatch {
+  position: relative;
+}
 /* Gone the instant the menu or dialog it opened appears — a tooltip still
    hanging over a dialog it just launched is the browser's habit, not ours. */
-.toolbtn:active[data-tip]::after {
+.toolbtn:active[data-tip]::after,
+.setinfo:active[data-tip]::after,
+.swatch:active[data-tip]::after {
   opacity: 0;
   visibility: hidden;
   transition: none;

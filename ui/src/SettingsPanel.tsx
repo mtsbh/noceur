@@ -1,15 +1,56 @@
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
 import { CloseIcon } from "./icons";
 import { credentials, openUrl, setDiscogsToken } from "./api";
 import type { Column } from "./columns";
 import {
   NEW_QUICK_GROUP,
   QUICK_KEYS,
+  TAG_COLOURS,
   type QuickGroup,
   type Settings as S,
 } from "./settings";
 
 export type ArtSize = "small" | "medium" | "large";
+
+/**
+ * One settings section, with its explanation behind a question mark.
+ *
+ * The panel used to carry its prose in the open — several paragraphs per
+ * section, permanently, for settings that are mostly obvious. That is text you
+ * read once and then scroll past forever, and it buried the controls it was
+ * meant to support. It is all still here; it is just folded away until asked
+ * for, which is the difference between a reference and a wall.
+ */
+function Section(props: {
+  title: string;
+  info?: JSX.Element;
+  children: JSX.Element;
+}) {
+  const [open, setOpen] = createSignal(false);
+
+  return (
+    <section class="setgroup">
+      <h3>
+        {props.title}
+        <Show when={props.info}>
+          <button
+            class={`setinfo ${open() ? "on" : ""}`}
+            aria-label={`About ${props.title.toLowerCase()}`}
+            aria-expanded={open()}
+            data-tip={open() ? "Hide" : `About ${props.title.toLowerCase()}`}
+            onClick={() => setOpen((v) => !v)}
+          >
+            ?
+          </button>
+        </Show>
+      </h3>
+      <Show when={open()}>
+        <div class="setabout">{props.info}</div>
+      </Show>
+      {props.children}
+    </section>
+  );
+}
 
 /**
  * Everything configurable, in one place.
@@ -74,9 +115,19 @@ export default function Settings(props: {
         </header>
 
         <div class="setbody">
-          <section class="setgroup">
-            <h3>Waveform</h3>
-
+          <Section
+            title="Waveform"
+            info={
+              <p>
+                All four read the same three frequency bands and only differ in
+                how they draw them. <b>RGB</b> blends bass, body and air into one
+                colour, as Traktor and Virtual DJ do. <b>3-band</b> draws them as
+                separate shapes — blue bass, orange body, pale highs — the way a
+                CDJ does. <b>Blue</b> is one colour that pales where the hats
+                are. <b>Mono</b> uses the app's own accent.
+              </p>
+            }
+          >
             <div class="setrow">
               <span class="setlabel">Shape</span>
               <div class="setseg" role="group">
@@ -129,18 +180,39 @@ export default function Settings(props: {
               </div>
             </div>
 
-            <p class="sethint">
-              Same three frequency bands in all four; only the drawing differs.
-            </p>
-          </section>
+          </Section>
 
-          <section class="setgroup">
-            <h3>Quick tag</h3>
-            <p class="sethint">
-              Values you can apply to the playing track by keyboard. The field
-              names are yours — <code>ENERGY</code> and <code>MOOD</code> are
-              only defaults.
-            </p>
+          <Section
+            title="Quick tag"
+            info={
+              <>
+                <p>
+                  Rows of values you can apply to the playing track by keyboard.
+                  Every library has its own vocabulary, so the field names are
+                  yours too — <code>ENERGY</code> and <code>MOOD</code> are only
+                  defaults.
+                </p>
+                <p>
+                  A name a format already knows goes to its proper home:{" "}
+                  <code>MOOD</code> becomes ID3's <code>TMOO</code> frame.
+                  Anything else becomes a user-defined field — <code>TXXX</code>{" "}
+                  in MP3, WAV and AIFF, a plain key in FLAC, an iTunes atom in
+                  M4A — which is where Mp3tag, OneTagger and Serato look.
+                </p>
+                <p>
+                  Rekordbox displays only a handful of fields, so for something
+                  visible on a CDJ point a row at <code>COMMENT</code> or{" "}
+                  <code>GROUPING</code> rather than a name of your own. The star
+                  rating is separate and always goes where Rekordbox reads it.
+                </p>
+                <p>
+                  A field name of exactly four capitals — <code>VIBE</code> — is
+                  refused: ID3 reads any four capitals as a frame identifier, so
+                  it would be written as something no reader understands.
+                </p>
+              </>
+            }
+          >
             <div class="setrow">
               <span class="setlabel">Stars</span>
               <label class="setcheck">
@@ -186,6 +258,23 @@ export default function Settings(props: {
                       />
                       <span>many</span>
                     </label>
+
+                    {/* Seven swatches rather than a colour picker: these are
+                        chosen to stay readable on this theme, and the point of
+                        marking a row is telling it apart at a glance. */}
+                    <div class="swatches" role="group" aria-label="Row colour">
+                      <For each={TAG_COLOURS}>
+                        {(c) => (
+                          <button
+                            class={`swatch ${g.colour === c.name ? "on" : ""}`}
+                            style={{ "--tag": c.line }}
+                            data-tip={c.label}
+                            aria-label={c.label}
+                            onClick={() => editGroup(row(), { colour: c.name })}
+                          />
+                        )}
+                      </For>
+                    </div>
                   </div>
                   <div class="setrow">
                     <input
@@ -231,22 +320,20 @@ export default function Settings(props: {
               </button>
             </Show>
 
-            <h4 class="setsub">Where these end up</h4>
-            <p class="sethint">
-              Known names go to their proper home — <code>MOOD</code> to ID3's
-              <code>TMOO</code>. Anything else becomes a user-defined field,
-              where Mp3tag, OneTagger and Serato look. For a value a CDJ will
-              show, point a row at <code>COMMENT</code> or{" "}
-              <code>GROUPING</code>. Names of exactly four capitals are refused:
-              ID3 would read them as a frame id.            </p>
-          </section>
+          </Section>
 
-          <section class="setgroup">
-            <h3>Metadata sources</h3>
-            <p class="sethint">
-              Deezer, iTunes and MusicBrainz need nothing. Discogs needs a token,
-              and is the only one that reliably knows label and catalogue number.
-            </p>
+          <Section
+            title="Metadata sources"
+            info={
+              <p>
+                Deezer, iTunes and MusicBrainz need nothing. Discogs needs a
+                personal access token from your own account, and is the only one
+                here that reliably knows a record's label and catalogue number.
+                The token is stored in plain text beside the app and is only ever
+                sent to Discogs.
+              </p>
+            }
+          >
             <div class="setrow">
               <span class="setlabel">Discogs</span>
               <input
@@ -287,13 +374,11 @@ export default function Settings(props: {
               >
                 Generate one on Discogs
               </a>
-              , then paste it here. Stored in plain text beside the app, and
-              only ever sent to Discogs.
+              , then paste it here.
             </p>
-          </section>
+          </Section>
 
-          <section class="setgroup">
-            <h3>List</h3>
+          <Section title="List">
             <div class="setrow">
               <span class="setlabel">Cover art</span>
               <div class="setseg" role="group">
@@ -317,10 +402,17 @@ export default function Settings(props: {
                 </For>
               </div>
             </div>
-          </section>
+          </Section>
 
-          <section class="setgroup">
-            <h3>Columns</h3>
+          <Section
+            title="Columns"
+            info={
+              <p>
+                Right-clicking the list header opens the same list. Drag a
+                heading to move it, or its right edge to change its width.
+              </p>
+            }
+          >
             <div class="setcols">
               <For each={props.columns}>
                 {(col) => (
@@ -336,11 +428,7 @@ export default function Settings(props: {
                 )}
               </For>
             </div>
-            <p class="sethint">
-              Right-click the list header for the same list. Drag a heading to
-              reorder, or its edge to resize.
-            </p>
-          </section>
+          </Section>
         </div>
       </div>
     </>

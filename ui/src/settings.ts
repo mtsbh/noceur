@@ -26,7 +26,48 @@ export type QuickGroup = {
   values: string[];
   /** Whether a track can carry several of these at once. */
   multi: boolean;
+  /** Which colour this row is marked in, or absent for the app's own accent. */
+  colour?: ColourName;
 };
+
+export type ColourName =
+  | "amber"
+  | "red"
+  | "violet"
+  | "blue"
+  | "teal"
+  | "green"
+  | "grey";
+
+/**
+ * The colours a quick-tag row can be marked in.
+ *
+ * Seven, and no colour picker. A palette chosen against this theme stays
+ * readable on it; a free choice produces the one row nobody can read, and the
+ * point of colouring a row is telling it apart at a glance mid-set.
+ *
+ * Each carries its own fill rather than deriving one, so the buttons do not
+ * depend on `color-mix` being available in whatever web view is hosting this.
+ */
+export const TAG_COLOURS: {
+  name: ColourName;
+  label: string;
+  line: string;
+  fill: string;
+}[] = [
+  { name: "amber", label: "Amber", line: "#e8a55f", fill: "rgba(232, 165, 95, 0.16)" },
+  { name: "red", label: "Red", line: "#e2685e", fill: "rgba(226, 104, 94, 0.16)" },
+  { name: "violet", label: "Violet", line: "#a98cf0", fill: "rgba(169, 140, 240, 0.16)" },
+  { name: "blue", label: "Blue", line: "#6aa9e8", fill: "rgba(106, 169, 232, 0.16)" },
+  { name: "teal", label: "Teal", line: "#5fc6b8", fill: "rgba(95, 198, 184, 0.16)" },
+  { name: "green", label: "Green", line: "#86c46a", fill: "rgba(134, 196, 106, 0.16)" },
+  { name: "grey", label: "Grey", line: "#9aa0a6", fill: "rgba(154, 160, 166, 0.16)" },
+];
+
+/** The palette entry for a name, or the accent when there is none. */
+export function colourOf(name?: ColourName) {
+  return TAG_COLOURS.find((c) => c.name === name) ?? TAG_COLOURS[0];
+}
 
 export type Settings = {
   wave: { shape: WaveShape; colour: WaveColour };
@@ -64,12 +105,19 @@ export const QUICK_KEYS: string[][] = [
  * the fields as much as the values, since every library has its own vocabulary.
  */
 export const DEFAULT_QUICK: QuickGroup[] = [
-  { label: "Energy", field: "ENERGY", values: ["1", "2", "3", "4", "5"], multi: false },
+  {
+    label: "Energy",
+    field: "ENERGY",
+    values: ["1", "2", "3", "4", "5"],
+    multi: false,
+    colour: "amber",
+  },
   {
     label: "Mood",
     field: "MOOD",
     values: ["Dark", "Rolling", "Peak", "Deep", "Uplifting", "Weird"],
     multi: true,
+    colour: "violet",
   },
 ];
 
@@ -103,7 +151,9 @@ export function loadSettings(): Settings {
         shape: shape && SHAPES.includes(shape) ? shape : DEFAULTS.wave.shape,
         colour: colour && COLOURS.includes(colour) ? colour : DEFAULTS.wave.colour,
       },
-      quick: Array.isArray(parsed.quick) ? parsed.quick.filter(isGroup) : DEFAULT_QUICK,
+      quick: Array.isArray(parsed.quick)
+        ? parsed.quick.filter(isGroup).map(withKnownColour)
+        : DEFAULT_QUICK,
       quickRating: parsed.quickRating !== false,
     };
   } catch {
@@ -121,6 +171,21 @@ function isGroup(g: unknown): g is QuickGroup {
     Array.isArray(q.values) &&
     q.values.every((v) => typeof v === "string")
   );
+}
+
+/**
+ * Drops a colour that names nothing.
+ *
+ * The row keeps its field and its values and simply loses the marking — a
+ * palette that shrank between builds must not take somebody's tag vocabulary
+ * with it.
+ */
+function withKnownColour(g: QuickGroup): QuickGroup {
+  if (g.colour && !TAG_COLOURS.some((c) => c.name === g.colour)) {
+    const { colour: _dropped, ...rest } = g;
+    return rest;
+  }
+  return g;
 }
 
 export function saveSettings(settings: Settings): void {
