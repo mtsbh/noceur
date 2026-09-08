@@ -93,6 +93,43 @@ impl Player {
         })
     }
 
+    /// Blocks until a [`load`](Self::load) has actually taken effect.
+    ///
+    /// `load` hands the path to the audio thread and returns at once. Opening
+    /// the file, building a decoder and reading its length happen over there,
+    /// and until they have, the player still describes the *previous* track —
+    /// so anything that loads and immediately reports its state describes the
+    /// wrong one.
+    ///
+    /// That was a race rather than a constant: an MP3 opened fast enough to win
+    /// it and a large FLAC did not, which is why a FLAC appeared to need playing
+    /// twice before it had a waveform, a duration or a position.
+    ///
+    /// Returns the state as of giving up, so a file that is genuinely slow — a
+    /// long track on a cold network share — reports what is known rather than
+    /// blocking a command indefinitely.
+    pub fn wait_until_loaded(&self, path: &Path, timeout: Duration) -> Playback {
+        let wanted = path.display().to_string();
+        let deadline = std::time::Instant::now() + timeout;
+
+        loop {
+            let now = self.state();
+            // The error belongs to this load only if it arrived after the
+            // previous track was cleared, which `open` does by leaving the path
+            // alone and setting the error. Either way there is nothing further
+            // to wait for.
+            if now.path.as_deref() == Some(wanted.as_str()) || now.error.is_some() {
+                return now;
+            }
+            if std::time::Instant::now() >= deadline {
+                return now;
+            }
+            // Short enough to be invisible on a file that opens quickly, long
+            // enough not to spin a core while one does not.
+            std::thread::sleep(Duration::from_millis(4));
+        }
+    }
+
     pub fn resume(&self) -> Result<(), AudioError> {
         self.send(Cmd::Resume)
     }
@@ -152,7 +189,21 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>) {
 
         if let Some(cmd) = cmd {
             match cmd {
-                Cmd::Load { path, play } => match open(&path, sink.mixer(), volume) {
+                Cmd::Load { path, play } => {
+                    // Cleared before opening rather than after. Two reasons: the
+                    // state must never go on describing the previous track while
+                    // this one is being opened, and a leftover error from a file
+                    // that would not play must not be read as this load's
+                    // outcome by anything waiting for it.
+                    set(&state, |s| {
+                        s.path = None;
+                        s.playing = false;
+                        s.position_ms = 0;
+                        s.duration_ms = None;
+                        s.error = None;
+                    });
+
+                    match open(&path, sink.mixer(), volume) {
                     Ok((new_player, duration)) => {
                         if !play {
                             new_player.pause();
@@ -176,7 +227,8 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>) {
                             s.error = Some(e.to_string());
                         });
                     }
-                },
+                    }
+                }
                 Cmd::Resume => {
                     if let Some(p) = &player {
                         p.play();

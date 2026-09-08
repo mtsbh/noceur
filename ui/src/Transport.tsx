@@ -43,10 +43,14 @@ export default function Transport(props: {
   const [wave, setWave] = createSignal<Uint8Array>(new Uint8Array());
   let bar: HTMLDivElement | undefined;
 
-  // Poll only while something is actually playing. A paused or empty transport
-  // has nothing to move, and polling it would be a timer that never sleeps.
+  // Poll while something is actually playing, and while a track is loaded but
+  // has not reported a duration yet — that is a file still being opened, and it
+  // is the one moment a stopped transport does have news coming. Otherwise a
+  // paused or empty transport has nothing to move, and polling it would be a
+  // timer that never sleeps.
   createEffect(() => {
-    if (!props.state?.playing) return;
+    const opening = Boolean(props.state?.path) && !props.state?.durationMs;
+    if (!props.state?.playing && !opening) return;
     const timer = window.setInterval(() => {
       transportState().then(props.onState).catch(() => {});
     }, TICK_MS);

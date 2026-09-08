@@ -436,8 +436,33 @@ pub async fn play(state: State<'_, AppState>, file_id: i64) -> Result<Transport,
         np.key_norm = tags.key_norm;
     }
 
+    // Waited for, because `load` only hands the path to the audio thread. Until
+    // that thread has opened the file, the player still describes whatever was
+    // playing before — so replying immediately answered "what is loaded now?"
+    // with the wrong track, or with nothing at all on the first play of a
+    // session. The front end then had no file id to fetch a waveform for and,
+    // seeing `playing: false`, never started polling to find out otherwise.
+    //
+    // An MP3 opened fast enough to win that race and a large FLAC did not, which
+    // is exactly why FLACs looked like they needed playing twice.
+    let player = state.player.clone();
+    let opening = found.path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        player.wait_until_loaded(&opening, LOAD_TIMEOUT);
+    })
+    .await
+    .map_err(|e| format!("load task failed: {e}"))?;
+
     Ok(transport(&state))
 }
+
+/// How long a load is waited for before the transport reports what it knows.
+///
+/// Long enough for a big lossless file on a cold network share, short enough
+/// that a genuinely stuck read does not hold a command open indefinitely. A file
+/// slower than this still loads — the transport just learns about it from the
+/// next poll rather than from this reply.
+const LOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Play/pause, stop, and seek. One command rather than four, because they are
 /// the same interaction from the UI's point of view: change what the transport

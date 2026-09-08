@@ -631,9 +631,15 @@ body.resizing * {
     transparent 6px
   );
 }
-/* A heading mid-drag, so it is obvious which one is being moved. */
-.hdr .col[draggable="true"]:active {
+/* A heading mid-drag, so it is obvious which one is being moved, and a line on
+   the one it would land on — a reorder with no feedback is a guess. */
+.hdr .col.moving {
   color: var(--acc);
+  opacity: 0.55;
+}
+.hdr .col.over {
+  box-shadow: inset 2px 0 0 var(--acc);
+  color: var(--fg);
 }
 
 /* Column chooser. */

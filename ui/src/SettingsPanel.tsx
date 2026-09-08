@@ -130,21 +130,16 @@ export default function Settings(props: {
             </div>
 
             <p class="sethint">
-              All four read the same three frequency bands and only differ in how
-              they draw them. <b>RGB</b> blends bass, body and air into one
-              colour, as Traktor and Virtual DJ do. <b>3-band</b> draws them as
-              separate shapes — blue bass, orange body, pale highs — the way a
-              CDJ does. <b>Blue</b> is a single colour that pales where the hats
-              are. <b>Mono</b> uses the app's own accent.
+              Same three frequency bands in all four; only the drawing differs.
             </p>
           </section>
 
           <section class="setgroup">
             <h3>Quick tag</h3>
             <p class="sethint">
-              Rows of values you can apply to the playing track by keyboard.
-              Every library has its own vocabulary, so the field names are yours
-              too — <code>ENERGY</code> and <code>MOOD</code> are only defaults.
+              Values you can apply to the playing track by keyboard. The field
+              names are yours — <code>ENERGY</code> and <code>MOOD</code> are
+              only defaults.
             </p>
             <div class="setrow">
               <span class="setlabel">Stars</span>
@@ -238,34 +233,19 @@ export default function Settings(props: {
 
             <h4 class="setsub">Where these end up</h4>
             <p class="sethint">
-              A name that a format already knows goes to its proper home:
-              <code>MOOD</code> becomes ID3's <code>TMOO</code> frame, and
-              <code>GENRE</code> or <code>COMMENT</code> become the real genre
-              and comment. Anything else becomes a user-defined field —
-              <code>TXXX</code> in MP3, WAV and AIFF, a plain key in FLAC, an
-              iTunes atom in M4A — which is where Mp3tag, OneTagger and Serato
-              look for custom values.
-            </p>
-            <p class="sethint">
-              Rekordbox only displays a handful of fields, so if you want energy
-              visible on a CDJ, point a row at <code>COMMENT</code> or
-              <code>GROUPING</code> rather than a name of your own. The star
-              rating above is separate and always goes where Rekordbox reads it.
-            </p>
-            <p class="sethint">
-              ID3 reads any four capitals as a frame identifier, so a field name
-              of exactly four — <code>VIBE</code> — is refused rather than
-              written as something no reader understands. Use a longer one.
-            </p>
+              Known names go to their proper home — <code>MOOD</code> to ID3's
+              <code>TMOO</code>. Anything else becomes a user-defined field,
+              where Mp3tag, OneTagger and Serato look. For a value a CDJ will
+              show, point a row at <code>COMMENT</code> or{" "}
+              <code>GROUPING</code>. Names of exactly four capitals are refused:
+              ID3 would read them as a frame id.            </p>
           </section>
 
           <section class="setgroup">
             <h3>Metadata sources</h3>
             <p class="sethint">
-              Deezer, iTunes and MusicBrainz need nothing. Discogs needs a
-              personal access token from your own account — it is the only
-              source here that reliably knows a record's label and catalogue
-              number.
+              Deezer, iTunes and MusicBrainz need nothing. Discogs needs a token,
+              and is the only one that reliably knows label and catalogue number.
             </p>
             <div class="setrow">
               <span class="setlabel">Discogs</span>
@@ -307,8 +287,8 @@ export default function Settings(props: {
               >
                 Generate one on Discogs
               </a>
-              , then paste it here. It is stored in plain text beside the app, and
-              is only ever sent to Discogs.
+              , then paste it here. Stored in plain text beside the app, and
+              only ever sent to Discogs.
             </p>
           </section>
 
@@ -356,12 +336,10 @@ export default function Settings(props: {
                 )}
               </For>
             </div>
-            <Show when={true}>
-              <p class="sethint">
-                Right-clicking the list header opens the same list. Drag a
-                heading's edge to change its width.
-              </p>
-            </Show>
+            <p class="sethint">
+              Right-click the list header for the same list. Drag a heading to
+              reorder, or its edge to resize.
+            </p>
           </section>
         </div>
       </div>

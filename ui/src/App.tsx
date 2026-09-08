@@ -355,15 +355,64 @@ export default function App() {
     window.addEventListener("pointerup", stop);
   }
 
-  // Which heading is being dragged, as an index into the visible columns.
-  let dragFrom = -1;
+  /** The column being dragged to a new position, and the one it is over. */
+  const [dragging, setDragging] = createSignal<SortColumn | null>(null);
+  const [dragOver, setDragOver] = createSignal<SortColumn | null>(null);
 
-  function dropColumn(toKey: SortColumn) {
-    const all = columns();
-    const from = all.findIndex((c) => c.key === shownColumns()[dragFrom]?.key);
-    const to = all.findIndex((c) => c.key === toKey);
-    if (from >= 0 && to >= 0) commitColumns(reorder(all, from, to));
-    dragFrom = -1;
+  /**
+   * Reorders columns by dragging a heading onto another one.
+   *
+   * Pointer events rather than HTML5 drag-and-drop, which does not work here at
+   * all: this window has Tauri's native file drop enabled so tracks can be
+   * dragged in from Explorer, and on Windows that hands every drag gesture in
+   * the web view to the OS. `dragstart` and `drop` simply never fire, which is
+   * why the headings looked draggable and were not.
+   *
+   * A drag only begins after a few pixels of movement, so a click still sorts.
+   */
+  function startColumnMove(e: PointerEvent, key: SortColumn) {
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    let moved = false;
+
+    const columnAt = (x: number): SortColumn | null => {
+      const under = document.elementFromPoint(x, e.clientY);
+      const head = under?.closest<HTMLElement>("[data-col]");
+      return (head?.dataset.col as SortColumn | undefined) ?? null;
+    };
+
+    const move = (ev: PointerEvent) => {
+      if (!moved) {
+        // Below this it is a click that wobbled, not a drag.
+        if (Math.abs(ev.clientX - startX) < 4) return;
+        moved = true;
+        setDragging(key);
+        document.body.classList.add("resizing");
+      }
+      setDragOver(columnAt(ev.clientX));
+    };
+
+    const stop = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      if (!moved) return;
+
+      document.body.classList.remove("resizing");
+      const target = columnAt(ev.clientX);
+      setDragOver(null);
+      // Cleared after the click that follows this pointerup, so a heading
+      // dragged somewhere else does not also sort by itself on release.
+      setTimeout(() => setDragging(null), 0);
+      if (!target || target === key) return;
+
+      const all = columns();
+      const from = all.findIndex((c) => c.key === key);
+      const to = all.findIndex((c) => c.key === target);
+      if (from >= 0 && to >= 0) commitColumns(reorder(all, from, to));
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
   }
 
   /**
@@ -1127,15 +1176,23 @@ export default function App() {
       >
         <span class="art" />
         <For each={shownColumns()}>
-          {(col, i) => (
+          {(col) => (
             <span
-              class={`col ${col.num ? "num" : ""} ${order().sort === col.key ? "sorted" : ""}`}
-              onClick={() => chooseSort(col.key)}
+              data-col={col.key}
+              class={`col ${col.num ? "num" : ""} ${
+                order().sort === col.key ? "sorted" : ""
+              } ${dragging() === col.key ? "moving" : ""} ${
+                dragOver() === col.key && dragging() && dragging() !== col.key
+                  ? "over"
+                  : ""
+              }`}
+              // A drag that moved must not also sort on release.
+              onClick={() => {
+                if (dragging()) return;
+                chooseSort(col.key);
+              }}
               title={`Sort by ${col.label.toLowerCase()} · drag to reorder`}
-              draggable={true}
-              onDragStart={() => (dragFrom = i())}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => dropColumn(col.key)}
+              onPointerDown={(e) => startColumnMove(e, col.key)}
             >
               {col.label}
               <Show when={order().sort === col.key}>
