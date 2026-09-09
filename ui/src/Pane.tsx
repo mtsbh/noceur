@@ -41,6 +41,17 @@ const PAGE = 200;
 /** Rows realised beyond the viewport, so a fast scroll shows rows rather than gaps. */
 const OVERSCAN = 12;
 
+/**
+ * One icon tile, in CSS pixels. Must match `.tile` in the theme.
+ *
+ * The width divides the pane into columns and the height is what the
+ * virtualizer is told a grid row costs, so both are arithmetic here before they
+ * are ever a rule — a tile that is 88px in CSS and 96px here would drift a row
+ * out of place for every screenful scrolled.
+ */
+const TILE_W = 88;
+const TILE_H = 84;
+
 /** Case-insensitive, and blind to a trailing separator: Windows paths are both. */
 const norm = (p: string) => p.replace(/[\\/]+$/, "").toLowerCase();
 
@@ -110,6 +121,8 @@ export default function Pane(props: {
   artSize: ArtSize;
   /** Which rows the listing includes. A setting, so every pane gets the same one. */
   show: RowFilter;
+  /** Whether a folder holding no audio is drawn as icons rather than as a list. */
+  folderGrid: boolean;
   rowHeight: number;
   onColumnMenu: (x: number, y: number) => void;
   onColumnResize: (e: PointerEvent, key: SortColumn) => void;
@@ -141,6 +154,9 @@ export default function Pane(props: {
   const [windowError, setWindowError] = createSignal("");
   /** Files tag-read so far in this folder; 0 once the folder is fully probed. */
   const [probed, setProbed] = createSignal(0);
+
+  /** The scroll box's own width, which is what decides how many tiles fit. */
+  const [paneWidth, setPaneWidth] = createSignal(0);
 
   let scrollEl: HTMLDivElement | undefined;
   let headEl: HTMLDivElement | undefined;
@@ -175,6 +191,43 @@ export default function Pane(props: {
   /** Row count of the whole listing — what the virtualizer sizes itself against. */
   const total = () => (listing.error ? 0 : (listing()?.total ?? 0));
 
+  /**
+   * Whether this folder is drawn as icons rather than as a list.
+   *
+   * A folder holding no audio at all is a set of places, not a table of values:
+   * every column except the name is empty for a directory, so the list spends a
+   * whole screen's width saying nothing. One track in it and the columns start
+   * meaning something again, so the list comes back.
+   *
+   * `audio` is counted by the backend rather than inferred from the rows on
+   * screen — the listing is directories-first, so a first window that is all
+   * folders proves nothing about the thousand rows behind it.
+   */
+  const grid = () =>
+    props.folderGrid && !listing.error && (listing()?.audio ?? 1) === 0 && total() > 0;
+
+  /** Tiles across the pane. At least one, however narrow it has been dragged. */
+  const perRow = () => Math.max(1, Math.floor(Math.max(paneWidth(), TILE_W) / TILE_W));
+
+  /** The listing indices a grid row holds, left to right. */
+  function slotsIn(gridRow: number): number[] {
+    const first = gridRow * perRow();
+    const last = Math.min(first + perRow(), total());
+    const out: number[] = [];
+    for (let i = first; i < last; i++) out.push(i);
+    return out;
+  }
+
+  /**
+   * The listing indices a virtual item covers.
+   *
+   * One row is one item in the list, and `perRow` of them in the grid — which is
+   * the whole difference between the two modes as far as fetching is concerned.
+   */
+  const firstOf = (index: number) => (grid() ? index * perRow() : index);
+  const lastOf = (index: number) =>
+    grid() ? Math.min(total() - 1, index * perRow() + perRow() - 1) : index;
+
   // Rows the frontend actually holds, keyed by page index. A store rather than a
   // signal so an arriving window re-renders its own rows and not the entire list.
   const [pages, setPages] = createStore<Record<number, RowDisplay[]>>({});
@@ -183,18 +236,36 @@ export default function Pane(props: {
   let inflight = new Set<number>();
 
   const virtualizer = createVirtualizer({
+    // In the grid the virtualizer counts *rows of tiles*, not tiles: it measures
+    // one dimension, and a grid scrolls in that one dimension too.
     get count() {
-      return total();
+      return grid() ? Math.ceil(total() / perRow()) : total();
     },
     getScrollElement: () => scrollEl ?? null,
-    estimateSize: () => props.rowHeight,
+    estimateSize: () => (grid() ? TILE_H : props.rowHeight),
     overscan: OVERSCAN,
   });
 
   // Changing the art size changes every row's height at once. The virtualizer
   // caches what it has measured, so it has to be told the old numbers are void —
   // without this the rows keep their previous spacing and overlap or gap.
-  createEffect(on(() => props.rowHeight, () => virtualizer.measure(), { defer: true }));
+  createEffect(
+    on(
+      () => [props.rowHeight, grid(), perRow()] as const,
+      () => virtualizer.measure(),
+      { defer: true },
+    ),
+  );
+
+  // How many tiles fit is a function of the pane's width, which changes with the
+  // tree divider, the split divider and the window. Observed rather than read on
+  // render: none of those three go through this component.
+  onMount(() => {
+    if (!scrollEl) return;
+    const box = new ResizeObserver((entries) => setPaneWidth(entries[0].contentRect.width));
+    box.observe(scrollEl);
+    onCleanup(() => box.disconnect());
+  });
 
   /** The row at a listing-wide index, or `undefined` while its window is in flight. */
   function rowAt(index: number): RowDisplay | undefined {
@@ -373,8 +444,8 @@ export default function Pane(props: {
 
     const asked = order();
     const shown = props.show;
-    const from = Math.floor(items[0].index / PAGE);
-    const to = Math.floor(items[items.length - 1].index / PAGE);
+    const from = Math.floor(firstOf(items[0].index) / PAGE);
+    const to = Math.floor(lastOf(items[items.length - 1].index) / PAGE);
     for (let p = from; p <= to; p++) {
       listRows(dirId, p * PAGE, PAGE, asked, shown)
         .then((w) => {
@@ -459,8 +530,8 @@ export default function Pane(props: {
     const items = virtualizer.getVirtualItems();
     if (items.length === 0) return;
 
-    const from = Math.floor(items[0].index / PAGE);
-    const to = Math.floor(items[items.length - 1].index / PAGE);
+    const from = Math.floor(firstOf(items[0].index) / PAGE);
+    const to = Math.floor(lastOf(items[items.length - 1].index) / PAGE);
     for (let p = from; p <= to; p++) request(p, l);
   });
 
@@ -585,15 +656,59 @@ export default function Pane(props: {
     }
   }
 
-  function rowClass(row: RowDisplay | undefined): string {
-    if (!row) return "row pending";
+  /**
+   * Everything a row and a tile do to the pointer, which is all of it.
+   *
+   * Spread onto both rather than written twice: the two views differ in how an
+   * entry is drawn and in nothing else, and a right-click that replaced the
+   * selection in one view but not the other would be a bug nobody found until
+   * they used the icon view on a folder they cared about.
+   */
+  function itemHandlers(row: () => RowDisplay | undefined) {
+    return {
+      onPointerDown: (e: PointerEvent) => {
+        const r = row();
+        if (!r) return;
+        selectRow(r, e);
+        startRowDrag(e, r);
+      },
+      onClick: () => {
+        const r = row();
+        if (r) onRow(r);
+      },
+      onDblClick: () => {
+        const r = row();
+        if (r) props.onPlay(r, props.tab.id);
+      },
+      onContextMenu: (e: MouseEvent) => {
+        const r = row();
+        if (!r) return;
+        e.preventDefault();
+        e.stopPropagation();
+        // Right-clicking outside the selection replaces it, as Explorer does;
+        // right-clicking inside it keeps it, so a menu acts on what is selected.
+        let ids = selection();
+        if (!ids.has(r.fileId)) {
+          ids = new Set([r.fileId]);
+          setSelection(ids);
+          setSelected(r.fileId);
+        }
+        props.onMenu(e, r, [...ids]);
+      },
+    };
+  }
+
+  /** The marks a row and a tile share: what kind it is, and how it is selected. */
+  function itemClass(base: string, row: RowDisplay | undefined): string {
+    if (!row) return `${base} pending`;
     const kind = row.kind === 0 ? " dir" : row.kind === 2 ? " other" : "";
     const chosen = selection().has(row.fileId) ? " sel" : "";
     // The anchor is marked separately: with several rows selected it is the one
     // shift extends from, and it would otherwise be indistinguishable.
     const anchor = selected() === row.fileId && selection().size > 1 ? " anchor" : "";
-    return "row" + kind + chosen + anchor;
+    return base + kind + chosen + anchor;
   }
+
 
   const shown = () => props.columns.filter((c) => c.visible);
   const dropKey = () => `pane:${props.tab.id}`;
@@ -615,19 +730,19 @@ export default function Pane(props: {
       data-path={current()}
     >
       <div class="crumbs">
-        <button class="navbtn" onClick={back} disabled={!canBack()} data-tip="Back · alt+←" data-tip-at="start" aria-label="Back">
+        <button class="navbtn" onClick={back} disabled={!canBack()} data-tip="Back" data-tip-at="start" aria-label="Back">
           ←
         </button>
         <button
           class="navbtn"
           onClick={forward}
           disabled={!canForward()}
-          data-tip="Forward · alt+→"
+          data-tip="Forward"
           aria-label="Forward"
         >
           →
         </button>
-        <button class="navbtn" onClick={up} data-tip="Up one folder" aria-label="Up one folder">
+        <button class="navbtn" onClick={up} data-tip="Up" aria-label="Up one folder">
           ↑
         </button>
         <span class="trail" ref={trail}>
@@ -657,6 +772,7 @@ export default function Pane(props: {
           for every column, which is most of what a split pane is. */}
       <div
         class="hdr"
+        hidden={grid()}
         ref={(el) => (headEl = el)}
         onContextMenu={(e) => {
           // Right-clicking the header chooses columns, as it does in Explorer.
@@ -705,7 +821,7 @@ export default function Pane(props: {
         </For>
         <span
           class="colpick"
-          data-tip="Choose columns"
+          data-tip="Columns"
           data-tip-at="end"
           aria-label="Choose columns"
           onClick={(e) => {
@@ -736,121 +852,152 @@ export default function Pane(props: {
             fallback={<div class="empty">Reading {current()}…</div>}
           >
             <Show when={total() > 0} fallback={<div class="empty">Nothing here.</div>}>
-              {/* One tall spacer holds the scrollbar honest; only the rows in
-                  view exist inside it. */}
-              <div class="canvas" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-                <For each={virtualizer.getVirtualItems()}>
-                  {(item) => {
-                    const row = () => rowAt(item.index);
-                    return (
+              {/* One tall spacer holds the scrollbar honest; only what is in
+                  view exists inside it. In the grid the spacer counts rows of
+                  tiles, which is what the virtualizer measures there. */}
+              <div
+                class={`canvas ${grid() ? "tiles" : ""}`}
+                style={{ height: `${virtualizer.getTotalSize()}px` }}
+              >
+                <Show
+                  when={grid()}
+                  fallback={
+                    <For each={virtualizer.getVirtualItems()}>
+                      {(item) => {
+                        const row = () => rowAt(item.index);
+                        return (
+                          <div
+                            class={itemClass("row", row())}
+                            style={{
+                              height: `${item.size}px`,
+                              transform: `translateY(${item.start}px)`,
+                            }}
+                            {...itemHandlers(row)}
+                          >
+                            <Show when={row()} fallback={<span class="ph" />}>
+                              {(r) => (
+                                <>
+                                  {/* Only rows the probe found a picture in get
+                                      an image at all; the rest render the empty
+                                      cell directly rather than firing a request
+                                      that can only 404. On error the image hides
+                                      itself and the cell's own background shows
+                                      through, which covers art that turns out
+                                      not to decode. */}
+                                  {/* Clicking the artwork opens the editor on
+                                      that row, where the cover can be seen at a
+                                      size worth looking at, replaced, or
+                                      removed. The row is selected first, so the
+                                      editor opens on what was clicked rather
+                                      than on whatever was selected before. */}
+                                  <span
+                                    class="art"
+                                    title={r().hasArt ? "Open cover art" : undefined}
+                                    onClick={(e) => {
+                                      if (!r().hasArt || r().kind !== 1) return;
+                                      e.stopPropagation();
+                                      setSelection(new Set([r().fileId]));
+                                      setSelected(r().fileId);
+                                      props.onArt(r().fileId);
+                                    }}
+                                  >
+                                    <Show when={r().hasArt}>
+                                      <img
+                                        src={thumbUrl(r().fileId, props.artSize)}
+                                        alt=""
+                                        loading="lazy"
+                                        decoding="async"
+                                        draggable={false}
+                                        onLoad={(e) =>
+                                          e.currentTarget.classList.remove("blank")
+                                        }
+                                        onError={(e) =>
+                                          e.currentTarget.classList.add("blank")
+                                        }
+                                      />
+                                    </Show>
+                                  </span>
+                                  <For each={shown()}>
+                                    {(col) =>
+                                      col.key === "name" ? (
+                                        <span class="name" title={r().name}>
+                                          {r().name}
+                                          <Show when={r().state}>
+                                            <span class="bad"> [{r().state}]</span>
+                                          </Show>
+                                        </span>
+                                      ) : (
+                                        <span
+                                          class={`${
+                                            col.num ? "num mono" : col.dim ? "dim" : "mono"
+                                          }${col.key === "key" ? " keycol" : ""}`}
+                                          style={
+                                            col.key === "key"
+                                              ? { color: keyColour(r().keyNorm) }
+                                              : undefined
+                                          }
+                                          title={cellText(r(), col.key)}
+                                        >
+                                          {cellText(r(), col.key)}
+                                        </span>
+                                      )
+                                    }
+                                  </For>
+                                </>
+                              )}
+                            </Show>
+                          </div>
+                        );
+                      }}
+                    </For>
+                  }
+                >
+                  <For each={virtualizer.getVirtualItems()}>
+                    {(item) => (
                       <div
-                        class={rowClass(row())}
-                        onPointerDown={(e) => {
-                          const r = row();
-                          if (!r) return;
-                          selectRow(r, e);
-                          startRowDrag(e, r);
-                        }}
+                        class="tilerow"
                         style={{
                           height: `${item.size}px`,
                           transform: `translateY(${item.start}px)`,
                         }}
-                        onClick={() => {
-                          const r = row();
-                          if (r) onRow(r);
-                        }}
-                        onDblClick={() => {
-                          const r = row();
-                          if (r) props.onPlay(r, props.tab.id);
-                        }}
-                        onContextMenu={(e) => {
-                          const r = row();
-                          if (!r) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          // Right-clicking outside the selection replaces it, as
-                          // Explorer does; right-clicking inside it keeps it, so
-                          // a menu acts on what is selected.
-                          let ids = selection();
-                          if (!ids.has(r.fileId)) {
-                            ids = new Set([r.fileId]);
-                            setSelection(ids);
-                            setSelected(r.fileId);
-                          }
-                          props.onMenu(e, r, [...ids]);
-                        }}
                       >
-                        <Show when={row()} fallback={<span class="ph" />}>
-                          {(r) => (
-                            <>
-                              {/* Only rows the probe found a picture in get an
-                                  <img> at all; the rest render the empty cell
-                                  directly rather than firing a request that can
-                                  only 404. On error the image hides itself and
-                                  the cell's own background shows through, which
-                                  covers art that turns out not to decode. */}
-                              {/* Clicking the artwork opens the editor on that
-                                  row, where the cover can be seen at a size
-                                  worth looking at, replaced, or removed. The
-                                  row is selected first, so the editor opens on
-                                  what was clicked rather than on whatever
-                                  happened to be selected before. */}
-                              <span
-                                class="art"
-                                title={r().hasArt ? "Open cover art" : undefined}
-                                onClick={(e) => {
-                                  if (!r().hasArt || r().kind !== 1) return;
-                                  e.stopPropagation();
-                                  setSelection(new Set([r().fileId]));
-                                  setSelected(r().fileId);
-                                  props.onArt(r().fileId);
-                                }}
-                              >
-                                <Show when={r().hasArt}>
-                                  <img
-                                    src={thumbUrl(r().fileId, props.artSize)}
-                                    alt=""
-                                    loading="lazy"
-                                    decoding="async"
-                                    draggable={false}
-                                    onLoad={(e) => e.currentTarget.classList.remove("blank")}
-                                    onError={(e) => e.currentTarget.classList.add("blank")}
-                                  />
-                                </Show>
-                              </span>
-                              <For each={shown()}>
-                                {(col) =>
-                                  col.key === "name" ? (
-                                    <span class="name" title={r().name}>
-                                      {r().name}
-                                      <Show when={r().state}>
-                                        <span class="bad"> [{r().state}]</span>
+                        <For each={slotsIn(item.index)}>
+                          {(index) => {
+                            const row = () => rowAt(index);
+                            return (
+                              <Show when={row()} fallback={<div class="tile pending" />}>
+                                {(r) => (
+                                  <div class={itemClass("tile", r())} {...itemHandlers(row)}>
+                                    {/* The shell's own folder icon, which is what
+                                        makes a folder that has set a custom one
+                                        look like itself. */}
+                                    <span class="tico">
+                                      <Show when={r().hasArt}>
+                                        <img
+                                          src={thumbUrl(r().fileId, "medium")}
+                                          alt=""
+                                          loading="lazy"
+                                          decoding="async"
+                                          draggable={false}
+                                          onError={(e) =>
+                                            e.currentTarget.classList.add("blank")
+                                          }
+                                        />
                                       </Show>
                                     </span>
-                                  ) : (
-                                    <span
-                                      class={`${
-                                        col.num ? "num mono" : col.dim ? "dim" : "mono"
-                                      }${col.key === "key" ? " keycol" : ""}`}
-                                      style={
-                                        col.key === "key"
-                                          ? { color: keyColour(r().keyNorm) }
-                                          : undefined
-                                      }
-                                      title={cellText(r(), col.key)}
-                                    >
-                                      {cellText(r(), col.key)}
+                                    <span class="tlabel" title={r().name}>
+                                      {r().name}
                                     </span>
-                                  )
-                                }
-                              </For>
-                            </>
-                          )}
-                        </Show>
+                                  </div>
+                                )}
+                              </Show>
+                            );
+                          }}
+                        </For>
                       </div>
-                    );
-                  }}
-                </For>
+                    )}
+                  </For>
+                </Show>
               </div>
             </Show>
           </Show>

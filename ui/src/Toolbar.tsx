@@ -34,13 +34,13 @@ const BUTTONS: {
   label: string;
   icon: () => import("solid-js").JSX.Element;
 }[] = [
-  { id: "tags", label: "Edit metadata", icon: TagIcon },
-  { id: "match", label: "Find metadata", icon: GlobeIcon },
-  { id: "art", label: "Find album art", icon: ImageIcon },
+  { id: "tags", label: "Metadata", icon: TagIcon },
+  { id: "match", label: "Lookup", icon: GlobeIcon },
+  { id: "art", label: "Album art", icon: ImageIcon },
   { id: "rename", label: "Rename", icon: RenameIcon },
-  { id: "clean", label: "Clean up", icon: BroomIcon },
-  { id: "quality", label: "Check quality", icon: SpectrumIcon },
-  { id: "copies", label: "Find duplicates", icon: CopiesIcon },
+  { id: "clean", label: "Cleanup", icon: BroomIcon },
+  { id: "quality", label: "Quality", icon: SpectrumIcon },
+  { id: "copies", label: "Duplicates", icon: CopiesIcon },
   { id: "quick", label: "Quick tag", icon: StarIcon },
 ];
 

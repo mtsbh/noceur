@@ -222,7 +222,7 @@ export default function Settings(props: {
           <button
             class="setclose"
             onClick={props.onClose}
-            data-tip="Close · esc"
+            data-tip="Close"
             data-tip-at="end"
             aria-label="Close"
           >
@@ -480,7 +480,7 @@ export default function Settings(props: {
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}
                     <button
                       class="setremove"
-                      data-tip="Remove this row"
+                      data-tip="Remove"
                       data-tip-at="end"
                       onClick={() =>
                         patch({
@@ -568,7 +568,7 @@ export default function Settings(props: {
                     </select>
                     <button
                       class="setremove"
-                      data-tip="Remove this button"
+                      data-tip="Remove"
                       data-tip-at="end"
                       onClick={() =>
                         saveActions(buttons().filter((_, i) => i !== at()))
@@ -766,7 +766,7 @@ export default function Settings(props: {
                       }`}
                       style={{ "font-family": font.stack }}
                       data-tip={
-                        missing().has(font.name) ? "Not installed — will fall back" : undefined
+                        missing().has(font.name) ? "Not installed" : undefined
                       }
                       onClick={() => patch({ font: font.name })}
                     >
@@ -809,7 +809,28 @@ export default function Settings(props: {
             </Show>
           </Section>
 
-          <Section title="List">
+          <Section
+            title="List"
+            info={
+              <p>
+                A folder holding no audio at all is a set of places rather than
+                a table of values — every column but the name is empty for a
+                directory — so it is drawn as icons instead. One track in it and
+                the columns mean something again, and the list comes back.
+              </p>
+            }
+          >
+            <div class="setrow">
+              <span class="setlabel">Folders</span>
+              <label class="setcheck">
+                <input
+                  type="checkbox"
+                  checked={props.settings.folderGrid}
+                  onChange={(e) => patch({ folderGrid: e.currentTarget.checked })}
+                />
+                <span>Icons for folders with no audio in them</span>
+              </label>
+            </div>
             <div class="setrow">
               <span class="setlabel">Cover art</span>
               <div class="setseg" role="group">

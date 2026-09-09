@@ -267,7 +267,7 @@ export default function QuickTag(props: {
           </Show>
         </Show>
       </span>
-      <button class="btn" onClick={props.onClose} data-tip="Close · esc" data-tip-at="end">
+      <button class="btn" onClick={props.onClose} data-tip="Close" data-tip-at="end">
         Done
       </button>
     </div>

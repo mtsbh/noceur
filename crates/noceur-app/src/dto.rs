@@ -20,6 +20,13 @@ pub struct DirListing {
     pub segments: Vec<Segment>,
     /// Total rows in the view, ignoring any window.
     pub total: i64,
+    /// How many of those rows are audio.
+    ///
+    /// Sent so the frontend can tell a folder of folders from a folder of
+    /// tracks without reading every row: the listing is directories-first, so a
+    /// first window that is all directories proves nothing about what follows
+    /// it. Independent of the `show` filter, which never hides audio.
+    pub audio: i64,
     /// The window starting at row 0, so the first screen needs no round trip.
     pub first: RowWindow,
     /// How long enumeration took, so slow network paths are visible.

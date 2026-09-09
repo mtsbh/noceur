@@ -14,6 +14,7 @@ import {
   transportCmd,
   reveal,
   pathOf,
+  parentOf,
   fileOp,
   fileOpPaths,
   dropEffect,
@@ -237,6 +238,21 @@ export default function App() {
    * is more than changing the path: the selection belongs to the folder being
    * left, and a stale one would leave Delete pointed at files nobody can see.
    */
+  /**
+   * Opens the playing track's folder in the focused pane, with it selected.
+   *
+   * The focused pane rather than the one the track was started from: this is
+   * "show me that file", and the answer belongs where the user is looking. The
+   * pane is already told to hold the selection until the listing arrives, so
+   * this works whether the folder is the one on screen or somewhere else.
+   */
+  async function locatePlaying() {
+    const playing = transport();
+    if (!playing?.path) return;
+    const folder = await parentOf(playing.path).catch(() => null);
+    if (folder) navigateFocused(folder, playing.fileId);
+  }
+
   function navigateFocused(path: string, select?: number) {
     const tab = activeTab(focusGroup());
     if (tab) handles()[tab.id]?.navigate(path, select);
@@ -1099,7 +1115,7 @@ export default function App() {
             {(size) => (
               <button
                 class={`sizebtn ${artSize() === size ? "on" : ""}`}
-                data-tip={`${size[0].toUpperCase()}${size.slice(1)} cover art`}
+                data-tip={`${size[0].toUpperCase()}${size.slice(1)}`}
                 aria-label={`${size} cover art`}
                 onClick={() => chooseArtSize(size)}
               >
@@ -1110,7 +1126,7 @@ export default function App() {
         </div>
         <button
           class={`gearbtn ${layout.groups.length > 1 ? "on" : ""}`}
-          data-tip={layout.groups.length > 1 ? "Close the split" : "Split the window"}
+          data-tip={layout.groups.length > 1 ? "Single pane" : "Dual pane"}
           data-tip-at="end"
           aria-label="Split"
           onClick={splitOrJoin}
@@ -1120,7 +1136,7 @@ export default function App() {
         <Show when={layout.groups.length > 1}>
           <button
             class="gearbtn"
-            data-tip={layout.dir === "row" ? "Stack the panes" : "Side by side"}
+            data-tip={layout.dir === "row" ? "Stack" : "Side by side"}
           data-tip-at="end"
             aria-label="Split orientation"
             onClick={flipSplit}
@@ -1130,9 +1146,9 @@ export default function App() {
         </Show>
         <button
           class={`gearbtn ${actionMenu() ? "on" : ""}`}
-          data-tip="Your buttons"
+          data-tip="Functions"
           data-tip-at="end"
-          aria-label="Your buttons"
+          aria-label="Functions"
           onClick={(e) => {
             const box = e.currentTarget.getBoundingClientRect();
             setActionMenu(actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 });
@@ -1240,6 +1256,7 @@ export default function App() {
                         columns={columns()}
                         artSize={artSize()}
                         show={settings().tracksOnly ? "tracks" : "everything"}
+                        folderGrid={settings().folderGrid}
                         rowHeight={metrics().row}
                         onColumnMenu={(x, y) => setColumnMenu({ x, y })}
                         onColumnResize={startColumnDrag}
@@ -1419,6 +1436,8 @@ export default function App() {
         onState={setTransport}
         onPrev={() => step(-1)}
         onNext={() => step(1)}
+        onArt={(fileId) => setEditing([fileId])}
+        onLocate={locatePlaying}
         settings={settings()}
       />
 

@@ -102,7 +102,7 @@ export default function CoverPicker(props: {
           <button
             class="setclose"
             onClick={props.onClose}
-            data-tip="Close · esc"
+            data-tip="Close"
             data-tip-at="end"
             aria-label="Close"
           >

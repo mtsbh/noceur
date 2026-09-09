@@ -37,6 +37,10 @@ export default function Transport(props: {
   onState: (t: T) => void;
   onPrev: () => void;
   onNext: () => void;
+  /** Double-clicking the cover opens the tag editor on what is playing. */
+  onArt: (fileId: number) => void;
+  /** Double-clicking the name goes to the file, in whichever pane has focus. */
+  onLocate: () => void;
   settings: Settings;
 }) {
   const [scrubbing, setScrubbing] = createSignal<number | null>(null);
@@ -135,14 +139,25 @@ export default function Transport(props: {
     if (!s) return "";
     const artist = s.artist.trim();
     const title = s.title.trim();
-    if (artist && title) return `${artist} — ${title}`;
+    if (artist && title) return `${artist} - ${title}`;
     return title || s.name;
   };
 
   return (
     <div class={`transport ${loaded() ? "" : "idle"}`}>
-      {/* Cover of what is playing, at the size the row list already caches. */}
-      <span class="tart">
+      {/* Cover of what is playing, at the size the row list already caches.
+          Double-click rather than single: this sits under the pointer on the
+          way to the play button, and a single click would open the editor by
+          accident several times an evening. */}
+      <span
+        class="tart"
+        data-tip={loaded() ? "Metadata" : undefined}
+        data-tip-at="above start"
+        onDblClick={() => {
+          const id = props.state?.fileId ?? 0;
+          if (id > 0) props.onArt(id);
+        }}
+      >
         <Show when={loaded() && props.state!.fileId > 0}>
           <img
             src={thumbUrl(props.state!.fileId, "medium")}
@@ -156,7 +171,13 @@ export default function Transport(props: {
       </span>
 
       <div class="tmeta">
-        <span class="tname" title={props.state?.path || ""}>
+        <span
+          class={`tname ${loaded() ? "go" : ""}`}
+          title={props.state?.path || ""}
+          data-tip={loaded() ? "Go to file" : undefined}
+          data-tip-at="above start"
+          onDblClick={() => loaded() && props.onLocate()}
+        >
           {label() || "Nothing loaded"}
         </span>
         <span class="ttags">
@@ -181,7 +202,7 @@ export default function Transport(props: {
           class="tbtn"
           onClick={props.onPrev}
           disabled={!loaded()}
-          data-tip="Previous track"
+          data-tip="Previous"
           data-tip-at="above"
           aria-label="Previous track"
         >
@@ -191,7 +212,7 @@ export default function Transport(props: {
           class="tbtn"
           onClick={() => nudge(-NUDGE_MS)}
           disabled={!loaded()}
-          data-tip="Back 10 seconds"
+          data-tip="−10s"
           data-tip-at="above"
           aria-label="Back 10 seconds"
         >
@@ -201,7 +222,7 @@ export default function Transport(props: {
           class="tbtn play"
           onClick={act("toggle")}
           disabled={!loaded()}
-          data-tip={props.state?.playing ? "Pause · space" : "Play · space"}
+          data-tip={props.state?.playing ? "Pause" : "Play"}
           data-tip-at="above"
           aria-label={props.state?.playing ? "Pause" : "Play"}
         >
@@ -211,7 +232,7 @@ export default function Transport(props: {
           class="tbtn"
           onClick={() => nudge(NUDGE_MS)}
           disabled={!loaded()}
-          data-tip="Forward 10 seconds"
+          data-tip="+10s"
           data-tip-at="above"
           aria-label="Forward 10 seconds"
         >
@@ -221,7 +242,7 @@ export default function Transport(props: {
           class="tbtn"
           onClick={props.onNext}
           disabled={!loaded()}
-          data-tip="Next track"
+          data-tip="Next"
           data-tip-at="above"
           aria-label="Next track"
         >

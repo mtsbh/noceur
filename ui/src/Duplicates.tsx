@@ -106,7 +106,7 @@ export default function Duplicates(props: {
           <button
             class="setclose"
             onClick={props.onClose}
-            data-tip="Close · esc"
+            data-tip="Close"
             data-tip-at="end"
             aria-label="Close"
           >
@@ -148,7 +148,7 @@ export default function Duplicates(props: {
                         <div
                           class="duprow"
                           onClick={() => reveal(file.fileId).catch(() => {})}
-                          data-tip="Show in Explorer"
+                          data-tip="Reveal"
                         >
                           <span class="dupname">{file.name}</span>
                           <span class="dupfolder">{file.folder}</span>

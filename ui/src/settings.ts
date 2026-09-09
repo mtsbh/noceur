@@ -134,6 +134,13 @@ export type Settings = {
   font: string;
   /** Family typed by hand, used only while `font` is `custom`. */
   fontCustom: string;
+  /**
+   * Whether a folder holding no audio is drawn as icons rather than as a list.
+   *
+   * On by default: every column but the name is empty for a directory, so a
+   * folder of folders spends a whole screen's width saying nothing.
+   */
+  folderGrid: boolean;
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -201,6 +208,7 @@ export const DEFAULTS: Settings = {
   tracksOnly: false,
   font: DEFAULT_FONT.name,
   fontCustom: "",
+  folderGrid: true,
 };
 
 const KEY = "noceur.settings";
@@ -237,6 +245,7 @@ export function loadSettings(): Settings {
       font: known(parsed.font) ? parsed.font : DEFAULTS.font,
       fontCustom:
         typeof parsed.fontCustom === "string" ? cleanFamily(parsed.fontCustom) : "",
+      folderGrid: parsed.folderGrid !== false,
     };
   } catch {
     return DEFAULTS;

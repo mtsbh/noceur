@@ -85,6 +85,8 @@ export type DirListing = {
   segments: Segment[];
   /** Rows in the whole listing, not in `first`. */
   total: number;
+  /** How many of those are audio — zero means a folder of folders. */
+  audio: number;
   /** The window at offset 0, so the first screen paints without a round trip. */
   first: RowWindow;
   /** How long enumeration took, so slow network paths stay visible. */

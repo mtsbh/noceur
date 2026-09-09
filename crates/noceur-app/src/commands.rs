@@ -55,6 +55,12 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
 
         let total = noceur_index::count(&db, dir_id, options(&req.order, show, 0, FIRST_WINDOW)?)
             .map_err(|e| e.to_string())?;
+        let audio = noceur_index::count(
+            &db,
+            dir_id,
+            options(&req.order, Show::AudioOnly, 0, FIRST_WINDOW)?,
+        )
+        .map_err(|e| e.to_string())?;
         let first = window(&db, dir_id, &req.order, show, 0, FIRST_WINDOW)?;
 
         let shown = simplify(&path);
@@ -63,6 +69,7 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
             path: shown.to_string_lossy().into_owned(),
             segments: segments_of(&shown),
             total,
+            audio,
             first,
             scan_ms,
         })

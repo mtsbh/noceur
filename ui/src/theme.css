@@ -253,6 +253,90 @@ body {
   right: 0;
 }
 
+/* ── The icon view ─────────────────────────────────────────────────────────
+   A folder of folders, drawn as tiles. The virtualizer counts rows of tiles
+   here rather than entries, so one .tilerow is one virtual item and is placed
+   by the same transform the list rows use. TILE_W and TILE_H in Pane.tsx are
+   these two numbers: the pane is divided into columns by the first and the
+   scroll height is computed from the second, so a disagreement would drift a
+   row out of place for every screenful scrolled. */
+.canvas.tiles .tilerow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  padding: 0 8px;
+}
+.tile {
+  flex: none;
+  width: 88px;
+  height: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 3px 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.tile.pending {
+  cursor: default;
+}
+.tico {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tico img {
+  max-width: 100%;
+  max-height: 100%;
+  /* Icons are drawn to fit rather than cropped: a folder icon is not square. */
+  object-fit: contain;
+}
+.tico img.blank {
+  visibility: hidden;
+}
+/* Two lines, then an ellipsis. A folder name is the only thing a tile says, so
+   it gets more than the one line a row would give it — but a third line would
+   make the tiles different heights, and the virtualizer is told they are not. */
+.tlabel {
+  width: 100%;
+  text-align: center;
+  line-height: 1.25;
+  color: var(--fg2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+.tile:hover {
+  background: var(--raise);
+}
+.tile:hover .tlabel {
+  color: var(--fg);
+}
+/* Selection reads as a filled tile rather than as the list's left edge: there
+   is no continuous edge to mark in a grid. */
+.tile.sel {
+  background: var(--acc-fill);
+}
+.tile.sel .tlabel {
+  color: var(--acc);
+}
+.tile.anchor {
+  outline: 1px solid var(--acc-line);
+  outline-offset: -1px;
+}
+.tile.other .tlabel {
+  color: var(--fg3);
+}
+
 /* A row whose window has not arrived yet. Deliberately quiet — a scroll that
    outruns the fetch should read as "not yet", not as an error. */
 .row.pending {
@@ -1340,6 +1424,15 @@ body.resizing * {
 .sethint b {
   font-weight: 600;
   color: var(--fg2);
+}
+/* Both halves of what is playing are double-click targets — the cover opens
+   the tag editor, the name goes to the file — so both say so on hover. */
+.tart[data-tip],
+.tname.go {
+  cursor: pointer;
+}
+.tname.go:hover {
+  color: var(--fg);
 }
 .tvolpct {
   width: 22px;
