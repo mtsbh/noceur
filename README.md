@@ -4,9 +4,10 @@ An audio-aware file browser for DJs. The filesystem is the library — no import
 database to keep in sync with reality. Folders are folders; they just happen to show BPM, key,
 duration and artist per row, and a waveform you can scrub.
 
-> **Status: usable, and not finished.** It browses, plays, draws waveforms and spectrograms,
-> searches, edits tags, fetches metadata and artwork, renames, and tells you whether a file is
-> really what it claims to be. See [What it does](#what-it-does).
+> **Status: usable, and not finished.** It browses in tabs and split panes, plays, draws
+> waveforms and spectrograms, searches, edits tags, fetches metadata and artwork, renames, finds
+> the same track filed twice, and tells you whether a file is really what it claims to be. See
+> [What it does](#what-it-does).
 
 ---
 
@@ -60,8 +61,17 @@ land on Windows' own undo stack.
 
 **Browsing.** A virtualized listing that does not care how large a folder is. Folder tree,
 pinned folders, breadcrumbs, back and forward. Eighteen columns, reorderable and resizable.
-Full-text search across the indexed library. Drag files in and out; copy, move and delete
-through the shell.
+Full-text search across the indexed library. Tabs, and a split into two panes — side by side or
+stacked — each with its own tabs, sort and history, so the folder you are filing tracks *into* is
+on screen beside the one you are filing them *out of*. Drag files in from Explorer, out to
+anything, and between panes or onto any open tab; copy, move and delete through the shell.
+
+**Filing.** Drag a selection onto the other pane, or onto a tab that is open but not in front of
+you, and it lands in that folder — copied or moved by the same rule Explorer uses, through the
+same shell operation, onto the same undo stack. Tabs themselves drag: to reorder, or across the
+divider to hand a folder to the other pane. `ctrl+t` opens a tab, `ctrl+w` closes one, `ctrl+\`
+splits and unsplits, `ctrl+1`–`9` and `ctrl+tab` move between tabs, `tab` between panes, and
+`alt+←`/`alt+→` walk each tab's own history.
 
 **Listening.** Preview playback with a seekable waveform drawn from three frequency bands, in
 four styles. A Spek-style spectrogram of the playing track.
@@ -75,14 +85,21 @@ always chosen by hand. Renaming from a template, and cleanup rules for the debri
 leaves behind. Each file's modified date is preserved by default, because retagging a folder
 should not move every track in it to the top of a sort by date.
 
+**Buttons of your own.** One thing done to a selection, defined as a kind, a target and a title-
+formatting expression: fix a tag, rename, open the files in another program, look the track up,
+copy or move it into a folder. Anything that changes a file is previewed first. They live in the
+config beside the executable, because they are full of one person's drive letters.
+
 **Checking.** Spectral analysis that finds a file's real bitrate: a track claiming 320 kbps that
 stops at 17 kHz was 160 kbps before somebody re-encoded it, and a FLAC with a hard cutoff was
-never lossless. Also catches sample-rate upconversion and clipping.
+never lossless. Also catches sample-rate upconversion and clipping. Separately, a hash of the
+decoded samples finds the same recording filed twice however differently the two copies are
+tagged — which is the case the whole data model exists for.
 
-## Still to come
+## Not planned
 
-Tabs and split panes · user-defined action buttons · true audio identity, so the same track is
-recognised across copies regardless of tags.
+Nothing is outstanding from the original plan: tabs and split panes, user-defined buttons and
+audio identity were the last three, and they are in.
 
 Deliberately not planned: BPM and key detection, because Mixed In Key already does it better
 than this would; Beatport and Bandcamp, which have no usable public API and would be scrapers
@@ -101,6 +118,7 @@ crates/
   noceur-app       the only Tauri-aware crate: commands, state, display formatting
   noceur-cli       debug CLI for driving the engine headless
 ui/                Solid + Vite frontend, TanStack Virtual, the Sodium theme
+                   App owns the layout, dialogs and player; Pane owns one folder's rows
 docs/              the design spec, build notes, troubleshooting
 ```
 
@@ -149,7 +167,13 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 npx --prefix ui tsc --noEmit -p ui/tsconfig.json
+npm --prefix ui test
 ```
+
+The frontend tests run on `node --test` with no framework, because Node strips the type
+annotations itself. They cover the layout reducers — the tab and split arithmetic, and the
+guards that stop a bad preference file leaving the window with no pane in it. Rendering a pane
+needs a window and a music library, and is not something a unit test should pretend to have.
 
 Some tests are `#[ignore]`d because they need a real music library or reach the network. Run
 them by hand:

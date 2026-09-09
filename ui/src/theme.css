@@ -60,7 +60,10 @@ body {
   height: 100%;
 }
 
-.crumbs {
+/* The window's own bar: the things that act on the app rather than on a folder.
+   It stays above the split, because a second copy of the settings button per
+   pane would be two ways to open one panel. */
+.topbar {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -68,6 +71,43 @@ body {
   border-bottom: 1px solid var(--hair);
   flex: none;
   flex-wrap: wrap;
+}
+
+/* The path, per pane. Never wraps: a pane half the window wide would turn a
+   deep path into three lines of chrome above a shrinking list, so it scrolls
+   out to the left instead and keeps the folder you are actually in on screen. */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--hair);
+  flex: none;
+  flex-wrap: nowrap;
+}
+/* Right-aligned inside its own clipping box, so what falls off a narrow pane is
+   the front of the path — `E:\ › music › …` — and the folder you are actually
+   in stays on screen. Left-aligned it would clip the only part worth reading. */
+.trail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  justify-content: flex-end;
+}
+.trail > * {
+  flex: none;
+  white-space: nowrap;
+}
+/* The toolbar's separator divides it from the size buttons that used to follow
+   it. In the window's own bar it is the leftmost thing and nothing follows it,
+   so the rule would hang in empty space. */
+.topbar > .toolbar {
+  margin-right: 0;
+  padding-right: 0;
+  border-right: none;
 }
 .crumb {
   color: var(--fg3);
@@ -116,6 +156,11 @@ body {
   letter-spacing: 0.13em;
   text-transform: uppercase;
   flex: none;
+  /* Clipped, and scrolled sideways from the list's own scroll handler. Without
+     this the columns of a pane too narrow to hold them all spill out of it —
+     which, before there were two panes, only meant spilling off the edge of the
+     window, and now means spilling across the divider into the other one. */
+  overflow: hidden;
 }
 .list {
   flex: 1;
@@ -283,11 +328,70 @@ body {
   display: flex;
   min-height: 0;
 }
+
+/* The panes and the divider between them. `row` is side by side, `column` is
+   stacked; both are the same boxes with the axis swapped, which is why the
+   split is one flex container rather than two layouts. */
+.panes {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+/* Keyed on an attribute rather than a class. `row` and `column` are the names
+   the flex axis actually goes by, and `.row` is already the class every line in
+   the listing wears — a `.panes.row` would inherit that rule's grid and its
+   24px height, and the panes would be crushed into a strip. */
+.panes[data-split="row"] {
+  flex-direction: row;
+}
+.panes[data-split="column"] {
+  flex-direction: column;
+}
+
+/* One pane's share of the window: its tab strip and the pane under it. The
+   `flex` basis is set inline from the split ratio. */
+.slot {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .pane {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  /* Nothing leaves a pane. Its own children clip themselves, but this is the
+     backstop: whatever a pane draws is the other pane's business only through
+     the divider. */
+  overflow: hidden;
+}
+/* Which pane the tree, the toolbar and the keyboard are talking to. Drawn only
+   while the window is split — with one pane the answer is never in doubt, and a
+   permanent ring around the whole listing is noise. */
+.pane.focused {
+  box-shadow: inset 1px 0 0 var(--acc-line);
+}
+
+/* The divider between two panes. Takes its cursor from the split's direction,
+   so a stacked split resizes vertically. */
+.psplit {
+  flex: none;
+  background: none;
+}
+.panes[data-split="row"] > .psplit {
+  width: 5px;
+  cursor: col-resize;
+}
+.panes[data-split="column"] > .psplit {
+  height: 5px;
+  cursor: row-resize;
+}
+.psplit:hover {
+  background: var(--hair2);
 }
 
 .tree {
@@ -857,9 +961,15 @@ body.resizing * {
   color: var(--acc);
 }
 
-/* Files being dragged in from outside. A border rather than a wash: the listing
-   underneath still has to be readable to see where they are going. */
-.app.dropping .pane {
+/* Files being dragged over a place they could land. A border rather than a
+   wash: the listing underneath still has to be readable to see where they are
+   going.
+
+   Only the target actually under the pointer is marked, which is the whole
+   point once there is more than one — with two panes and a strip of tabs each,
+   lighting up everything droppable would say nothing about where the files are
+   about to go. */
+.pane.dropping {
   box-shadow: inset 0 0 0 2px var(--acc-line);
 }
 
@@ -2461,4 +2571,144 @@ label.artoffer:hover {
 }
 .cleanrow.bad .renameto {
   color: var(--acc);
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────────
+   One strip per pane. Tabs are draggable — within the strip to reorder, across
+   the divider to hand a folder to the other pane — and they are also drop
+   targets for files, so a track can be filed into a folder that is open but not
+   in front of you. */
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  height: 27px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hair);
+  overflow: hidden;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 190px;
+  /* Tabs shrink to fit rather than scrolling out of reach, down to a floor that
+     still leaves the close button hittable. A tab you have to scroll to is not
+     a drop target, and being able to drop a track on any open folder is most of
+     why the strip is here. */
+  min-width: 34px;
+  padding: 0 6px 0 10px;
+  border-right: 1px solid var(--hair);
+  color: var(--fg3);
+  cursor: default;
+  white-space: nowrap;
+  /* The strip can hold more tabs than fit. They shrink rather than scroll,
+     which keeps every one of them a place you can drop a file — a tab you have
+     to scroll to is not a drop target. */
+  flex: 0 1 auto;
+}
+.tab:hover {
+  background: var(--raise);
+  color: var(--fg2);
+}
+/* The visible tab. Marked along its top edge rather than by a fill, so the tab
+   reads as continuous with the pane below it. */
+.tab.on {
+  background: var(--panel);
+  color: var(--fg);
+  box-shadow: inset 0 2px 0 var(--acc);
+}
+/* The pane the keyboard is talking to. Only its active tab is lit, so the two
+   strips never both look current. */
+.tabs:not(.focused) .tab.on {
+  box-shadow: inset 0 2px 0 var(--fg4);
+}
+/* The tab being dragged. Left in place at half strength rather than removed:
+   the strip must not reflow under the pointer while it is being aimed. */
+.tab.moving {
+  opacity: 0.4;
+}
+/* Files are over this tab and would land in its folder. */
+.tab.dropping {
+  background: var(--acc-fill);
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--acc-line);
+}
+
+.tabname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabx {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg4);
+  cursor: pointer;
+}
+.tab:hover .tabx {
+  color: var(--fg3);
+}
+.tabx:hover {
+  background: var(--hair2);
+  color: var(--fg);
+}
+
+.tabnew {
+  flex: none;
+  width: 24px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--hair);
+  color: var(--fg4);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tabnew:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+
+/* The rest of the strip. Empty, and deliberately part of the drop area:
+   dragging a tab to the blank space after the last one means "put it at the
+   end", which is the only way to say that. */
+.tabfill {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* Where a dragged tab would land. */
+.tabmark {
+  flex: none;
+  width: 2px;
+  margin: 3px 0;
+  background: var(--acc);
+}
+
+/* While a tab is being dragged. Same job as `body.resizing`: stop the pointer
+   selecting text or changing shape as it crosses everything between the two
+   strips. */
+body.tabbing * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* A stacked split resizes vertically, so the drag cursor has to as well. */
+body.resizing-v {
+  cursor: row-resize;
+}
+body.resizing-v * {
+  cursor: row-resize !important;
+  user-select: none;
 }

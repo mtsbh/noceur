@@ -1,32 +1,24 @@
 import {
   createSignal,
-  createResource,
   createEffect,
   createMemo,
-  on,
   onCleanup,
+  untrack,
   For,
   Show,
 } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore, produce } from "solid-js/store";
 import { listen } from "@tauri-apps/api/event";
-import { createVirtualizer } from "@tanstack/solid-virtual";
 import {
-  openDir,
-  listRows,
-  parentOf,
-  thumbUrl,
-  probeBatch,
-  spectrogram,
   play,
   transportCmd,
   reveal,
   pathOf,
-  startDrag,
   fileOp,
   fileOpPaths,
   dropEffect,
   shellMenu,
+  spectrogram,
   type TagField,
   actions,
   runAction as runUserAction,
@@ -35,9 +27,7 @@ import {
   type Action,
   type Transport as TransportState,
   type ArtSize,
-  type Order,
   type SortColumn,
-  type DirListing,
   type RowDisplay,
 } from "./api";
 import Tree, { storedPins } from "./Tree";
@@ -57,14 +47,28 @@ import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
 import Titlebar from "./Titlebar";
-import { BoltIcon, PigIcon, SettingsIcon } from "./icons";
+import Pane, { type PaneHandle } from "./Pane";
+import Tabs, { type TabDrop } from "./Tabs";
+import {
+  activeTab,
+  clampRatio,
+  defaultOrder,
+  currentPath,
+  insertTab,
+  loadLayout,
+  newTab,
+  relocateTab,
+  removeTab,
+  saveLayout,
+  toggleSplit,
+  type Group,
+  type Layout,
+  type Tab,
+} from "./layout";
+import { BoltIcon, PigIcon, SettingsIcon, SplitColsIcon, SplitRowsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import {
-  DEFAULT_COLUMNS,
-  cellText,
   clampWidth,
-  gridTemplate,
-  keyColour,
   loadColumns,
   reorder,
   saveColumns,
@@ -107,21 +111,6 @@ function storedArtSize(): ArtSize {
   return v === "medium" || v === "large" || v === "small" ? v : "small";
 }
 
-const SORT_KEY = "noceur.sort";
-
-function storedOrder(): Order {
-  try {
-    const raw = localStorage.getItem(SORT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Order;
-      if (DEFAULT_COLUMNS.some((c) => c.key === parsed.sort)) return parsed;
-    }
-  } catch {
-    // A corrupt preference is not worth failing over; fall through to the default.
-  }
-  return { sort: "name", desc: false };
-}
-
 const TREE_KEY = "noceur.treeWidth";
 const TREE_MIN = 140;
 const TREE_MAX = 700;
@@ -137,169 +126,211 @@ function storedTreeWidth(): number {
   return Number.isFinite(v) && v > 0 ? clampTree(v) : TREE_DEFAULT;
 }
 
-/**
- * Rows per window.
- *
- * Must equal `FIRST_WINDOW` in `commands.rs`: the window that arrives with a
- * listing is cached verbatim as page 0, so a mismatch would file 200 rows into a
- * 100-row page and lose half of them.
- */
-const PAGE = 200;
+/** Case-insensitive, and blind to a trailing separator: Windows paths are both. */
+const norm = (p: string) => p.replace(/[\\/]+$/, "").toLowerCase();
 
-/** Rows realised beyond the viewport, so a fast scroll shows rows rather than gaps. */
-const OVERSCAN = 12;
+/** The folder a path sits in. Empty for a drive root, which has no parent here. */
+function parentDir(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const cut = trimmed.replace(/[\\/][^\\/]+$/, "");
+  return cut === trimmed ? "" : cut;
+}
+
+/** Whether `inner` is `outer` or sits somewhere beneath it. */
+function within(inner: string, outer: string): boolean {
+  const a = norm(inner);
+  const b = norm(outer);
+  return a === b || a.startsWith(b + "\\") || a.startsWith(b + "/");
+}
 
 /**
- * Row height is now owned by JavaScript rather than by `--row-h` in the
- * stylesheet.
+ * A dropped file's destination, hit-tested against the panes and tab strips.
  *
- * Milestone 3 had CSS as the source of truth and read the value back, because
- * the height was a constant only the virtualizer also needed to know. Now the
- * user changes it at runtime, so the signal has to be authoritative and the
- * stylesheet is fed from it.
+ * Every drop target carries `data-drop` (a key, unique per target, so only the
+ * one under the pointer lights up) and `data-path` (where the files would go).
+ * Hit-testing rather than DOM drag events because a drag that started in this
+ * window is being run by the shell by the time it gets here: the web view sees
+ * no pointer events during it, and the only thing that arrives is a Tauri drag
+ * event carrying a physical screen position.
  */
-function metrics(size: ArtSize) {
-  return ART[size];
+function targetAt(x: number, y: number): { key: string; path: string } | null {
+  const host = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop]");
+  const key = host?.dataset.drop;
+  const path = host?.dataset.path;
+  return key && path ? { key, path } : null;
+}
+
+/** Whether a key event is somebody typing rather than reaching for a shortcut. */
+function isTyping(e: KeyboardEvent): boolean {
+  return (
+    e.target instanceof HTMLElement &&
+    (e.target.tagName === "INPUT" ||
+      e.target.tagName === "TEXTAREA" ||
+      e.target.isContentEditable)
+  );
+}
+
+/**
+ * Tauri reports drag positions in physical pixels; the DOM works in CSS pixels.
+ *
+ * On a 100% display these are the same number, which is exactly why the
+ * conversion has to be here rather than discovered later on somebody's 150%
+ * laptop, where every drop would land a third of the way up the window from
+ * where it was aimed.
+ */
+function toClient(position: { x: number; y: number } | undefined) {
+  if (!position) return null;
+  const dpr = window.devicePixelRatio || 1;
+  return { x: position.x / dpr, y: position.y / dpr };
 }
 
 export default function App() {
-  // Back/forward history for this pane. Index points at the current entry.
-  const [history, setHistory] = createSignal<string[]>([home()]);
-  const [cursor, setCursor] = createSignal(0);
-  const [selected, setSelected] = createSignal<number | null>(null);
-  /**
-   * Every selected row, by file id.
-   *
-   * Separate from `selected`, which is the anchor the keyboard and the range
-   * shortcut work from. A set rather than a list because the only questions
-   * asked of it are "is this row in it" and "what is in it".
-   */
-  const [selection, setSelection] = createSignal<Set<number>>(new Set());
-
-  /** Ctrl adds and removes, shift extends from the anchor, a plain click replaces. */
-  function selectRow(row: RowDisplay, e: MouseEvent) {
-    const total = listing()?.total ?? 0;
-
-    if (e.ctrlKey || e.metaKey) {
-      const next = new Set(selection());
-      if (next.has(row.fileId)) next.delete(row.fileId);
-      else next.add(row.fileId);
-      setSelection(next);
-      setSelected(row.fileId);
-      return;
-    }
-
-    if (e.shiftKey && selected() !== null) {
-      // Both ends have to be on screen for the range to be known — the rows
-      // between them may not be loaded, and inventing ids would select the
-      // wrong files.
-      const from = indexOf(selected()!);
-      const to = indexOf(row.fileId);
-      if (from >= 0 && to >= 0) {
-        const next = new Set(selection());
-        for (let i = Math.min(from, to); i <= Math.max(from, to) && i < total; i++) {
-          const at = rowAt(i);
-          if (at) next.add(at.fileId);
-        }
-        setSelection(next);
-        return;
-      }
-    }
-
-    setSelection(new Set([row.fileId]));
-    setSelected(row.fileId);
-  }
-
-  /**
-   * The selected rows that are audio files.
-   *
-   * Both menus act on tracks, and a selection can hold folders — dragging a box
-   * across a listing takes whatever it crosses. Rows whose window has since been
-   * dropped are not in here, which is the same limit the shift-select range has
-   * and for the same reason: the id is known, what it points at is not.
-   */
-  const audioSelection = createMemo(() => {
-    const ids = selection();
-    if (ids.size === 0) return [];
-    const out: number[] = [];
-    for (const rows of Object.values(pages)) {
-      for (const r of rows) {
-        if (r.kind === 1 && ids.has(r.fileId)) out.push(r.fileId);
-      }
-    }
-    return out;
-  });
-
-  /**
-   * Runs one of the track actions.
-   *
-   * Each opens exactly what the matching right-click entry opens; the button is
-   * a second route to the same dialogs rather than a second implementation.
-   */
-  function runAction(id: ActionId) {
-    if (id === "quick") {
-      setQuickOpen((open) => !open);
-      return;
-    }
-    const ids = audioSelection();
-    if (ids.length === 0) return;
-
-    switch (id) {
-      case "tags":
-        setEditing(ids);
-        break;
-      // These two search on one track and apply to the whole selection, which is
-      // the rule the menu follows: twelve tracks off one release share a cover
-      // and an album, and searching for each of them would ask the same question
-      // twelve times.
-      case "match":
-        setMatching({ fileId: ids[0], fileIds: ids });
-        break;
-      case "art":
-        setCovering({ fileId: ids[0], fileIds: ids });
-        break;
-      case "rename":
-        setRenaming(ids);
-        break;
-      case "clean":
-        setCleaning(ids);
-        break;
-      case "quality":
-        setChecking(ids);
-        break;
-      case "copies":
-        setComparing(ids);
-        break;
-    }
-  }
-
-  /** Position of a row in the listing, or -1 if its window is not loaded. */
-  function indexOf(fileId: number): number {
-    for (const [page, rows] of Object.entries(pages)) {
-      const at = rows.findIndex((r) => r.fileId === fileId);
-      if (at >= 0) return Number(page) * PAGE + at;
-    }
-    return -1;
-  }
-  const [windowError, setWindowError] = createSignal("");
-  // Files tag-read so far in this folder; 0 once the folder is fully probed.
-  const [probed, setProbed] = createSignal(0);
   const [artSize, setArtSize] = createSignal<ArtSize>(storedArtSize());
   const [treeWidth, setTreeWidth] = createSignal(storedTreeWidth());
-  const [order, setOrder] = createSignal<Order>(storedOrder());
   const [columns, setColumns] = createSignal<Column[]>(loadColumns());
   const [settings, setSettings] = createSignal<SettingsState>(loadSettings());
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [quickOpen, setQuickOpen] = createSignal(false);
+
+  /* ── Tabs and panes ────────────────────────────────────────────────────── */
+
+  const [layout, setLayout] = createStore<Layout>(loadLayout(home(), defaultOrder()));
+
+  /**
+   * Every mounted pane, by tab id.
+   *
+   * A pane owns its listing, so anything outside one that needs to touch it —
+   * the transport stepping to the next track, a dialog that has just written to
+   * files, the toolbar counting a selection — comes through here. A signal
+   * rather than a plain map so those readings are reactive.
+   */
+  const [handles, setHandles] = createSignal<Record<number, PaneHandle>>({});
+
+  const groupAt = (id: number) => layout.groups.findIndex((g) => g.id === id);
+
+  const focusGroup = (): Group =>
+    layout.groups.find((g) => g.id === layout.focus) ?? layout.groups[0];
+
+  /** The pane the tree, the toolbar and the keyboard are talking to. */
+  const focusHandle = (): PaneHandle | undefined => {
+    const tab = activeTab(focusGroup());
+    return tab ? handles()[tab.id] : undefined;
+  };
+
+  const focusPath = () => {
+    const tab = activeTab(focusGroup());
+    return tab ? currentPath(tab) : home();
+  };
+
+  const audioSelection = createMemo(() => focusHandle()?.audioSelection() ?? []);
+
+  /** Re-reads every visible pane. A write can land in a folder either one shows. */
+  function refetchAll() {
+    for (const handle of Object.values(handles())) handle.refetch();
+  }
+
+  /**
+   * Opens a folder in the focused pane, from the tree or a search result.
+   *
+   * Through the pane rather than by writing the tab record, because navigating
+   * is more than changing the path: the selection belongs to the folder being
+   * left, and a stale one would leave Delete pointed at files nobody can see.
+   */
+  function navigateFocused(path: string, select?: number) {
+    const tab = activeTab(focusGroup());
+    if (tab) handles()[tab.id]?.navigate(path, select);
+  }
+
+  // The layout is remembered across restarts. Only paths and sorts are read
+  // here, so this tracks those and not the selection or scroll offset that share
+  // the record — and the split ratio is read untracked, because a divider drag
+  // changes it sixty times a second and each one would be a JSON write.
+  createEffect(() => saveLayout(layout, untrack(() => layout.ratio)));
+
+  function patchTab(tabId: number, patch: Partial<Tab>) {
+    setLayout(
+      produce((l) => {
+        for (const group of l.groups) {
+          const tab = group.tabs.find((t) => t.id === tabId);
+          if (tab) {
+            Object.assign(tab, patch);
+            return;
+          }
+        }
+      }),
+    );
+  }
+
+  function openTab(groupId: number, path: string) {
+    setLayout(produce((l) => insertTab(l, groupId, newTab(path, defaultOrder()))));
+  }
+
+  function closeTab(groupId: number, tabId: number) {
+    setLayout(produce((l) => removeTab(l, groupId, tabId, home(), defaultOrder())));
+  }
+
+  function moveTab(tabId: number, to: TabDrop) {
+    setLayout(produce((l) => relocateTab(l, tabId, to)));
+  }
+
+  /**
+   * Where a tab being dragged would land.
+   *
+   * Up here rather than in the strip, because a tab dragged across the divider
+   * is tracked by the strip it left and drawn by the strip it is over.
+   */
+  const [tabMark, setTabMark] = createSignal<TabDrop | null>(null);
+
+  function splitOrJoin() {
+    setLayout(produce((l) => toggleSplit(l, home(), defaultOrder())));
+  }
+
+  /** Flips a split between side by side and stacked. */
+  function flipSplit() {
+    setLayout("dir", layout.dir === "row" ? "column" : "row");
+  }
+
+  /**
+   * Drags the divider between two panes.
+   *
+   * A ratio rather than a width, so the split survives the window being resized
+   * — a pixel width would leave one pane the same size and the other taking
+   * every pixel the window gained.
+   */
+  function startSplitDrag(e: PointerEvent) {
+    e.preventDefault();
+    const host = (e.currentTarget as HTMLElement).parentElement;
+    if (!host) return;
+    const box = host.getBoundingClientRect();
+    document.body.classList.add(layout.dir === "row" ? "resizing" : "resizing-v");
+
+    const move = (ev: PointerEvent) => {
+      const along =
+        layout.dir === "row"
+          ? (ev.clientX - box.left) / box.width
+          : (ev.clientY - box.top) / box.height;
+      setLayout("ratio", clampRatio(along));
+    };
+
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      document.body.classList.remove("resizing", "resizing-v");
+      saveLayout(layout, layout.ratio);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
+
+  /* ── Dialogs ───────────────────────────────────────────────────────────── */
+
   /** The user's own buttons, and the one being run. */
   const [buttons, setButtons] = createSignal<Action[]>([]);
-  const [running, setRunning] = createSignal<{
-    action: Action;
-    fileIds: number[];
-  } | null>(null);
-  const [actionMenu, setActionMenu] = createSignal<{ x: number; y: number } | null>(
+  const [running, setRunning] = createSignal<{ action: Action; fileIds: number[] } | null>(
     null,
   );
+  const [actionMenu, setActionMenu] = createSignal<{ x: number; y: number } | null>(null);
 
   /** Whether the spectrogram strip is showing. */
   const [spekOpen, setSpekOpen] = createSignal(false);
@@ -334,13 +365,64 @@ export default function App() {
    */
   const [artNonce, setArtNonce] = createSignal(0);
 
+  const [finding, setFinding] = createSignal(false);
+  const [transport, setTransport] = createSignal<TransportState | null>(null);
+  /**
+   * The tab whose listing the player is walking.
+   *
+   * Next and previous follow the folder the track was started from, not whatever
+   * pane happens to be focused now — otherwise clicking into the other pane
+   * mid-track would silently repoint the transport at a different folder.
+   */
+  const [playingTab, setPlayingTab] = createSignal<number | null>(null);
+
+  /**
+   * Runs one of the track actions.
+   *
+   * Each opens exactly what the matching right-click entry opens; the button is
+   * a second route to the same dialogs rather than a second implementation.
+   */
+  function runAction(id: ActionId, ids: number[] = audioSelection()) {
+    if (id === "quick") {
+      setQuickOpen((open) => !open);
+      return;
+    }
+    if (ids.length === 0) return;
+
+    switch (id) {
+      case "tags":
+        setEditing(ids);
+        break;
+      // These two search on one track and apply to the whole selection, which is
+      // the rule the menu follows: twelve tracks off one release share a cover
+      // and an album, and searching for each of them would ask the same question
+      // twelve times.
+      case "match":
+        setMatching({ fileId: ids[0], fileIds: ids });
+        break;
+      case "art":
+        setCovering({ fileId: ids[0], fileIds: ids });
+        break;
+      case "rename":
+        setRenaming(ids);
+        break;
+      case "clean":
+        setCleaning(ids);
+        break;
+      case "quality":
+        setChecking(ids);
+        break;
+      case "copies":
+        setComparing(ids);
+        break;
+    }
+  }
+
   /** Every settings change is written straight through — there is no Save. */
   function commitSettings(next: SettingsState) {
     setSettings(next);
     saveSettings(next);
   }
-
-  const shownColumns = () => columns().filter((c) => c.visible);
 
   function commitColumns(next: Column[]) {
     setColumns(next);
@@ -348,9 +430,7 @@ export default function App() {
   }
 
   function toggleColumn(key: SortColumn) {
-    commitColumns(
-      columns().map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)),
-    );
+    commitColumns(columns().map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)));
   }
 
   /**
@@ -370,9 +450,7 @@ export default function App() {
     const move = (ev: PointerEvent) =>
       setColumns(
         columns().map((c) =>
-          c.key === key
-            ? { ...c, width: clampWidth(startWidth + ev.clientX - startX) }
-            : c,
+          c.key === key ? { ...c, width: clampWidth(startWidth + ev.clientX - startX) } : c,
         ),
       );
 
@@ -447,29 +525,13 @@ export default function App() {
     window.addEventListener("pointerup", stop);
   }
 
-  /**
-   * Clicking a header sorts by it; clicking the one already active reverses it.
-   *
-   * Directories stay grouped first either way — `desc` reverses the sort column,
-   * not the grouping, so reversing by size does not bury the folders at the
-   * bottom of the listing.
-   */
-  function chooseSort(column: SortColumn) {
-    const next: Order =
-      order().sort === column
-        ? { sort: column, desc: !order().desc }
-        : { sort: column, desc: false };
-    setOrder(next);
-    localStorage.setItem(SORT_KEY, JSON.stringify(next));
-  }
-
   function chooseArtSize(size: ArtSize) {
     setArtSize(size);
     localStorage.setItem(ART_KEY, size);
   }
 
   /**
-   * Drags the divider between the tree and the list.
+   * Drags the divider between the tree and the panes.
    *
    * Listeners go on the window rather than the handle so the drag survives the
    * pointer outrunning a 5px strip, which it will on any real drag. The width is
@@ -481,8 +543,7 @@ export default function App() {
     const startWidth = treeWidth();
     document.body.classList.add("resizing");
 
-    const move = (ev: PointerEvent) =>
-      setTreeWidth(clampTree(startWidth + ev.clientX - startX));
+    const move = (ev: PointerEvent) => setTreeWidth(clampTree(startWidth + ev.clientX - startX));
 
     const stop = () => {
       window.removeEventListener("pointermove", move);
@@ -494,9 +555,6 @@ export default function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   }
-
-  const [finding, setFinding] = createSignal(false);
-  const [transport, setTransport] = createSignal<TransportState | null>(null);
 
   // Measured only while the strip is open — a full decode per track is not
   // something to do for a panel nobody is looking at. Keyed on the file id
@@ -522,7 +580,9 @@ export default function App() {
   // are edited.
   createEffect(() => {
     if (settingsOpen()) return;
-    actions().then(setButtons).catch(() => {});
+    actions()
+      .then(setButtons)
+      .catch(() => {});
   });
 
   /**
@@ -547,8 +607,7 @@ export default function App() {
 
     return buttons().map((action) => ({
       kind: "item" as const,
-      label:
-        ids.length > 1 ? `${action.label} — ${ids.length} tracks` : action.label,
+      label: ids.length > 1 ? `${action.label} — ${ids.length} tracks` : action.label,
       disabled: ids.length === 0,
       run: () => {
         if (actionWrites(action.kind)) {
@@ -560,117 +619,97 @@ export default function App() {
     }));
   }
 
-  /** Loads a row into the player. Non-audio rows have nothing to play. */
-  function playRow(row: RowDisplay) {
+  /** Loads a row into the player, and remembers which tab it is walking. */
+  function playRow(row: RowDisplay, tabId: number) {
     if (row.kind !== 1) return;
-    setSelected(row.fileId);
+    setPlayingTab(tabId);
     play(row.fileId).then(setTransport).catch(() => {});
   }
 
   /**
-   * Steps to the next or previous audio row in the listing.
+   * Steps to the next or previous audio row in the playing tab's listing.
    *
    * The listing is the playlist — auditioning means walking a folder in the
    * order on screen, so "next" follows the sort the user chose rather than a
-   * queue built somewhere else. Rows whose window is not loaded stop the walk
-   * rather than being guessed at.
+   * queue built somewhere else. If that tab has since been closed, the focused
+   * pane takes over rather than the transport going dead.
    */
   function step(by: number) {
-    const from = transport()?.fileId ?? selected();
+    const from = transport()?.fileId;
     if (from == null) return;
-    let at = indexOf(from);
-    if (at < 0) return;
-
-    const total = listing()?.total ?? 0;
-    for (let i = at + by; i >= 0 && i < total; i += by) {
-      const row = rowAt(i);
-      if (!row) return;
-      if (row.kind === 1) {
-        playRow(row);
-        return;
-      }
-    }
+    const tabId = playingTab();
+    const handle = (tabId !== null ? handles()[tabId] : undefined) ?? focusHandle();
+    if (!handle) return;
+    const row = handle.step(from, by);
+    if (row) playRow(row, handle.tabId);
   }
 
-  /**
-   * Begins a native drag once the pointer has actually moved.
-   *
-   * A drag has to be told apart from a click, and the threshold is what does it:
-   * without it, every click on a row would hand the mouse to the shell's modal
-   * drag loop and selecting a track would become impossible.
-   *
-   * Everything selected is dragged, so dragging one of several selected rows
-   * takes the whole selection — as Explorer does.
-   */
-  function startRowDrag(e: PointerEvent, row: RowDisplay) {
-    if (e.button !== 0) return;
-    const startX = e.clientX;
-    const startY = e.clientY;
+  /* ── Drag and drop ─────────────────────────────────────────────────────── */
 
-    const move = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - startX) < 5 && Math.abs(ev.clientY - startY) < 5) {
-        return;
-      }
-      stop();
-      const ids = selection().has(row.fileId) ? [...selection()] : [row.fileId];
-      startDrag(ids).catch(() => {});
-    };
-
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-  }
-
-  // A move drops rows out of this folder, so the listing is re-read once the
-  // shell says the drag is over.
-  createEffect(() => {
-    const unlisten = listen<string>("drag-finished", (event) => {
-      if (event.payload === "moved") refetchListing();
-    });
-    onCleanup(() => {
-      unlisten.then((off) => off()).catch(() => {});
-    });
-  });
-
-  const [dropping, setDropping] = createSignal(false);
+  /** The drop target under a file drag, or null when nothing is being dragged. */
+  const [dropOver, setDropOver] = createSignal<{ key: string; path: string } | null>(null);
 
   /**
-   * Files dragged in from Explorer.
+   * Files dropped on the window, from anywhere.
    *
-   * The shell decides copy or move the same way Explorer does — move within a
-   * volume, copy across one — and performs it through `IFileOperation`, so the
-   * progress dialog, the name-collision prompt and the undo stack are the ones
-   * the user already knows.
+   * There is deliberately one path here for all of it. A drag out of this
+   * window's own list becomes a shell drag the moment it starts — `start_drag`
+   * calls `DoDragDrop`, which owns the mouse until the button comes up — so a
+   * drag from one tab to another arrives back here as exactly the same Tauri
+   * event as a drag from Explorer, carrying the same real paths. Treating them
+   * as one case is not a shortcut; it is what they are.
+   *
+   * Where it lands is hit-tested against `data-drop`, so a track can be dropped
+   * on the other pane, or on a tab that is not even in front of you.
    */
   createEffect(() => {
     const pending = [
-      listen("tauri://drag-enter", () => setDropping(true)),
-      listen("tauri://drag-leave", () => setDropping(false)),
-      listen<{ paths: string[] }>("tauri://drag-drop", async (event) => {
-        setDropping(false);
-        const paths = event.payload?.paths ?? [];
-        const into = current();
-        if (paths.length === 0) return;
-
-        // A folder dropped onto itself would be the shell asked to move files
-        // to where they already are.
-        const fromHere = paths.every(
-          (p) => p.toLowerCase().startsWith(into.toLowerCase() + "\\"),
-        );
-        if (fromHere) return;
-
-        try {
-          const effect = await dropEffect(paths, into);
-          await fileOpPaths(effect === "move" ? "move" : "copy", paths, into);
-          refetchListing();
-        } catch {
-          // The shell reports its own failures in its own dialog.
-        }
+      listen<{ position?: { x: number; y: number } }>("tauri://drag-enter", (event) => {
+        const at = toClient(event.payload?.position);
+        setDropOver(at ? targetAt(at.x, at.y) : null);
       }),
+      listen<{ position?: { x: number; y: number } }>("tauri://drag-over", (event) => {
+        const at = toClient(event.payload?.position);
+        setDropOver(at ? targetAt(at.x, at.y) : null);
+      }),
+      listen("tauri://drag-leave", () => setDropOver(null)),
+      listen<{ paths: string[]; position?: { x: number; y: number } }>(
+        "tauri://drag-drop",
+        async (event) => {
+          const target = dropOver();
+          setDropOver(null);
+
+          const paths = event.payload?.paths ?? [];
+          if (paths.length === 0) return;
+
+          // Hit-tested again at the drop position rather than trusting the last
+          // hover: a drop can arrive without a preceding `drag-over` at the same
+          // place, and landing files in the pane the pointer passed over on the
+          // way would be worse than not landing them at all.
+          const at = toClient(event.payload?.position);
+          const into = (at ? targetAt(at.x, at.y) : null)?.path ?? target?.path ?? focusPath();
+
+          // Files already sitting in the destination. Not an error — it is
+          // dropping a selection back where it came from, which is a gesture
+          // people make constantly and which should do nothing.
+          if (paths.every((p) => norm(parentDir(p)) === norm(into))) return;
+
+          // A folder cannot be moved inside itself. The shell would refuse, but
+          // it would refuse in a dialog, and tabs make this an easy thing to aim
+          // at by accident.
+          if (paths.some((p) => within(into, p))) return;
+
+          try {
+            const effect = await dropEffect(paths, into);
+            await fileOpPaths(effect === "move" ? "move" : "copy", paths, into);
+            // Both panes: a move empties one folder and fills another, and they
+            // may well both be on screen.
+            refetchAll();
+          } catch {
+            // The shell reports its own failures in its own dialog.
+          }
+        },
+      ),
     ];
 
     onCleanup(() => {
@@ -678,57 +717,51 @@ export default function App() {
     });
   });
 
-  /** Deletes the selection to the recycle bin, through the shell. */
+  // A move drops rows out of a folder, so every pane is re-read once the shell
+  // says the drag is over — the destination may be the other pane, or a tab
+  // that is not in front of anybody.
+  createEffect(() => {
+    const unlisten = listen<string>("drag-finished", (event) => {
+      if (event.payload === "moved") refetchAll();
+    });
+    onCleanup(() => {
+      unlisten.then((off) => off()).catch(() => {});
+    });
+  });
+
+  /** Deletes the focused pane's selection to the recycle bin, through the shell. */
   function deleteSelection() {
-    const ids = [...selection()];
+    const ids = focusHandle()?.selection() ?? [];
     if (ids.length === 0) return;
     fileOp("delete", ids)
-      .then(() => refetchListing())
+      .then(() => refetchAll())
       .catch(() => {});
   }
 
-  // The row menu, and where it was opened.
+  /* ── Menus ─────────────────────────────────────────────────────────────── */
+
+  /** The row menu: what was right-clicked, where, and what was selected then. */
   const [menu, setMenu] = createSignal<{
     row: RowDisplay;
+    ids: number[];
     x: number;
     y: number;
   } | null>(null);
 
-  /**
-   * Right-click shows the shell's own menu — the same one Explorer shows, with
-   * the same extensions in it.
-   *
-   * Falls back to the small built-in menu only if the shell refuses, which on a
-   * non-Windows build it always does.
-   */
-  function openMenu(e: MouseEvent, row: RowDisplay) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Right-clicking outside the selection replaces it, as Explorer does;
-    // right-clicking inside it keeps it, so a menu acts on what is selected.
-    if (!selection().has(row.fileId)) {
-      setSelection(new Set([row.fileId]));
-      setSelected(row.fileId);
-    }
-
+  function openMenu(e: MouseEvent, row: RowDisplay, ids: number[]) {
     // Shift goes straight to the shell's menu, the way shift-right-click has
     // always meant "give me the longer menu" in Explorer.
     if (e.shiftKey) {
-      openShellMenu();
+      openShellMenu(ids);
       return;
     }
-
-    setSelected(row.fileId);
     // The menu measures itself after mount and nudges back inside the window,
     // so the raw pointer position is the right starting point.
-    setMenu({ row, x: e.clientX, y: e.clientY });
+    setMenu({ row, ids, x: e.clientX, y: e.clientY });
   }
 
   // Where the column chooser was opened from, or null when it is closed.
-  const [columnMenu, setColumnMenu] = createSignal<{ x: number; y: number } | null>(
-    null,
-  );
+  const [columnMenu, setColumnMenu] = createSignal<{ x: number; y: number } | null>(null);
 
   /** The column chooser, as menu entries that tick on and off. */
   function columnMenuItems(): MenuItem[] {
@@ -744,10 +777,10 @@ export default function App() {
   }
 
   /** Hands off to the shell's own menu, extensions and all. */
-  function openShellMenu() {
+  function openShellMenu(ids: number[]) {
     setMenu(null);
-    shellMenu([...selection()])
-      .then(() => refetchListing())
+    shellMenu(ids)
+      .then(() => refetchAll())
       .catch(() => {});
   }
 
@@ -757,19 +790,30 @@ export default function App() {
    * The things a music browser knows and the shell does not go here; everything
    * the shell does better stays one entry away, under "Windows menu".
    */
-  function rowMenuItems(row: RowDisplay): MenuItem[] {
-    const many = selection().size > 1;
+  function rowMenuItems(row: RowDisplay, ids: number[]): MenuItem[] {
+    const many = ids.length > 1;
     const lookup = [row.artist, row.title || row.name].filter(Boolean).join(" ");
+    const audio = row.kind !== 1;
 
     return [
       {
         kind: "item",
         label: "Play",
         hint: "double-click",
-        disabled: row.kind !== 1,
-        run: () => playRow(row),
+        disabled: audio,
+        run: () => playRow(row, playingTab() ?? (activeTab(focusGroup())?.id ?? 0)),
       },
       { kind: "separator" },
+      {
+        kind: "item",
+        label: "Open in new tab",
+        disabled: row.kind !== 0,
+        run: () => {
+          const here = focusPath();
+          const sep = here.endsWith("\\") || here.endsWith("/") ? "" : "\\";
+          openTab(focusGroup().id, `${here}${sep}${row.name}`);
+        },
+      },
       {
         kind: "item",
         label: "Reveal in Explorer",
@@ -779,70 +823,66 @@ export default function App() {
       },
       {
         kind: "item",
-        label: many ? `Copy ${selection().size} paths` : "Copy path",
+        label: many ? `Copy ${ids.length} paths` : "Copy path",
         run: () => {
-          Promise.all([...selection()].map((id) => pathOf(id)))
+          Promise.all(ids.map((id) => pathOf(id)))
             .then((paths) => copyText(paths.join("\r\n")))
             .catch(() => {});
         },
       },
       {
         kind: "item",
-        label: many ? `Edit metadata of ${selection().size} tracks…` : "Edit metadata…",
+        label: many ? `Edit metadata of ${ids.length} tracks…` : "Edit metadata…",
         hint: "f2",
-        disabled: row.kind !== 1,
-        run: () => setEditing([...selection()]),
+        disabled: audio,
+        run: () => setEditing(ids),
       },
       {
         kind: "item",
-        label: many ? `Rename ${selection().size} tracks…` : "Rename…",
-        disabled: row.kind !== 1,
-        run: () => setRenaming([...selection()]),
+        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
+        disabled: audio,
+        run: () => setRenaming(ids),
       },
       {
         kind: "item",
-        label: many ? `Clean up ${selection().size} tracks…` : "Clean up…",
-        disabled: row.kind !== 1,
-        run: () => setCleaning([...selection()]),
+        label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
+        disabled: audio,
+        run: () => setCleaning(ids),
       },
       {
         kind: "item",
-        label: many
-          ? `Check quality of ${selection().size} tracks…`
-          : "Check quality…",
-        disabled: row.kind !== 1,
-        run: () => setChecking([...selection()]),
+        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
+        disabled: audio,
+        run: () => setChecking(ids),
       },
       {
         kind: "item",
-        label: many
-          ? `Find duplicates of ${selection().size} tracks…`
-          : "Find duplicates…",
-        disabled: row.kind !== 1,
-        run: () => setComparing([...selection()]),
+        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
+        disabled: audio,
+        run: () => setComparing(ids),
       },
       {
         kind: "item",
         label: "Find metadata online…",
-        disabled: row.kind !== 1,
+        disabled: audio,
         // Matched on the row that was right-clicked, applied to whatever is
         // selected — the same rule the rest of the menu follows.
-        run: () => setMatching({ fileId: row.fileId, fileIds: [...selection()] }),
+        run: () => setMatching({ fileId: row.fileId, fileIds: ids }),
       },
       {
         kind: "item",
-        label: many ? `Find album art for ${selection().size} tracks…` : "Find album art…",
-        disabled: row.kind !== 1,
+        label: many ? `Find album art for ${ids.length} tracks…` : "Find album art…",
+        disabled: audio,
         // Searched on the row that was right-clicked, applied to the whole
         // selection: an album's tracks share a sleeve, and searching on each of
         // them would be twelve requests for one answer.
-        run: () => setCovering({ fileId: row.fileId, fileIds: [...selection()] }),
+        run: () => setCovering({ fileId: row.fileId, fileIds: ids }),
       },
       { kind: "separator" },
       {
         kind: "item",
         label: "Search Discogs",
-        disabled: row.kind !== 1 || lookup === "",
+        disabled: audio || lookup === "",
         run: () => {
           openUrl(
             `https://www.discogs.com/search/?q=${encodeURIComponent(lookup)}&type=release`,
@@ -852,7 +892,7 @@ export default function App() {
       {
         kind: "item",
         label: "Search YouTube",
-        disabled: row.kind !== 1 || lookup === "",
+        disabled: audio || lookup === "",
         run: () => {
           openUrl(
             `https://www.youtube.com/results?search_query=${encodeURIComponent(lookup)}`,
@@ -862,7 +902,7 @@ export default function App() {
       { kind: "separator" },
       {
         kind: "item",
-        label: many ? `Delete ${selection().size} items` : "Delete",
+        label: many ? `Delete ${ids.length} items` : "Delete",
         hint: "del",
         danger: true,
         run: deleteSelection,
@@ -872,7 +912,7 @@ export default function App() {
         kind: "item",
         label: "Windows menu",
         hint: "shift-click",
-        run: openShellMenu,
+        run: () => openShellMenu(ids),
       },
     ];
   }
@@ -901,46 +941,115 @@ export default function App() {
     }
   }
 
-  // Ctrl+F from anywhere. Registered on the window rather than a focusable
-  // element so it works without the list having been clicked first.
+  /* ── Keyboard ──────────────────────────────────────────────────────────── */
+
+  // Registered on the window rather than a focusable element so the shortcuts
+  // work without the list having been clicked first.
   createEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      const mod = e.ctrlKey || e.metaKey;
+
+      if (mod && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setFinding(true);
         return;
       }
 
-      // Space toggles playback, unless the user is typing — the search box is a
-      // text field and a space there is a space, not a transport command.
-      const typing =
-        e.target instanceof HTMLElement &&
-        (e.target.tagName === "INPUT" || e.target.isContentEditable);
+      // The tab and split shortcuts. Ctrl+T is the reason every bare-letter
+      // shortcut below checks the modifier: without it, opening a tab would also
+      // toggle quick tag.
+      if (mod && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        openTab(focusGroup().id, focusPath());
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        const group = focusGroup();
+        closeTab(group.id, group.active);
+        return;
+      }
+      if (mod && e.key === "\\") {
+        e.preventDefault();
+        splitOrJoin();
+        return;
+      }
+      // Back and forward walk the focused pane's own history, as they do in a
+      // browser tab — which is what a tab here is.
+      if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        const handle = focusHandle();
+        if (e.key === "ArrowLeft") handle?.back();
+        else handle?.forward();
+        return;
+      }
+      // Bare Tab moves between panes, per the spec. Safe to take: nothing in
+      // the browsing surface is reached by tabbing to it, and while the user is
+      // in a text field the guard below has already returned.
+      if (e.key === "Tab" && !mod && !e.altKey && !isTyping(e)) {
+        e.preventDefault();
+        const groups = layout.groups;
+        if (groups.length > 1) {
+          setLayout("focus", groups[(groupAt(layout.focus) + 1) % groups.length].id);
+        }
+        return;
+      }
+      if (mod && e.key === "Tab") {
+        e.preventDefault();
+        const group = focusGroup();
+        const at = group.tabs.findIndex((t) => t.id === group.active);
+        const by = e.shiftKey ? -1 : 1;
+        const next = (at + by + group.tabs.length) % group.tabs.length;
+        setLayout("groups", groupAt(group.id), "active", group.tabs[next].id);
+        return;
+      }
+      // Ctrl+1..9 jumps to a tab by position, and Ctrl+9 to the last one however
+      // many there are — the rule browsers use.
+      if (mod && /^[1-9]$/.test(e.key)) {
+        e.preventDefault();
+        const group = focusGroup();
+        const at = e.key === "9" ? group.tabs.length - 1 : Number(e.key) - 1;
+        if (at < group.tabs.length) {
+          setLayout("groups", groupAt(group.id), "active", group.tabs[at].id);
+        }
+        return;
+      }
 
-      if (e.key === " " && !typing && !finding()) {
+      // Below here are the bare-key shortcuts, which must not fire while the
+      // user is typing — the search box is a text field and a space there is a
+      // space, not a transport command.
+      if (isTyping(e) || finding() || mod || e.altKey) return;
+
+      if (e.key === " ") {
         e.preventDefault();
         transportCmd("toggle").then(setTransport).catch(() => {});
+        return;
       }
 
       // Delete sends the selection to the recycle bin, as it does in Explorer.
-      if (e.key === "Delete" && !typing && !finding()) {
+      if (e.key === "Delete") {
         e.preventDefault();
         deleteSelection();
+        return;
       }
 
       // T toggles quick tag. A single letter because the whole point is that a
       // hand stays on the keyboard.
-      if (e.key.toLowerCase() === "t" && !typing && !finding()) {
+      if (e.key.toLowerCase() === "t") {
         e.preventDefault();
         setQuickOpen((open) => !open);
+        return;
       }
 
       // F2 opens the tag editor. Explorer renames on F2, but this is a music
       // browser: the thing you want to change about a track is almost never the
       // name of the file it lives in.
-      if (e.key === "F2" && !typing && !finding() && selection().size > 0) {
-        e.preventDefault();
-        setEditing([...selection()]);
+      if (e.key === "F2") {
+        const ids = focusHandle()?.selection() ?? [];
+        if (ids.length > 0) {
+          e.preventDefault();
+          setEditing(ids);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -948,298 +1057,33 @@ export default function App() {
   });
 
   /**
-   * Where search looks: every pinned folder, plus the tree currently open.
+   * Where search looks: every pinned folder, plus the folder in front of you.
    *
    * The current path is included whether or not it is pinned — searching only
    * pinned folders would ignore wherever the user actually is.
    */
   const searchScopes = () => {
     const pins = storedPins();
-    const here = current();
-    return pins.some((p) => here.toLowerCase().startsWith(p.toLowerCase()))
-      ? pins
-      : [...pins, here];
+    const here = focusPath();
+    return pins.some((p) => within(here, p)) ? pins : [...pins, here];
   };
 
-  /** Opens a folder from a search result, selecting the file that matched. */
-  function revealFromSearch(dirPath: string, fileId: number) {
-    navigate(dirPath);
-    setSelected(fileId);
-  }
-
-  const current = () => history()[cursor()];
-  // Keyed on the path only. Changing the sort must not re-open the directory:
-  // opening re-enumerates it, and the order is a property of the read, not of
-  // the folder. A sort change clears the cached windows instead.
-  //
-  // The fetcher is wrapped rather than passed directly, because Solid calls it
-  // as `fetcher(source, info)` and would hand that info object to openDir's
-  // second parameter.
-  const [listing, { refetch: refetchListing }] = createResource<DirListing, string>(
-    current,
-    (p) => openDir(p, order()),
-  );
-
-  /** Row count of the whole listing — what the virtualizer sizes itself against. */
-  const total = () => (listing.error ? 0 : (listing()?.total ?? 0));
-
-  // Rows the frontend actually holds, keyed by page index. A store rather than a
-  // signal so an arriving window re-renders its own rows and not the entire list.
-  const [pages, setPages] = createStore<Record<number, RowDisplay[]>>({});
-  // Pages already asked for. Deliberately not reactive: it exists only to stop
-  // duplicate requests, and nothing is rendered from it.
-  let inflight = new Set<number>();
-
-  let scrollEl: HTMLDivElement | undefined;
-
-  const virtualizer = createVirtualizer({
-    get count() {
-      return total();
-    },
-    getScrollElement: () => scrollEl ?? null,
-    estimateSize: () => metrics(artSize()).row,
-    overscan: OVERSCAN,
-  });
-
-  // Changing the art size changes every row's height at once. The virtualizer
-  // caches what it has measured, so it has to be told the old numbers are void —
-  // without this the rows keep their previous spacing and overlap or gap.
-  createEffect(
-    on(
-      artSize,
-      () => virtualizer.measure(),
-      { defer: true },
-    ),
-  );
-
-  // A new listing invalidates every cached window. Drop them, seed page 0 from
-  // the window that arrived with the listing, and go back to the top — otherwise
-  // a folder opened at scroll offset 12,000 would start out of range.
-  createEffect(
-    on(listing, (l) => {
-      if (!l) return;
-      setPages(reconcile({}));
-      inflight = new Set();
-      setWindowError("");
-      setProbed(0);
-      if (l.first.rows.length > 0) setPages(0, l.first.rows);
-      if (scrollEl) scrollEl.scrollTop = 0;
-      void runProbe(l.dirId);
-    }),
-  );
-
-  /**
-   * Re-reads the windows currently on screen.
-   *
-   * Rows are replaced rather than cleared, so a refresh mid-probe updates the
-   * cells that gained a BPM and leaves the rest of the row untouched — clearing
-   * first would blink the whole list on every batch.
-   */
-  function refreshVisible(dirId: number) {
-    const items = virtualizer.getVirtualItems();
-    if (items.length === 0) return;
-
-    const asked = order();
-    const from = Math.floor(items[0].index / PAGE);
-    const to = Math.floor(items[items.length - 1].index / PAGE);
-    for (let p = from; p <= to; p++) {
-      listRows(dirId, p * PAGE, PAGE, asked)
-        .then((w) => {
-          if (listing()?.dirId !== dirId || order() !== asked) return;
-          setPages(Math.floor(w.offset / PAGE), w.rows);
-        })
-        .catch(() => {});
-    }
-  }
-
-  // Re-sorting reorders every row, so every cached window is wrong. Deferred so
-  // it does not fire on the initial render, which already has the right order.
-  createEffect(
-    on(
-      order,
-      () => {
-        setPages(reconcile({}));
-        inflight = new Set();
-        if (scrollEl) scrollEl.scrollTop = 0;
-      },
-      { defer: true },
-    ),
-  );
-
-  /**
-   * Reads the folder's tags in the background, a batch at a time.
-   *
-   * The listing is already on screen by now; this is what fills in BPM, key,
-   * duration and cover art behind it. Each batch is a separate call so the index
-   * is released between them — a folder-long hold is what used to make opening a
-   * large folder feel like the app had stopped.
-   *
-   * Stops as soon as the user navigates elsewhere: the tags of a folder nobody is
-   * looking at are not worth the disk.
-   */
-  async function runProbe(dirId: number) {
-    let done = 0;
-    for (;;) {
-      if (listing()?.dirId !== dirId) return;
-
-      let progress;
-      try {
-        progress = await probeBatch(dirId);
-      } catch {
-        return;
-      }
-      if (listing()?.dirId !== dirId) return;
-
-      if (progress.done) {
-        setProbed(0);
-        refreshVisible(dirId);
-        return;
-      }
-
-      done += progress.probed;
-      setProbed(done);
-      refreshVisible(dirId);
-    }
-  }
-
-  /** The row at a listing-wide index, or `undefined` while its window is in flight. */
-  function rowAt(index: number): RowDisplay | undefined {
-    return pages[Math.floor(index / PAGE)]?.[index % PAGE];
-  }
-
-  function request(page: number, l: DirListing) {
-    if (pages[page] !== undefined || inflight.has(page)) return;
-    inflight.add(page);
-    const dirId = l.dirId;
-    const asked = order();
-
-    listRows(dirId, page * PAGE, PAGE, asked)
-      .then((w) => {
-        // A window that lands after we have navigated, or after the sort
-        // changed, belongs to a listing that is no longer on screen; filing it
-        // would show another folder's rows, or these rows in the wrong places.
-        if (listing()?.dirId !== dirId || order() !== asked) return;
-        setPages(Math.floor(w.offset / PAGE), w.rows);
-        setWindowError("");
-      })
-      .catch((e) => setWindowError(String(e)))
-      // Dropped from the in-flight set even on failure, so scrolling past the
-      // gap again retries rather than leaving those rows blank forever.
-      .finally(() => inflight.delete(page));
-  }
-
-  // Fetch whatever the visible range needs. Re-runs when the range moves and
-  // when a window arrives; a page already held or already requested is skipped,
-  // so settling on one screen issues no further calls.
-  //
-  // Declared after the reset effect above, and must stay there: Solid runs
-  // effects in creation order, so on a navigation the cache is emptied before
-  // this one looks at it. Reversed, it would find the previous folder's pages
-  // still cached, consider the range satisfied, and render those rows.
-  createEffect(() => {
-    const l = listing.error ? undefined : listing();
-    if (!l) return;
-    const items = virtualizer.getVirtualItems();
-    if (items.length === 0) return;
-
-    const from = Math.floor(items[0].index / PAGE);
-    const to = Math.floor(items[items.length - 1].index / PAGE);
-    for (let p = from; p <= to; p++) request(p, l);
-  });
-
-  function navigate(path: string) {
-    // Truncate any forward history, exactly like a browser.
-    const next = history().slice(0, cursor() + 1);
-    next.push(path);
-    setHistory(next);
-    setCursor(next.length - 1);
-    setSelected(null);
-  }
-
-  const canBack = () => cursor() > 0;
-  const canForward = () => cursor() < history().length - 1;
-
-  function back() {
-    if (canBack()) {
-      setCursor(cursor() - 1);
-      setSelected(null);
-    }
-  }
-  function forward() {
-    if (canForward()) {
-      setCursor(cursor() + 1);
-      setSelected(null);
-    }
-  }
-  async function up() {
-    const parent = await parentOf(current());
-    if (parent) navigate(parent);
-  }
-
-  function onRow(row: RowDisplay) {
-    // Selection is handled by the pointer handler; this is the open action.
-    if (row.kind === 0) {
-      const sep = current().endsWith("\\") || current().endsWith("/") ? "" : "\\";
-      navigate(`${current()}${sep}${row.name}`);
-    }
-  }
-
-  function rowClass(row: RowDisplay | undefined): string {
-    if (!row) return "row pending";
-    const kind = row.kind === 0 ? " dir" : row.kind === 2 ? " other" : "";
-    const chosen = selection().has(row.fileId) ? " sel" : "";
-    // The anchor is marked separately: with several rows selected it is the one
-    // shift extends from, and it would otherwise be indistinguishable.
-    const anchor = selected() === row.fileId && selection().size > 1 ? " anchor" : "";
-    return "row" + kind + chosen + anchor;
-  }
+  const metrics = () => ART[artSize()];
 
   return (
     <div
-      class={`app ${dropping() ? "dropping" : ""}`}
+      class="app"
       style={{
-        "--row-h": `${metrics(artSize()).row}px`,
-        "--art": `${metrics(artSize()).art}px`,
+        "--row-h": `${metrics().row}px`,
+        "--art": `${metrics().art}px`,
         "--tree-w": `${treeWidth()}px`,
-        "--cols": gridTemplate(columns()),
       }}
     >
       <Titlebar />
 
-      <div class="crumbs">
-        <button class="navbtn" onClick={back} disabled={!canBack()}>
-          ←
-        </button>
-        <button class="navbtn" onClick={forward} disabled={!canForward()}>
-          →
-        </button>
-        <button class="navbtn" onClick={up}>
-          ↑
-        </button>
-        <Show when={!listing.error && listing()}>
-          <For each={listing()!.segments}>
-            {(seg, i) => (
-              <>
-                <Show when={i() > 0}>
-                  <span class="sep">›</span>
-                </Show>
-                <span
-                  class={`crumb ${i() === listing()!.segments.length - 1 ? "last" : ""}`}
-                  onClick={() => navigate(seg.path)}
-                >
-                  {seg.label}
-                </span>
-              </>
-            )}
-          </For>
-        </Show>
-
+      <div class="topbar">
+        <Toolbar count={audioSelection().length} quickOpen={quickOpen()} onRun={runAction} />
         <span class="grow" />
-        <Toolbar
-          count={audioSelection().length}
-          quickOpen={quickOpen()}
-          onRun={runAction}
-        />
         <div class="sizes" role="group" aria-label="Cover art size">
           <For each={ART_SIZES}>
             {(size) => (
@@ -1254,14 +1098,30 @@ export default function App() {
           </For>
         </div>
         <button
+          class={`gearbtn ${layout.groups.length > 1 ? "on" : ""}`}
+          data-tip={layout.groups.length > 1 ? "Close the split" : "Split the window"}
+          aria-label="Split"
+          onClick={splitOrJoin}
+        >
+          <SplitColsIcon />
+        </button>
+        <Show when={layout.groups.length > 1}>
+          <button
+            class="gearbtn"
+            data-tip={layout.dir === "row" ? "Stack the panes" : "Side by side"}
+            aria-label="Split orientation"
+            onClick={flipSplit}
+          >
+            <SplitRowsIcon />
+          </button>
+        </Show>
+        <button
           class={`gearbtn ${actionMenu() ? "on" : ""}`}
           data-tip="Your buttons"
           aria-label="Your buttons"
           onClick={(e) => {
             const box = e.currentTarget.getBoundingClientRect();
-            setActionMenu(
-              actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 },
-            );
+            setActionMenu(actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 });
           }}
         >
           <BoltIcon />
@@ -1284,7 +1144,7 @@ export default function App() {
       </div>
 
       <div class="body">
-        <Tree current={current()} onNavigate={navigate} />
+        <Tree current={focusPath()} onNavigate={(path) => navigateFocused(path)} />
         <div
           class="vsplit"
           onPointerDown={startTreeDrag}
@@ -1295,63 +1155,91 @@ export default function App() {
           title="Drag to resize · double-click to reset"
         />
 
-        <div class="pane">
-      <div
-        class="hdr"
-        onContextMenu={(e) => {
-          // Right-clicking the header chooses columns, as it does in Explorer.
-          e.preventDefault();
-          e.stopPropagation();
-          setColumnMenu({ x: e.clientX, y: e.clientY });
-        }}
-      >
-        <span class="art" />
-        <For each={shownColumns()}>
-          {(col) => (
-            <span
-              data-col={col.key}
-              class={`col ${col.num ? "num" : ""} ${
-                order().sort === col.key ? "sorted" : ""
-              } ${dragging() === col.key ? "moving" : ""} ${
-                dragOver() === col.key && dragging() && dragging() !== col.key
-                  ? "over"
-                  : ""
-              }`}
-              // A drag that moved must not also sort on release.
-              onClick={() => {
-                if (dragging()) return;
-                chooseSort(col.key);
-              }}
-              title={`Sort by ${col.label.toLowerCase()} · drag to reorder`}
-              onPointerDown={(e) => startColumnMove(e, col.key)}
-            >
-              {col.label}
-              <Show when={order().sort === col.key}>
-                <span class="arrow">{order().desc ? "▾" : "▴"}</span>
-              </Show>
-              {/* Sits on the boundary and swallows the click, so grabbing the
-                  edge resizes rather than sorting. */}
-              <span
-                class="grip"
-                title={`Resize ${col.label.toLowerCase()}`}
-                onPointerDown={(e) => startColumnDrag(e, col.key)}
-                onClick={(e) => e.stopPropagation()}
-                onDragStart={(e) => e.preventDefault()}
-              />
-            </span>
-          )}
-        </For>
-        <span
-          class="colpick"
-          title="Choose columns"
-          onClick={(e) => {
-            e.stopPropagation();
-            const box = e.currentTarget.getBoundingClientRect();
-            setColumnMenu({ x: box.right - 170, y: box.bottom + 4 });
-          }}
-        >
-          ⋮
-        </span>
+        <div class="panes" data-split={layout.dir}>
+          <For each={layout.groups}>
+            {(group, gi) => (
+              <>
+                <Show when={gi() > 0}>
+                  <div
+                    class="psplit"
+                    onPointerDown={startSplitDrag}
+                    onDblClick={() => {
+                      setLayout("ratio", 0.5);
+                      saveLayout(layout, 0.5);
+                    }}
+                    title="Drag to resize · double-click to even out"
+                  />
+                </Show>
+                <div
+                  class="slot"
+                  style={{
+                    // Only meaningful with two groups; a lone pane takes the
+                    // whole thing whatever the ratio says.
+                    flex:
+                      layout.groups.length > 1
+                        ? `${gi() === 0 ? layout.ratio : 1 - layout.ratio} 1 0`
+                        : "1 1 0",
+                  }}
+                >
+                  <Tabs
+                    group={group}
+                    focused={layout.focus === group.id}
+                    dropKey={dropOver()?.key ?? null}
+                    onActivate={(tabId) => {
+                      setLayout("groups", gi(), "active", tabId);
+                      setLayout("focus", group.id);
+                    }}
+                    onClose={(tabId) => closeTab(group.id, tabId)}
+                    onNew={() => {
+                      const tab = activeTab(group);
+                      openTab(group.id, tab ? currentPath(tab) : home());
+                    }}
+                    onMove={moveTab}
+                    mark={tabMark()}
+                    onMark={setTabMark}
+                  />
+                  {/* Keyed on the tab, so switching tabs mounts a fresh pane
+                      rather than re-pointing this one: a pane holds a
+                      virtualizer and a folder's loaded windows, and neither
+                      belongs to the tab you just switched to. */}
+                  <Show when={activeTab(group)} keyed>
+                    {(tab) => (
+                      <Pane
+                        tab={tab}
+                        focused={layout.focus === group.id}
+                        split={layout.groups.length > 1}
+                        onFocus={() => setLayout("focus", group.id)}
+                        onTab={(patch) => patchTab(tab.id, patch)}
+                        onReady={(handle) =>
+                          setHandles((all) => ({ ...all, [handle.tabId]: handle }))
+                        }
+                        onGone={(tabId) =>
+                          setHandles((all) => {
+                            const next = { ...all };
+                            delete next[tabId];
+                            return next;
+                          })
+                        }
+                        columns={columns()}
+                        artSize={artSize()}
+                        rowHeight={metrics().row}
+                        onColumnMenu={(x, y) => setColumnMenu({ x, y })}
+                        onColumnResize={startColumnDrag}
+                        onColumnMove={startColumnMove}
+                        columnDragging={dragging()}
+                        columnOver={dragOver()}
+                        onMenu={openMenu}
+                        onArt={(fileId) => setEditing([fileId])}
+                        onPlay={playRow}
+                        dropKey={dropOver()?.key ?? null}
+                      />
+                    )}
+                  </Show>
+                </div>
+              </>
+            )}
+          </For>
+        </div>
       </div>
 
       <Show when={columnMenu()}>
@@ -1363,152 +1251,24 @@ export default function App() {
         />
       </Show>
 
-      {/* The scroll container is the virtualizer's measuring stick, so it is
-          always mounted — the loading and empty states render inside it. */}
-      <div class="list" ref={(el) => (scrollEl = el)}>
-        <Show
-          when={!listing.error}
-          fallback={<div class="empty">Could not read {current()}.</div>}
-        >
-          <Show when={!listing.loading} fallback={<div class="empty">Reading {current()}…</div>}>
-            <Show when={total() > 0} fallback={<div class="empty">Nothing here.</div>}>
-              {/* One tall spacer holds the scrollbar honest; only the rows in
-                  view exist inside it. */}
-              <div class="canvas" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-                <For each={virtualizer.getVirtualItems()}>
-                  {(item) => {
-                    const row = () => rowAt(item.index);
-                    return (
-                      <div
-                        class={rowClass(row())}
-                        onPointerDown={(e) => {
-                          const r = row();
-                          if (!r) return;
-                          selectRow(r, e);
-                          startRowDrag(e, r);
-                        }}
-                        style={{
-                          height: `${item.size}px`,
-                          transform: `translateY(${item.start}px)`,
-                        }}
-                        onClick={() => {
-                          const r = row();
-                          if (r) onRow(r);
-                        }}
-                        onDblClick={() => {
-                          const r = row();
-                          if (r) playRow(r);
-                        }}
-                        onContextMenu={(e) => {
-                          const r = row();
-                          if (r) openMenu(e, r);
-                        }}
-                      >
-                        <Show when={row()} fallback={<span class="ph" />}>
-                          {(r) => (
-                            <>
-                              {/* Only rows the probe found a picture in get an
-                                  <img> at all; the rest render the empty cell
-                                  directly rather than firing a request that can
-                                  only 404. On error the image hides itself and
-                                  the cell's own background shows through, which
-                                  covers art that turns out not to decode. */}
-                              {/* Clicking the artwork opens the editor on that
-                                  row, where the cover can be seen at a size
-                                  worth looking at, replaced, or removed. The
-                                  row is selected first, so the editor opens on
-                                  what was clicked rather than on whatever
-                                  happened to be selected before. */}
-                              <span
-                                class="art"
-                                title={r().hasArt ? "Open cover art" : undefined}
-                                onClick={(e) => {
-                                  if (!r().hasArt || r().kind !== 1) return;
-                                  e.stopPropagation();
-                                  setSelection(new Set([r().fileId]));
-                                  setSelected(r().fileId);
-                                  setEditing([r().fileId]);
-                                }}
-                              >
-                                <Show when={r().hasArt}>
-                                  <img
-                                    src={thumbUrl(r().fileId, artSize())}
-                                    alt=""
-                                    loading="lazy"
-                                    decoding="async"
-                                    draggable={false}
-                                    onLoad={(e) => e.currentTarget.classList.remove("blank")}
-                                    onError={(e) => e.currentTarget.classList.add("blank")}
-                                  />
-                                </Show>
-                              </span>
-                              <For each={shownColumns()}>
-                                {(col) =>
-                                  col.key === "name" ? (
-                                    <span class="name" title={r().name}>
-                                      {r().name}
-                                      <Show when={r().state}>
-                                        <span class="bad"> [{r().state}]</span>
-                                      </Show>
-                                    </span>
-                                  ) : (
-                                    <span
-                                      class={`${col.num ? "num mono" : col.dim ? "dim" : "mono"}${
-                                        col.key === "key" ? " keycol" : ""
-                                      }`}
-                                      style={
-                                        col.key === "key"
-                                          ? { color: keyColour(r().keyNorm) }
-                                          : undefined
-                                      }
-                                      title={cellText(r(), col.key)}
-                                    >
-                                      {cellText(r(), col.key)}
-                                    </span>
-                                  )
-                                }
-                              </For>
-                            </>
-                          )}
-                        </Show>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
-            </Show>
-          </Show>
-        </Show>
-      </div>
-        </div>
-      </div>
-
       <Show when={menu()}>
         <Menu
           x={menu()!.x}
           y={menu()!.y}
-          items={rowMenuItems(menu()!.row)}
+          items={rowMenuItems(menu()!.row, menu()!.ids)}
           onClose={() => setMenu(null)}
         />
       </Show>
 
       <Show when={renaming()}>
         {(ids) => (
-          <Renamer
-            fileIds={ids()}
-            onClose={() => setRenaming(null)}
-            onRenamed={() => refetchListing()}
-          />
+          <Renamer fileIds={ids()} onClose={() => setRenaming(null)} onRenamed={refetchAll} />
         )}
       </Show>
 
       <Show when={cleaning()}>
         {(ids) => (
-          <Cleanup
-            fileIds={ids()}
-            onClose={() => setCleaning(null)}
-            onChanged={() => refetchListing()}
-          />
+          <Cleanup fileIds={ids()} onClose={() => setCleaning(null)} onChanged={refetchAll} />
         )}
       </Show>
 
@@ -1527,7 +1287,7 @@ export default function App() {
             action={target().action}
             fileIds={target().fileIds}
             onClose={() => setRunning(null)}
-            onDone={() => refetchListing()}
+            onDone={refetchAll}
           />
         )}
       </Show>
@@ -1542,7 +1302,7 @@ export default function App() {
             fileIds={ids()}
             // Reported across the pinned folders as well as this one: a copy
             // matters precisely when it is somewhere else.
-            scopes={[...storedPins(), current()]}
+            scopes={[...storedPins(), focusPath()]}
             onClose={() => setComparing(null)}
           />
         )}
@@ -1579,7 +1339,7 @@ export default function App() {
               setPrefill({});
               setPrefillArt(undefined);
             }}
-            onWritten={() => refetchListing()}
+            onWritten={refetchAll}
           />
         )}
       </Show>
@@ -1591,7 +1351,7 @@ export default function App() {
             fileIds={target().fileIds}
             onClose={() => setCovering(null)}
             onApplied={() => {
-              refetchListing();
+              refetchAll();
               // The editor may be open behind this, drawing the cover that was
               // just replaced.
               setArtNonce((n) => n + 1);
@@ -1632,7 +1392,7 @@ export default function App() {
           groups={settings().quick}
           rating={settings().quickRating}
           onClose={() => setQuickOpen(false)}
-          onWritten={() => refetchListing()}
+          onWritten={refetchAll}
         />
       </Show>
 
@@ -1644,28 +1404,13 @@ export default function App() {
         settings={settings()}
       />
 
-      <div class="status">
-        <Show when={!listing.error && listing()}>
-          <span>{listing()!.total} entries</span>
-          <span class={listing()!.scanMs > 500 ? "slow" : ""}>
-            scan {listing()!.scanMs}ms
-          </span>
-        </Show>
-        {/* Only while tags are still being read. A folder already in the index
-            opens with everything filled in and says nothing here. */}
-        <Show when={probed() > 0}>
-          <span class="working">reading tags… {probed()}</span>
-        </Show>
-        <Show when={windowError()}>
-          <span class="slow">{windowError()}</span>
-        </Show>
-      </div>
-
       <Show when={finding()}>
         <Search
           scopes={searchScopes()}
           onClose={() => setFinding(false)}
-          onOpen={revealFromSearch}
+          // Opened in the focused pane, with the row that matched selected
+          // once the folder holding it has been read.
+          onOpen={(dirPath, fileId) => navigateFocused(dirPath, fileId)}
         />
       </Show>
     </div>
