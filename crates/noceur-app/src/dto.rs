@@ -1,6 +1,7 @@
 //! Types crossing the IPC boundary.
 
 use crate::format::RowDisplay;
+use noceur_index::Show;
 
 /// Everything the UI needs to render one directory listing *except* its rows.
 ///
@@ -41,7 +42,7 @@ pub struct Segment {
 pub struct ListRequest {
     pub path: String,
     #[serde(default)]
-    pub audio_only: bool,
+    pub show: Show,
     #[serde(flatten)]
     pub order: Order,
 }
@@ -73,7 +74,7 @@ pub struct RowsRequest {
     /// Must match the [`ListRequest`] that opened the directory, or the window
     /// will be cut from a differently-filtered list than the one being scrolled.
     #[serde(default)]
-    pub audio_only: bool,
+    pub show: Show,
     #[serde(flatten)]
     pub order: Order,
 }

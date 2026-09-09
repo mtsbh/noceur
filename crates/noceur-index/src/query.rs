@@ -109,12 +109,44 @@ impl SortColumn {
     }
 }
 
+/// Which rows a listing includes.
+///
+/// Three states rather than an "audio only" flag, because hiding non-audio
+/// files and hiding *everything* that is not audio are different requests and
+/// only one of them leaves a folder you can navigate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Show {
+    /// Every row.
+    #[default]
+    Everything,
+    /// Audio, and the folders that lead to more of it. Drops the cover scans,
+    /// cue sheets, `.nfo`s and stray archives a download leaves behind.
+    Tracks,
+    /// Audio alone — folders included in what is dropped. For a flat listing
+    /// that is going to be read rather than walked.
+    AudioOnly,
+}
+
+impl Show {
+    /// The `WHERE` fragment this appends to a listing query.
+    ///
+    /// `f.kind` is [`EntryKind::group`]: 0 directory, 1 audio, 2 anything else.
+    fn sql(self) -> &'static str {
+        match self {
+            Show::Everything => "",
+            Show::Tracks => " AND f.kind != 2",
+            Show::AudioOnly => " AND f.kind = 1",
+        }
+    }
+}
+
 /// How to slice and order a directory listing.
 #[derive(Debug, Clone)]
 pub struct ListOptions {
     pub sort: SortColumn,
     pub desc: bool,
-    pub audio_only: bool,
+    pub show: Show,
     pub offset: i64,
     /// Rows to return. `-1` means no limit.
     pub limit: i64,
@@ -125,7 +157,7 @@ impl Default for ListOptions {
         ListOptions {
             sort: SortColumn::Name,
             desc: false,
-            audio_only: false,
+            show: Show::Everything,
             offset: 0,
             limit: -1,
         }
@@ -184,11 +216,7 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
         "{SELECT}{audio}
          ORDER BY f.kind ASC, {col} {dir}, f.name COLLATE NOCASE ASC
          LIMIT ?2 OFFSET ?3",
-        audio = if opts.audio_only {
-            " AND f.kind = 1"
-        } else {
-            ""
-        },
+        audio = opts.show.sql(),
         col = opts.sort.sql(),
         dir = if opts.desc { "DESC" } else { "ASC" },
     );
@@ -229,11 +257,7 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
 pub fn count(db: &Db, dir_id: i64, opts: ListOptions) -> Result<i64, IndexError> {
     let sql = format!(
         "SELECT COUNT(*) FROM file f WHERE f.dir_id = ?1{}",
-        if opts.audio_only {
-            " AND f.kind = 1"
-        } else {
-            ""
-        }
+        opts.show.sql()
     );
     Ok(db.conn().query_row(&sql, [dir_id], |r| r.get(0))?)
 }
@@ -368,6 +392,37 @@ mod tests {
         assert_eq!(audio, ["a.wav", "c.wav", "b.wav"]);
     }
 
+    /// The setting behind "hide files that are not audio". The folder has to
+    /// survive it: a browser that filters away the thing you navigate with has
+    /// filtered away the browser.
+    #[test]
+    fn tracks_hides_other_files_but_keeps_the_folders() {
+        let (db, _d, dir_id) = setup();
+        let rows = list(
+            &db,
+            dir_id,
+            ListOptions {
+                show: Show::Tracks,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(names(&rows), ["Zebra folder", "a.wav", "b.wav", "c.wav"]);
+        assert_eq!(
+            count(
+                &db,
+                dir_id,
+                ListOptions {
+                    show: Show::Tracks,
+                    ..Default::default()
+                }
+            )
+            .unwrap(),
+            4,
+            "the count has to agree with the rows, or the list scrolls past its end"
+        );
+    }
+
     #[test]
     fn audio_only_hides_directories_and_other_files() {
         let (db, _d, dir_id) = setup();
@@ -375,7 +430,7 @@ mod tests {
             &db,
             dir_id,
             ListOptions {
-                audio_only: true,
+                show: Show::AudioOnly,
                 ..Default::default()
             },
         )
@@ -485,7 +540,7 @@ mod tests {
                 &db,
                 dir_id,
                 ListOptions {
-                    audio_only: true,
+                    show: Show::AudioOnly,
                     ..Default::default()
                 }
             )

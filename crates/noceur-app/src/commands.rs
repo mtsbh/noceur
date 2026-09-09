@@ -8,7 +8,7 @@ use crate::format;
 use crate::state::AppState;
 use noceur_fsmodel::path::simplify;
 use noceur_fsmodel::{natural_cmp, EntryKind};
-use noceur_index::{list, volume, Db, IndexError, ListOptions, SortColumn};
+use noceur_index::{list, volume, Db, IndexError, ListOptions, Show, SortColumn};
 use noceur_tags::KeyNotation;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -43,7 +43,7 @@ const FIRST_WINDOW: i64 = 200;
 pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<DirListing, String> {
     let db = state.db.clone();
     let path = PathBuf::from(&req.path);
-    let audio_only = req.audio_only;
+    let show = req.show;
 
     tauri::async_runtime::spawn_blocking(move || {
         let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
@@ -53,13 +53,9 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
         let dir_id = noceur_index::scan_dir(&db, volume_id, &path).map_err(|e| e.to_string())?;
         let scan_ms = started.elapsed().as_millis() as u64;
 
-        let total = noceur_index::count(
-            &db,
-            dir_id,
-            options(&req.order, audio_only, 0, FIRST_WINDOW)?,
-        )
-        .map_err(|e| e.to_string())?;
-        let first = window(&db, dir_id, &req.order, audio_only, 0, FIRST_WINDOW)?;
+        let total = noceur_index::count(&db, dir_id, options(&req.order, show, 0, FIRST_WINDOW)?)
+            .map_err(|e| e.to_string())?;
+        let first = window(&db, dir_id, &req.order, show, 0, FIRST_WINDOW)?;
 
         let shown = simplify(&path);
         Ok(DirListing {
@@ -113,12 +109,12 @@ pub async fn list_rows(state: State<'_, AppState>, req: RowsRequest) -> Result<R
     let db = state.db.clone();
     let offset = req.offset.max(0);
     let limit = req.limit.clamp(0, MAX_LIMIT);
-    let (dir_id, audio_only) = (req.dir_id, req.audio_only);
+    let (dir_id, show) = (req.dir_id, req.show);
     let order = req.order.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
         let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
-        window(&db, dir_id, &order, audio_only, offset, limit)
+        window(&db, dir_id, &order, show, offset, limit)
     })
     .await
     .map_err(|e| format!("window task failed: {e}"))?
@@ -131,12 +127,7 @@ pub async fn list_rows(state: State<'_, AppState>, req: RowsRequest) -> Result<R
 /// name order: a frontend asking for a column that does not exist is a bug, and
 /// a list that quietly ignores the header you clicked is worse than one that
 /// says so.
-fn options(
-    order: &Order,
-    audio_only: bool,
-    offset: i64,
-    limit: i64,
-) -> Result<ListOptions, String> {
+fn options(order: &Order, show: Show, offset: i64, limit: i64) -> Result<ListOptions, String> {
     let sort = match order.sort.as_deref() {
         None | Some("") => SortColumn::Name,
         Some(name) => {
@@ -147,7 +138,7 @@ fn options(
     Ok(ListOptions {
         sort,
         desc: order.desc,
-        audio_only,
+        show,
         offset,
         limit,
     })
@@ -158,11 +149,11 @@ fn window(
     db: &Db,
     dir_id: i64,
     order: &Order,
-    audio_only: bool,
+    show: Show,
     offset: i64,
     limit: i64,
 ) -> Result<RowWindow, String> {
-    let rows = list(db, dir_id, options(order, audio_only, offset, limit)?)
+    let rows = list(db, dir_id, options(order, show, offset, limit)?)
         .map_err(|e: IndexError| e.to_string())?;
     Ok(RowWindow {
         offset,

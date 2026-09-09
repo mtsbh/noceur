@@ -673,14 +673,23 @@ export default function Settings(props: {
           <Section
             title="Files"
             info={
-              <p>
-                Writing a tag rewrites the file, and the filesystem stamps it
-                with the time it was rewritten. For a music library that is
-                destructive in a quiet way: "date modified" is what you sort by
-                to find what arrived last week, and retagging a folder moves
-                every track in it to the top of that sort at once. The old dates
-                are not recoverable, which is why this starts on.
-              </p>
+              <>
+                <p>
+                  Writing a tag rewrites the file, and the filesystem stamps it
+                  with the time it was rewritten. For a music library that is
+                  destructive in a quiet way: "date modified" is what you sort by
+                  to find what arrived last week, and retagging a folder moves
+                  every track in it to the top of that sort at once. The old
+                  dates are not recoverable, which is why this starts on.
+                </p>
+                <p>
+                  Hiding non-audio files drops the cover scans, cue sheets,
+                  .nfo files and stray archives a download leaves in a release
+                  folder. Folders themselves always stay — they are what you
+                  navigate with. It only changes what is shown: nothing is
+                  moved or deleted, and the hidden files are still there.
+                </p>
+              </>
             }
           >
             <div class="setrow">
@@ -696,6 +705,17 @@ export default function Settings(props: {
                   }}
                 />
                 <span>Preserve file modification time when retagging</span>
+              </label>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">Show</span>
+              <label class="setcheck">
+                <input
+                  type="checkbox"
+                  checked={props.settings.tracksOnly}
+                  onChange={(e) => patch({ tracksOnly: e.currentTarget.checked })}
+                />
+                <span>Hide files that are not audio</span>
               </label>
             </div>
           </Section>

@@ -121,6 +121,14 @@ export type Settings = {
   quick: QuickGroup[];
   /** Whether the quick-tag panel offers a star rating row. */
   quickRating: boolean;
+  /**
+   * Whether listings hide files that are not audio.
+   *
+   * Folders always survive it — see `Show` in `api.ts`. Off by default: a
+   * browser that silently omits files is lying about what is on the disk, and
+   * that is a thing to opt into rather than to discover.
+   */
+  tracksOnly: boolean;
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -185,6 +193,7 @@ export const DEFAULTS: Settings = {
   wave: { shape: "filled", colour: "rgb" },
   quick: DEFAULT_QUICK,
   quickRating: true,
+  tracksOnly: false,
 };
 
 const KEY = "noceur.settings";
@@ -215,6 +224,7 @@ export function loadSettings(): Settings {
         ? parsed.quick.filter(isGroup).map(readGroup)
         : DEFAULT_QUICK,
       quickRating: parsed.quickRating !== false,
+      tracksOnly: parsed.tracksOnly === true,
     };
   } catch {
     return DEFAULTS;

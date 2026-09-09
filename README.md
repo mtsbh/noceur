@@ -61,6 +61,8 @@ land on Windows' own undo stack.
 
 **Browsing.** A virtualized listing that does not care how large a folder is. Folder tree,
 pinned folders, breadcrumbs, back and forward. Eighteen columns, reorderable and resizable.
+Optionally hides everything that is not audio, folders excepted, so a release folder is the
+tracks in it rather than the cover scans and `.nfo`s that came with them.
 Full-text search across the indexed library. Tabs, and a split into two panes — side by side or
 stacked — each with its own tabs, sort and history, so the folder you are filing tracks *into* is
 on screen beside the one you are filing them *out of*. Drag files in from Explorer, out to

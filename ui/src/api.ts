@@ -124,24 +124,29 @@ export type SortColumn =
 export type Order = { sort: SortColumn; desc: boolean };
 
 /**
+ * Which rows a listing includes. Mirrors `Show` in `noceur-index`.
+ *
+ * `tracks` keeps the folders — it hides the artwork, cue sheets and `.nfo`s a
+ * download leaves in a release folder, not the thing you navigate with.
+ * `audioOnly` drops those too and is not something the browser asks for.
+ */
+export type Show = "everything" | "tracks" | "audioOnly";
+
+/**
  * Scans and counts a directory, returning its first window of rows.
  *
  * Does not read tags — see `probeBatch`, which fills those in afterwards.
  */
-export function openDir(
-  path: string,
-  order: Order,
-  audioOnly = false,
-): Promise<DirListing> {
+export function openDir(path: string, order: Order, show: Show = "everything"): Promise<DirListing> {
   return invoke<DirListing>("open_dir", {
-    req: { path, audioOnly, sort: order.sort, desc: order.desc },
+    req: { path, show, sort: order.sort, desc: order.desc },
   });
 }
 
 /**
  * Reads one window of an already-opened directory.
  *
- * `order` and `audioOnly` must match the values `openDir` was called with — the
+ * `order` and `show` must match the values `openDir` was called with — the
  * backend cuts the window from the ordered, filtered list, so a mismatch
  * silently returns rows from a different list than the one on screen.
  */
@@ -150,10 +155,10 @@ export function listRows(
   offset: number,
   limit: number,
   order: Order,
-  audioOnly = false,
+  show: Show = "everything",
 ): Promise<RowWindow> {
   return invoke<RowWindow>("list_rows", {
-    req: { dirId, offset, limit, audioOnly, sort: order.sort, desc: order.desc },
+    req: { dirId, offset, limit, show, sort: order.sort, desc: order.desc },
   });
 }
 

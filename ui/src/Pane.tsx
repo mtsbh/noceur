@@ -23,6 +23,8 @@ import {
   type SortColumn,
   type DirListing,
   type RowDisplay,
+  // Aliased: `Show` is Solid's conditional component in this file.
+  type Show as RowFilter,
 } from "./api";
 import { currentPath, rememberOrder, type Tab } from "./layout";
 import { cellText, gridTemplate, keyColour, type Column } from "./columns";
@@ -106,6 +108,8 @@ export default function Pane(props: {
   /** Columns, art size and the header drags are global — every pane shares them. */
   columns: Column[];
   artSize: ArtSize;
+  /** Which rows the listing includes. A setting, so every pane gets the same one. */
+  show: RowFilter;
   rowHeight: number;
   onColumnMenu: (x: number, y: number) => void;
   onColumnResize: (e: PointerEvent, key: SortColumn) => void;
@@ -151,7 +155,7 @@ export default function Pane(props: {
   // second parameter.
   const [listing, { refetch: refetchListing }] = createResource<DirListing, string>(
     current,
-    (p) => openDir(p, order()),
+    (p) => openDir(p, order(), props.show),
   );
 
   // The path sits beside the buttons that navigate it, so a path too long for a
@@ -331,6 +335,17 @@ export default function Pane(props: {
     }),
   );
 
+  // Filtering changes how many rows there are, not just their order, and the
+  // total comes from the listing — so unlike a sort this has to re-open the
+  // directory. Deferred: the first listing already asked with the right filter.
+  createEffect(
+    on(
+      () => props.show,
+      () => void refetchListing(),
+      { defer: true },
+    ),
+  );
+
   // Re-sorting reorders every row, so every cached window is wrong. Deferred so
   // it does not fire on the initial render, which already has the right order.
   createEffect(
@@ -357,12 +372,13 @@ export default function Pane(props: {
     if (items.length === 0) return;
 
     const asked = order();
+    const shown = props.show;
     const from = Math.floor(items[0].index / PAGE);
     const to = Math.floor(items[items.length - 1].index / PAGE);
     for (let p = from; p <= to; p++) {
-      listRows(dirId, p * PAGE, PAGE, asked)
+      listRows(dirId, p * PAGE, PAGE, asked, shown)
         .then((w) => {
-          if (listing()?.dirId !== dirId || order() !== asked) return;
+          if (listing()?.dirId !== dirId || order() !== asked || props.show !== shown) return;
           setPages(Math.floor(w.offset / PAGE), w.rows);
         })
         .catch(() => {});
@@ -410,13 +426,16 @@ export default function Pane(props: {
     inflight.add(page);
     const dirId = l.dirId;
     const asked = order();
+    const shown = props.show;
 
-    listRows(dirId, page * PAGE, PAGE, asked)
+    listRows(dirId, page * PAGE, PAGE, asked, shown)
       .then((w) => {
-        // A window that lands after we have navigated, or after the sort
-        // changed, belongs to a listing that is no longer on screen; filing it
-        // would show another folder's rows, or these rows in the wrong places.
-        if (listing()?.dirId !== dirId || order() !== asked) return;
+        // A window that lands after we have navigated, or after the sort or the
+        // filter changed, belongs to a listing that is no longer on screen;
+        // filing it would show another folder's rows, or these rows in the
+        // wrong places. The filter needs checking by hand because it leaves the
+        // directory id alone — same folder, different list.
+        if (listing()?.dirId !== dirId || order() !== asked || props.show !== shown) return;
         setPages(Math.floor(w.offset / PAGE), w.rows);
         setWindowError("");
       })

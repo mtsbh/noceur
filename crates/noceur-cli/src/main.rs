@@ -1,7 +1,7 @@
 //! Debug CLI for the Noceur engine. Not the shipping interface.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use noceur_index::query::{count, list, ListOptions, SortColumn};
+use noceur_index::query::{count, list, ListOptions, Show, SortColumn};
 use noceur_index::volume::{upsert, VolumeKind};
 use noceur_index::{probe_dir, scan_dir, Db};
 use noceur_tags::{KeyNotation, MusicalKey};
@@ -119,7 +119,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let opts = ListOptions {
                 sort: sort.into(),
                 desc,
-                audio_only,
+                show: if audio_only {
+                    Show::AudioOnly
+                } else {
+                    Show::Everything
+                },
                 ..Default::default()
             };
             let total = count(&db, dir_id, opts.clone())?;

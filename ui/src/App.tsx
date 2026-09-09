@@ -1222,6 +1222,7 @@ export default function App() {
                         }
                         columns={columns()}
                         artSize={artSize()}
+                        show={settings().tracksOnly ? "tracks" : "everything"}
                         rowHeight={metrics().row}
                         onColumnMenu={(x, y) => setColumnMenu({ x, y })}
                         onColumnResize={startColumnDrag}

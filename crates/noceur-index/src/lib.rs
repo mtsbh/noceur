@@ -13,7 +13,7 @@ pub mod thumb;
 pub mod volume;
 
 pub use db::{Db, IndexError};
-pub use query::{count, list, ListOptions, ListRow, SortColumn};
+pub use query::{count, list, ListOptions, ListRow, Show, SortColumn};
 pub use scan::{probe_batch, probe_dir, reprobe, scan_dir, PROBE_BATCH};
 pub use search::{search, Hit, Tags};
 pub use thumb::{Cached, Located};
