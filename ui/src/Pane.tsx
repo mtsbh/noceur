@@ -140,6 +140,7 @@ export default function Pane(props: {
 
   let scrollEl: HTMLDivElement | undefined;
   let headEl: HTMLDivElement | undefined;
+  let trail: HTMLSpanElement | undefined;
 
   // Keyed on the path only. Changing the sort must not re-open the directory:
   // opening re-enumerates it, and the order is a property of the read, not of
@@ -151,6 +152,20 @@ export default function Pane(props: {
   const [listing, { refetch: refetchListing }] = createResource<DirListing, string>(
     current,
     (p) => openDir(p, order()),
+  );
+
+  // The path sits beside the buttons that navigate it, so a path too long for a
+  // narrow pane overflows to the right — off the end, taking the folder you are
+  // actually in with it. Scrolling the box to its end keeps that folder on
+  // screen and drops the front of the path instead, which is the half nobody
+  // reads. `overflow: hidden` still scrolls under script; only the user cannot.
+  createEffect(
+    on(
+      () => [current(), listing()] as const,
+      () => {
+        if (trail) trail.scrollLeft = trail.scrollWidth;
+      },
+    ),
   );
 
   /** Row count of the whole listing — what the virtualizer sizes itself against. */
@@ -590,7 +605,7 @@ export default function Pane(props: {
         <button class="navbtn" onClick={up} title="Up one folder">
           ↑
         </button>
-        <span class="trail">
+        <span class="trail" ref={trail}>
           <Show when={!listing.error && listing()}>
             <For each={listing()!.segments}>
               {(seg, i) => (

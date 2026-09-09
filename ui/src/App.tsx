@@ -1082,8 +1082,8 @@ export default function App() {
       <Titlebar />
 
       <div class="topbar">
-        <Toolbar count={audioSelection().length} quickOpen={quickOpen()} onRun={runAction} />
         <span class="grow" />
+        <Toolbar count={audioSelection().length} quickOpen={quickOpen()} onRun={runAction} />
         <div class="sizes" role="group" aria-label="Cover art size">
           <For each={ART_SIZES}>
             {(size) => (

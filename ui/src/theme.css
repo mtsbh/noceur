@@ -85,9 +85,10 @@ body {
   flex: none;
   flex-wrap: nowrap;
 }
-/* Right-aligned inside its own clipping box, so what falls off a narrow pane is
-   the front of the path — `E:\ › music › …` — and the folder you are actually
-   in stays on screen. Left-aligned it would clip the only part worth reading. */
+/* Left-aligned, beside the buttons it belongs to, and scrolled to its end when
+   it does not fit. Right-aligning it achieved the same clipping without any
+   script, at the cost of a path floating alone at the far edge of every pane
+   wide enough to hold it — which is nearly all of them. */
 .trail {
   flex: 1;
   min-width: 0;
@@ -95,19 +96,19 @@ body {
   align-items: center;
   gap: 6px;
   overflow: hidden;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 .trail > * {
   flex: none;
   white-space: nowrap;
 }
-/* The toolbar's separator divides it from the size buttons that used to follow
-   it. In the window's own bar it is the leftmost thing and nothing follows it,
-   so the rule would hang in empty space. */
+/* Everything in the window's bar sits together on the right: two clusters at
+   opposite ends of an otherwise empty strip read as two unrelated things. The
+   separator divides the track actions from the view controls that follow. */
 .topbar > .toolbar {
-  margin-right: 0;
-  padding-right: 0;
-  border-right: none;
+  margin-right: 8px;
+  padding-right: 8px;
+  border-right: 1px solid var(--hair2);
 }
 .crumb {
   color: var(--fg3);
