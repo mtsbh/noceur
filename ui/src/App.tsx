@@ -1142,7 +1142,7 @@ export default function App() {
         </button>
         <button
           class={`gearbtn ${spekOpen() ? "on" : ""}`}
-          data-tip="Spectrogram of the playing track"
+          data-tip="Spek"
           data-tip-at="end"
           aria-label="Spectrogram"
           onClick={() => setSpekOpen((open) => !open)}
