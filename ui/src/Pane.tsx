@@ -615,13 +615,19 @@ export default function Pane(props: {
       data-path={current()}
     >
       <div class="crumbs">
-        <button class="navbtn" onClick={back} disabled={!canBack()} title="Back">
+        <button class="navbtn" onClick={back} disabled={!canBack()} data-tip="Back · alt+←" data-tip-at="start" aria-label="Back">
           ←
         </button>
-        <button class="navbtn" onClick={forward} disabled={!canForward()} title="Forward">
+        <button
+          class="navbtn"
+          onClick={forward}
+          disabled={!canForward()}
+          data-tip="Forward · alt+→"
+          aria-label="Forward"
+        >
           →
         </button>
-        <button class="navbtn" onClick={up} title="Up one folder">
+        <button class="navbtn" onClick={up} data-tip="Up one folder" aria-label="Up one folder">
           ↑
         </button>
         <span class="trail" ref={trail}>
@@ -699,7 +705,9 @@ export default function Pane(props: {
         </For>
         <span
           class="colpick"
-          title="Choose columns"
+          data-tip="Choose columns"
+          data-tip-at="end"
+          aria-label="Choose columns"
           onClick={(e) => {
             e.stopPropagation();
             const box = e.currentTarget.getBoundingClientRect();

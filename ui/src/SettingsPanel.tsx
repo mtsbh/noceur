@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
 import { CloseIcon } from "./icons";
 import {
   actions,
@@ -12,6 +12,7 @@ import {
   type ActionKind,
 } from "./api";
 import type { Column } from "./columns";
+import { CUSTOM, UI_FONTS, cleanFamily, head, installed } from "./fonts";
 import {
   NEW_QUICK_GROUP,
   QUICK_KEYS,
@@ -144,6 +145,17 @@ export default function Settings(props: {
 
   const patch = (next: Partial<S>) => props.onSettings({ ...props.settings, ...next });
 
+  /**
+   * The offered faces this machine does not have.
+   *
+   * Worked out once when the panel opens rather than per render: the answer
+   * cannot change while it is open, and it costs a canvas measurement per font
+   * per base.
+   */
+  const missing = createMemo(
+    () => new Set(UI_FONTS.filter((f) => !installed(head(f.stack))).map((f) => f.name)),
+  );
+
   /** Replaces one quick-tag group, leaving the rest alone. */
   function editGroup(index: number, change: Partial<QuickGroup>) {
     patch({
@@ -207,7 +219,13 @@ export default function Settings(props: {
       <div class="settings" role="dialog" aria-label="Settings">
         <header class="sethead">
           <span class="settitle">Settings</span>
-          <button class="setclose" onClick={props.onClose} title="Close (Esc)">
+          <button
+            class="setclose"
+            onClick={props.onClose}
+            data-tip="Close · esc"
+            data-tip-at="end"
+            aria-label="Close"
+          >
             <CloseIcon />
           </button>
         </header>
@@ -462,7 +480,8 @@ export default function Settings(props: {
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}
                     <button
                       class="setremove"
-                      title="Remove this row"
+                      data-tip="Remove this row"
+                      data-tip-at="end"
                       onClick={() =>
                         patch({
                           quick: props.settings.quick.filter((_, i) => i !== row()),
@@ -549,7 +568,8 @@ export default function Settings(props: {
                     </select>
                     <button
                       class="setremove"
-                      title="Remove this button"
+                      data-tip="Remove this button"
+                      data-tip-at="end"
                       onClick={() =>
                         saveActions(buttons().filter((_, i) => i !== at()))
                       }
@@ -718,6 +738,75 @@ export default function Settings(props: {
                 <span>Hide files that are not audio</span>
               </label>
             </div>
+          </Section>
+
+          <Section
+            title="Text"
+            info={
+              <p>
+                Everything offered here except Inter ships with Windows, so the
+                list is what this machine already has rather than a list of
+                things to install — a face it turns out not to have is marked
+                as missing rather than quietly drawn in another one. "Other"
+                takes the exact name of any font installed on the machine, as
+                spelled in Windows' own font list.
+              </p>
+            }
+          >
+            <div class="setrow">
+              <span class="setlabel">Font</span>
+              {/* Each choice is drawn in the face it selects, which is the only
+                  honest way to show a font and saves a preview row. */}
+              <div class="setseg wrap" role="group" aria-label="Interface font">
+                <For each={UI_FONTS}>
+                  {(font) => (
+                    <button
+                      class={`segbtn ${props.settings.font === font.name ? "on" : ""} ${
+                        missing().has(font.name) ? "miss" : ""
+                      }`}
+                      style={{ "font-family": font.stack }}
+                      data-tip={
+                        missing().has(font.name) ? "Not installed — will fall back" : undefined
+                      }
+                      onClick={() => patch({ font: font.name })}
+                    >
+                      {font.label}
+                    </button>
+                  )}
+                </For>
+                <button
+                  class={`segbtn ${props.settings.font === CUSTOM ? "on" : ""}`}
+                  onClick={() => patch({ font: CUSTOM })}
+                >
+                  Other…
+                </button>
+              </div>
+            </div>
+            <Show when={props.settings.font === CUSTOM}>
+              <div class="setrow">
+                <span class="setlabel">Family</span>
+                {/* Committed on blur or Enter rather than per keystroke: typing
+                    "Consolas" one letter at a time would restyle the window
+                    eight times and land on whatever "Conso" resolves to. */}
+                <input
+                  type="text"
+                  value={props.settings.fontCustom}
+                  placeholder="Exact name, as Windows spells it"
+                  onChange={(e) => patch({ fontCustom: cleanFamily(e.currentTarget.value) })}
+                />
+              </div>
+              <Show
+                when={
+                  props.settings.fontCustom.trim() !== "" &&
+                  !installed(props.settings.fontCustom)
+                }
+              >
+                <p class="sethint">
+                  Nothing installed under that name — the interface is falling
+                  back to Segoe UI.
+                </p>
+              </Show>
+            </Show>
           </Section>
 
           <Section title="List">

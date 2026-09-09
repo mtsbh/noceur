@@ -177,14 +177,23 @@ export default function Transport(props: {
       {/* Play is the one button hit constantly and the one that must be found
           without looking, so it is the only one given a filled shape. */}
       <div class="tbtns">
-        <button class="tbtn" onClick={props.onPrev} disabled={!loaded()} title="Previous track">
+        <button
+          class="tbtn"
+          onClick={props.onPrev}
+          disabled={!loaded()}
+          data-tip="Previous track"
+          data-tip-at="above"
+          aria-label="Previous track"
+        >
           <PrevIcon />
         </button>
         <button
           class="tbtn"
           onClick={() => nudge(-NUDGE_MS)}
           disabled={!loaded()}
-          title="Back 10 seconds"
+          data-tip="Back 10 seconds"
+          data-tip-at="above"
+          aria-label="Back 10 seconds"
         >
           <BackIcon />
         </button>
@@ -192,7 +201,9 @@ export default function Transport(props: {
           class="tbtn play"
           onClick={act("toggle")}
           disabled={!loaded()}
-          title={props.state?.playing ? "Pause (space)" : "Play (space)"}
+          data-tip={props.state?.playing ? "Pause · space" : "Play · space"}
+          data-tip-at="above"
+          aria-label={props.state?.playing ? "Pause" : "Play"}
         >
           {props.state?.playing ? <PauseIcon /> : <PlayIcon />}
         </button>
@@ -200,14 +211,30 @@ export default function Transport(props: {
           class="tbtn"
           onClick={() => nudge(NUDGE_MS)}
           disabled={!loaded()}
-          title="Forward 10 seconds"
+          data-tip="Forward 10 seconds"
+          data-tip-at="above"
+          aria-label="Forward 10 seconds"
         >
           <ForwardIcon />
         </button>
-        <button class="tbtn" onClick={props.onNext} disabled={!loaded()} title="Next track">
+        <button
+          class="tbtn"
+          onClick={props.onNext}
+          disabled={!loaded()}
+          data-tip="Next track"
+          data-tip-at="above"
+          aria-label="Next track"
+        >
           <NextIcon />
         </button>
-        <button class="tbtn" onClick={act("stop")} disabled={!loaded()} title="Stop">
+        <button
+          class="tbtn"
+          onClick={act("stop")}
+          disabled={!loaded()}
+          data-tip="Stop"
+          data-tip-at="above"
+          aria-label="Stop"
+        >
           <StopIcon />
         </button>
       </div>

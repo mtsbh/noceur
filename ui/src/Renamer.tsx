@@ -103,7 +103,13 @@ export default function Renamer(props: {
           <span class="tagsubject">
             {props.fileIds.length} {props.fileIds.length === 1 ? "track" : "tracks"}
           </span>
-          <button class="setclose" onClick={props.onClose} title="Close (Esc)">
+          <button
+            class="setclose"
+            onClick={props.onClose}
+            data-tip="Close · esc"
+            data-tip-at="end"
+            aria-label="Close"
+          >
             <CloseIcon />
           </button>
         </header>

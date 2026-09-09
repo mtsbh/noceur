@@ -1,4 +1,5 @@
 import type { WaveColour, WaveShape } from "./Waveform";
+import { CUSTOM, DEFAULT_FONT, UI_FONTS, cleanFamily } from "./fonts";
 
 /**
  * Everything the app remembers about how it should look.
@@ -129,6 +130,10 @@ export type Settings = {
    * that is a thing to opt into rather than to discover.
    */
   tracksOnly: boolean;
+  /** Name of the interface face — see `UI_FONTS` in `fonts.ts`. */
+  font: string;
+  /** Family typed by hand, used only while `font` is `custom`. */
+  fontCustom: string;
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -194,6 +199,8 @@ export const DEFAULTS: Settings = {
   quick: DEFAULT_QUICK,
   quickRating: true,
   tracksOnly: false,
+  font: DEFAULT_FONT.name,
+  fontCustom: "",
 };
 
 const KEY = "noceur.settings";
@@ -225,10 +232,20 @@ export function loadSettings(): Settings {
         : DEFAULT_QUICK,
       quickRating: parsed.quickRating !== false,
       tracksOnly: parsed.tracksOnly === true,
+      // A name no build knows about falls back rather than leaving the app in
+      // a face it cannot show in the picker.
+      font: known(parsed.font) ? parsed.font : DEFAULTS.font,
+      fontCustom:
+        typeof parsed.fontCustom === "string" ? cleanFamily(parsed.fontCustom) : "",
     };
   } catch {
     return DEFAULTS;
   }
+}
+
+/** Whether a stored font name is one this build offers. */
+function known(name: unknown): name is string {
+  return name === CUSTOM || UI_FONTS.some((f) => f.name === name);
 }
 
 /** Guards a stored group, since this file is editable by hand. */

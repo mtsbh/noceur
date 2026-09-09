@@ -19,6 +19,11 @@
   --acc-fill: rgba(232, 165, 95, 0.16);
   --acc-line: rgba(232, 165, 95, 0.42);
   --row-h: 26px;
+  /* The interface face, replaced at runtime from settings. Segoe UI Variable
+     Text is Windows 11's own, and is hinted for the 11-12px this is drawn at;
+     on Windows 10 it does not exist and the stack falls through to Segoe UI,
+     which is what it would have used anyway. */
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   /* Verdict colours for the quality report. Green and red rather than the
      accent, because "this file is not what it says" is the one place in this
      interface that wants the conventional reading rather than a house one. */
@@ -31,6 +36,16 @@
   box-sizing: border-box;
 }
 
+/* Form controls do not inherit the page's font on their own — they take the
+   platform's. Family only, not the shorthand: the sizes on these are chosen per
+   control and `font: inherit` would flatten every one of them to 12px. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 html,
 body,
 #root {
@@ -41,7 +56,7 @@ body,
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -1311,6 +1326,17 @@ body.resizing * {
   flex: 1 0 42%;
   border-bottom: 1px solid var(--hair2);
 }
+/* A face this machine does not have. Still selectable — it will simply fall
+   back — but shown as what it is rather than drawn in the fallback under the
+   missing font's name, which would make the picker quietly lie. */
+.segbtn.miss {
+  color: var(--fg4);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg4);
+}
+.segbtn.miss.on {
+  color: var(--acc);
+}
 .sethint b {
   font-weight: 600;
   color: var(--fg2);
@@ -2220,10 +2246,10 @@ body.resizing * {
    does not set off six of them, short enough to answer "what is this one"
    before anyone gives up and clicks it to find out. A disabled button keeps
    its tooltip — that is exactly when the reason matters. */
-.toolbtn[data-tip]::after,
-.setinfo[data-tip]::after,
-.setchip[data-tip]::after,
-.swatch[data-tip]::after {
+[data-tip] {
+  position: relative;
+}
+[data-tip]::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 7px);
@@ -2245,33 +2271,33 @@ body.resizing * {
     opacity 0.08s ease 0.4s,
     visibility 0s linear 0.4s;
 }
-.toolbtn:hover[data-tip]::after,
-.setinfo:hover[data-tip]::after,
-.setchip:hover[data-tip]::after,
-.swatch:hover[data-tip]::after {
+[data-tip]:hover::after {
   opacity: 1;
   visibility: visible;
 }
-/* The last of a row is closest to the window edge, so its tooltip grows
-   leftwards from it rather than centring and running off the screen. */
+/* Placement, for the buttons that sit against an edge of the window. Below and
+   centred is the default and is right for most of them; a button on the bottom
+   bar would put its tooltip off the bottom of the screen, and one in the corner
+   would put it off the side. */
+[data-tip-at~="above"]::after {
+  top: auto;
+  bottom: calc(100% + 7px);
+}
+[data-tip-at~="end"]::after,
 .toolbtn:last-child[data-tip]::after,
 .swatch:last-child[data-tip]::after {
   left: auto;
   right: 0;
   transform: none;
 }
-/* These need the positioning context their tooltip is placed against. */
-.setinfo,
-.setchip,
-.swatch {
-  position: relative;
+[data-tip-at~="start"]::after {
+  left: 0;
+  right: auto;
+  transform: none;
 }
 /* Gone the instant the menu or dialog it opened appears — a tooltip still
    hanging over a dialog it just launched is the browser's habit, not ours. */
-.toolbtn:active[data-tip]::after,
-.setinfo:active[data-tip]::after,
-.setchip:active[data-tip]::after,
-.swatch:active[data-tip]::after {
+[data-tip]:active::after {
   opacity: 0;
   visibility: hidden;
   transition: none;

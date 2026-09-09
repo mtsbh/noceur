@@ -108,7 +108,13 @@ export default function MatchPicker(props: {
       <div class="matches" role="dialog" aria-label="Find metadata">
         <header class="sethead">
           <span class="settitle">Find metadata</span>
-          <button class="setclose" onClick={props.onClose} title="Close (Esc)">
+          <button
+            class="setclose"
+            onClick={props.onClose}
+            data-tip="Close · esc"
+            data-tip-at="end"
+            aria-label="Close"
+          >
             <CloseIcon />
           </button>
         </header>

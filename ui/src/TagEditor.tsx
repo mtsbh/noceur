@@ -197,7 +197,13 @@ export default function TagEditor(props: {
         <header class="sethead">
           <span class="settitle">Edit metadata</span>
           <span class="tagsubject">{form()?.subject ?? ""}</span>
-          <button class="setclose" onClick={props.onClose} title="Close (Esc)">
+          <button
+            class="setclose"
+            onClick={props.onClose}
+            data-tip="Close · esc"
+            data-tip-at="end"
+            aria-label="Close"
+          >
             <CloseIcon />
           </button>
         </header>
@@ -370,7 +376,8 @@ export default function TagEditor(props: {
             class="btn primary"
             disabled={!dirty() || busy()}
             onClick={save}
-            title="Ctrl+Enter"
+            data-tip="ctrl+enter"
+            data-tip-at="above end"
           >
             {busy() ? "Saving…" : "Save"}
           </button>

@@ -67,6 +67,7 @@ import {
 } from "./layout";
 import { BoltIcon, PigIcon, SettingsIcon, SplitColsIcon, SplitRowsIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
+import { stackFor } from "./fonts";
 import {
   clampWidth,
   loadColumns,
@@ -423,6 +424,15 @@ export default function App() {
     setSettings(next);
     saveSettings(next);
   }
+
+  // The chosen face, pushed at the one custom property the whole theme reads.
+  // Set on the root element rather than swapped into the stylesheet so it
+  // survives every rule that inherits from it, and applies the moment it
+  // changes rather than on the next reload.
+  createEffect(() => {
+    const s = settings();
+    document.documentElement.style.setProperty("--ui-font", stackFor(s.font, s.fontCustom));
+  });
 
   function commitColumns(next: Column[]) {
     setColumns(next);
@@ -1089,7 +1099,8 @@ export default function App() {
             {(size) => (
               <button
                 class={`sizebtn ${artSize() === size ? "on" : ""}`}
-                title={`${size[0].toUpperCase()}${size.slice(1)} cover art`}
+                data-tip={`${size[0].toUpperCase()}${size.slice(1)} cover art`}
+                aria-label={`${size} cover art`}
                 onClick={() => chooseArtSize(size)}
               >
                 {size[0].toUpperCase()}
@@ -1100,6 +1111,7 @@ export default function App() {
         <button
           class={`gearbtn ${layout.groups.length > 1 ? "on" : ""}`}
           data-tip={layout.groups.length > 1 ? "Close the split" : "Split the window"}
+          data-tip-at="end"
           aria-label="Split"
           onClick={splitOrJoin}
         >
@@ -1109,6 +1121,7 @@ export default function App() {
           <button
             class="gearbtn"
             data-tip={layout.dir === "row" ? "Stack the panes" : "Side by side"}
+          data-tip-at="end"
             aria-label="Split orientation"
             onClick={flipSplit}
           >
@@ -1118,6 +1131,7 @@ export default function App() {
         <button
           class={`gearbtn ${actionMenu() ? "on" : ""}`}
           data-tip="Your buttons"
+          data-tip-at="end"
           aria-label="Your buttons"
           onClick={(e) => {
             const box = e.currentTarget.getBoundingClientRect();
@@ -1129,6 +1143,7 @@ export default function App() {
         <button
           class={`gearbtn ${spekOpen() ? "on" : ""}`}
           data-tip="Spectrogram of the playing track"
+          data-tip-at="end"
           aria-label="Spectrogram"
           onClick={() => setSpekOpen((open) => !open)}
         >
@@ -1136,7 +1151,9 @@ export default function App() {
         </button>
         <button
           class={`gearbtn ${settingsOpen() ? "on" : ""}`}
-          title="Settings"
+          data-tip="Settings"
+          data-tip-at="end"
+          aria-label="Settings"
           onClick={() => setSettingsOpen((open) => !open)}
         >
           <SettingsIcon />

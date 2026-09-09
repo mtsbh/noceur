@@ -212,6 +212,9 @@ export default function Tabs(props: {
         <span class="tabmark" />
       </Show>
 
+      {/* The only button left on the browser's own tooltip. `.tabs` clips its
+          overflow so that too many tabs shrink rather than spill, and the app's
+          tooltip is taller than the 27px strip — it would be sliced in half. */}
       <button class="tabnew" title="New tab · ctrl+t" aria-label="New tab" onClick={props.onNew}>
         +
       </button>

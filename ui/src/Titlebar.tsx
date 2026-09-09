@@ -58,7 +58,8 @@ export default function Titlebar() {
       <div class="tbbtns">
         <button
           class="tbbtn"
-          title="Minimise"
+          data-tip="Minimise"
+          aria-label="Minimise"
           onClick={() => win().minimize().catch(() => {})}
         >
           <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
@@ -67,7 +68,8 @@ export default function Titlebar() {
         </button>
         <button
           class="tbbtn"
-          title={maximized() ? "Restore" : "Maximise"}
+          data-tip={maximized() ? "Restore" : "Maximise"}
+          aria-label={maximized() ? "Restore" : "Maximise"}
           onClick={() => win().toggleMaximize().catch(() => {})}
         >
           <svg viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true">
@@ -83,7 +85,9 @@ export default function Titlebar() {
         </button>
         <button
           class="tbbtn close"
-          title="Close"
+          data-tip="Close"
+          data-tip-at="end"
+          aria-label="Close"
           onClick={() => win().close().catch(() => {})}
         >
           <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">

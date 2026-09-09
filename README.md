@@ -59,6 +59,10 @@ land on Windows' own undo stack.
 
 ## What it does
 
+**Looking at it.** The interface font is a setting: eight faces that ship with Windows, or the
+exact name of any other one installed, with the ones this machine does not have marked rather
+than silently drawn in the fallback.
+
 **Browsing.** A virtualized listing that does not care how large a folder is. Folder tree,
 pinned folders, breadcrumbs, back and forward. Eighteen columns, reorderable and resizable.
 Optionally hides everything that is not audio, folders excepted, so a release folder is the
