@@ -23,7 +23,18 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "mtsbh",
+    "category": "Music",
+    "shortDescription": "An audio-aware file browser for DJs.",
+    "longDescription": "A file browser that shows BPM, key and duration per row, plays and scrubs, tags, and tells you whether a file is really what it claims to be.",
+    "licenseFile": "../../LICENSE",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -1,4 +1,4 @@
-# Superpowers brainstorming artifacts
+# Brainstorming scratch from an earlier tool. Never part of the project.
 .superpowers/
 
 # Rust
@@ -14,6 +14,9 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 crates/noceur-app/gen/
+
+# Local config, full of one machine's paths
+noceur-config.json
 
 # OS
 Thumbs.db

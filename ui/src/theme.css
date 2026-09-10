@@ -81,7 +81,7 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 1px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--hair);
   flex: none;
@@ -401,6 +401,7 @@ body {
 .sizes {
   display: flex;
   gap: 2px;
+  margin: 0 8px;
 }
 .sizebtn {
   background: none;
@@ -1392,15 +1393,19 @@ body.resizing * {
   accent-color: var(--acc);
 }
 
+/* The view controls — split, functions, spek, settings — are the same button as
+   the track actions to their left. They were 26px wide inside a border, with
+   8px between each, which made four boxed buttons sitting apart from a row of
+   flush ones: the same kind of thing drawn two ways in one bar. Only the
+   separator after the toolbar divides them now. */
 .gearbtn {
-  margin-left: 8px;
-  width: 26px;
+  width: 24px;
   height: 22px;
   padding: 0;
-  border: 1px solid var(--hair2);
+  border: 0;
   border-radius: 4px;
   background: none;
-  color: var(--fg2);
+  color: var(--fg3);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1411,8 +1416,8 @@ body.resizing * {
   color: var(--fg);
 }
 .gearbtn.on {
-  border-color: var(--acc-line);
   color: var(--acc);
+  background: var(--raise);
 }
 
 /* A segmented control with more options than fit one line. */
