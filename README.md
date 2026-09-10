@@ -10,10 +10,10 @@ The filesystem *is* the library — no import step, no database to keep in sync 
 Folders are folders; they just happen to show BPM, key, duration and artist per row,
 and a waveform you can scrub.
 
-[![CI](https://github.com/mtsbh/noceur/actions/workflows/ci.yml/badge.svg)](https://github.com/mtsbh/noceur/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/mtsbh/noceur?include_prereleases&sort=semver)](https://github.com/mtsbh/noceur/releases/latest)
 [![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-blue)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Rust](https://img.shields.io/badge/rust-2021-orange)
+![Frontend](https://img.shields.io/badge/ui-Solid%20%2B%20Tauri%202-informational)
 
 [Getting it](#getting-it) · [What it does](#what-it-does) · [Design](#design) · [Building](#building)
 
@@ -21,7 +21,7 @@ and a waveform you can scrub.
 
 ---
 
-<!-- HERO -->
+<img src="docs/images/main.png" alt="The Noceur window: folder tree, tabs, a listing showing BPM, key, artist and dates, and the player along the bottom.">
 
 ## Why
 
@@ -42,16 +42,15 @@ states. That one fact drives the whole data model.
 Windows 10 or 11, 64-bit. Nothing else to install — the WebView2 runtime ships with Windows.
 
 [**Build it**](#building) — two commands, and the result is a single portable executable.
-Tagged commits also publish an installer and that executable to
-[Releases](https://github.com/mtsbh/noceur/releases).
+There is also an NSIS installer target, and a workflow that attaches both to a GitHub Release
+when a `v*` tag is pushed.
 
 Either way it stays portable: settings, window position and your own buttons live in
 `noceur-config.json` beside the executable, and the index (`noceur-index.db`) is a cache of what
 is on disk that is safe to delete at any time. Nothing is written to the registry or to
 `AppData`.
 
-> **Status: usable, and not finished.** Everything below is built and working. It is one person's
-> tool, shared because it may be somebody else's too.
+> **Status: usable, and not finished.** Everything below is built and working.
 
 ## What it does
 
