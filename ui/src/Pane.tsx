@@ -971,7 +971,7 @@ export default function Pane(props: {
                                     {/* The shell's own folder icon, which is what
                                         makes a folder that has set a custom one
                                         look like itself. */}
-                                    <span class="tico">
+                                    <span class="tileart">
                                       <Show when={r().hasArt}>
                                         <img
                                           src={thumbUrl(r().fileId, "medium")}
@@ -985,7 +985,7 @@ export default function Pane(props: {
                                         />
                                       </Show>
                                     </span>
-                                    <span class="tlabel" title={r().name}>
+                                    <span class="tilename" title={r().name}>
                                       {r().name}
                                     </span>
                                   </div>

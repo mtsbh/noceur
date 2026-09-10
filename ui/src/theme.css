@@ -284,7 +284,7 @@ body {
 .tile.pending {
   cursor: default;
 }
-.tico {
+.tileart {
   flex: none;
   width: 44px;
   height: 44px;
@@ -292,19 +292,23 @@ body {
   align-items: center;
   justify-content: center;
 }
-.tico img {
+.tileart img {
   max-width: 100%;
   max-height: 100%;
   /* Icons are drawn to fit rather than cropped: a folder icon is not square. */
   object-fit: contain;
 }
-.tico img.blank {
+.tileart img.blank {
   visibility: hidden;
 }
-/* Two lines, then an ellipsis. A folder name is the only thing a tile says, so
+/* Named for the tile rather than shortened: `.tlabel` and `.ticon` are the
+   folder tree's, and a tile style landing on those centred every drive name
+   in the sidebar.
+
+   Two lines, then an ellipsis. A folder name is the only thing a tile says, so
    it gets more than the one line a row would give it — but a third line would
    make the tiles different heights, and the virtualizer is told they are not. */
-.tlabel {
+.tilename {
   width: 100%;
   text-align: center;
   line-height: 1.25;
@@ -318,7 +322,7 @@ body {
 .tile:hover {
   background: var(--raise);
 }
-.tile:hover .tlabel {
+.tile:hover .tilename {
   color: var(--fg);
 }
 /* Selection reads as a filled tile rather than as the list's left edge: there
@@ -326,14 +330,14 @@ body {
 .tile.sel {
   background: var(--acc-fill);
 }
-.tile.sel .tlabel {
+.tile.sel .tilename {
   color: var(--acc);
 }
 .tile.anchor {
   outline: 1px solid var(--acc-line);
   outline-offset: -1px;
 }
-.tile.other .tlabel {
+.tile.other .tilename {
   color: var(--fg3);
 }
 
