@@ -155,19 +155,100 @@ fn civil_utc(unix_seconds: i64) -> (i64, i64, i64, i64, i64) {
     (y, m, d, secs / 3_600, (secs % 3_600) / 60)
 }
 
-/// Last-modified time as `YYYY-MM-DD HH:MM`, or [`ABSENT`] where the filesystem
+/// Days since 1970-01-01 for a civil date. The inverse of [`civil_from_days`].
+///
+/// Used to ask two questions a `YYYY-MM-DD` string cannot answer: which weekday
+/// a date fell on, and how many days ago it was.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+const WEEKDAYS: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
+
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/// The weekday a day number falls on.
+///
+/// Day zero is 1970-01-01, which was a Thursday — index 4 counting from Sunday,
+/// which is where the offset comes from.
+fn weekday(days: i64) -> &'static str {
+    WEEKDAYS[(days + 4).rem_euclid(7) as usize]
+}
+
+/// A 24-hour clock as the twelve-hour one with its half of the day.
+fn twelve(h: i64) -> (i64, &'static str) {
+    match h {
+        0 => (12, "AM"),
+        1..=11 => (h, "AM"),
+        12 => (12, "PM"),
+        _ => (h - 12, "PM"),
+    }
+}
+
+/// Last-modified time, in **local** time, or [`ABSENT`] where the filesystem
 /// gave none.
 ///
-/// Shown in **local** time. The stamp exists to be compared against what
-/// Explorer says about the same file, and a column that is silently three hours
-/// off is worse than no column: it looks authoritative and is wrong.
+/// Recent files are named by their weekday — `Tuesday 3:54 AM` — because within
+/// the last week that is how anybody actually thinks about when a file arrived,
+/// and `2026-09-08 03:54` makes you count. Older ones get the date,
+/// `10-Aug-26 1:14 AM`, where the weekday would mean nothing.
+///
+/// The window is the last seven days including today, so the seven weekday
+/// names are all distinct and none of them is ambiguous — an eighth day would
+/// put two Tuesdays in the column with no way to tell them apart.
+///
+/// Sorting is unaffected: the column orders on `f.mtime` in SQL, so this string
+/// is only ever read.
 pub fn modified(unix_seconds: i64) -> String {
+    modified_at(unix_seconds, now_seconds())
+}
+
+/// The clock, as seconds since the epoch. Zero if it is before 1970.
+fn now_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// [`modified`], against a given moment. Split out so it can be tested.
+pub fn modified_at(unix_seconds: i64, now: i64) -> String {
     if unix_seconds <= 0 {
         return ABSENT.to_string();
     }
 
     let (y, m, d, h, mi) = local_civil(unix_seconds);
-    format!("{y:04}-{m:02}-{d:02} {h:02}:{mi:02}")
+    let (hour, half) = twelve(h);
+
+    let (ny, nm, nd, _, _) = local_civil(now);
+    let ago = days_from_civil(ny, nm, nd) - days_from_civil(y, m, d);
+
+    if (0..7).contains(&ago) {
+        let name = weekday(days_from_civil(y, m, d));
+        return format!("{name} {hour}:{mi:02} {half}");
+    }
+
+    let month = MONTHS[(m - 1).clamp(0, 11) as usize];
+    format!(
+        "{d:02}-{month}-{:02} {hour}:{mi:02} {half}",
+        y.rem_euclid(100)
+    )
 }
 
 /// Converts to the machine's local time, honouring daylight saving as it stood
@@ -400,28 +481,82 @@ mod tests {
         assert_eq!(civil_utc(-2_208_988_800), (1900, 1, 1, 0, 0));
     }
 
+    /// The day number and the civil date are inverses of each other. Everything
+    /// the friendly stamp says about "which weekday" and "how long ago" rests
+    /// on this, and a leap-year slip here would shift a whole column by a day.
     #[test]
-    fn modified_renders_a_sortable_stamp() {
-        let stamp = modified(1_700_000_000);
-        assert_eq!(stamp.len(), 16, "expected YYYY-MM-DD HH:MM, got {stamp}");
-        assert_eq!(&stamp[4..5], "-");
-        assert_eq!(&stamp[10..11], " ");
-        assert_eq!(&stamp[13..14], ":");
+    fn day_numbers_round_trip_through_civil_dates() {
+        for days in [-25_000, -1, 0, 1, 18_500, 20_000, 25_000] {
+            let (y, m, d, _, _) = civil_utc(days * 86_400);
+            assert_eq!(days_from_civil(y, m, d), days, "{y}-{m}-{d}");
+        }
     }
 
-    /// Whatever the machine's zone, local time is within a day of UTC — enough
-    /// to catch a conversion that lands in the wrong year or fails silently.
+    /// 1970-01-01 was a Thursday. If that anchor is wrong every weekday is,
+    /// and dates before the epoch are where a plain `%` would go negative.
     #[test]
-    fn modified_stays_near_the_utc_instant() {
-        let (y, m, _, _, _) = civil_utc(1_700_000_000);
-        let stamp = modified(1_700_000_000);
-        let year: i64 = stamp[..4].parse().unwrap();
-        let month: i64 = stamp[5..7].parse().unwrap();
-        assert_eq!(year, y);
+    fn the_epoch_was_a_thursday() {
+        assert_eq!(weekday(0), "Thursday");
+        assert_eq!(weekday(1), "Friday");
+        assert_eq!(weekday(7), "Thursday");
+        assert_eq!(weekday(-1), "Wednesday");
+        assert_eq!(weekday(-7), "Thursday");
+    }
+
+    /// Anything within the last seven days is named by its weekday, and
+    /// anything older gets a date — the whole point of the column.
+    #[test]
+    fn recent_files_are_named_by_their_weekday() {
+        // A fixed local noon, so no zone can push these over a day boundary.
+        let now = 1_757_505_600; // 2025-09-10, around midday UTC
+        let day = 86_400;
+
         assert!(
-            (month - m).abs() <= 1,
-            "local month {month} is nowhere near UTC month {m}"
+            WEEKDAYS.contains(&modified_at(now, now).split(' ').next().unwrap()),
+            "today should be a weekday name, got {}",
+            modified_at(now, now)
         );
+        let week_ago = modified_at(now - 6 * day, now);
+        assert!(
+            WEEKDAYS.contains(&week_ago.split(' ').next().unwrap()),
+            "six days back is still a weekday, got {week_ago}"
+        );
+        let older = modified_at(now - 40 * day, now);
+        assert!(
+            !WEEKDAYS.contains(&older.split(' ').next().unwrap()),
+            "forty days back should be a date, got {older}"
+        );
+        assert!(older.contains('-'), "expected a dated stamp, got {older}");
+    }
+
+    /// Seven weekday names and no eighth, or two Tuesdays would sit in the
+    /// column with nothing to tell them apart.
+    #[test]
+    fn the_weekday_window_stops_before_it_repeats() {
+        let now = 1_757_505_600;
+        let day = 86_400;
+        let mut seen = std::collections::HashSet::new();
+        for back in 0..7 {
+            let stamp = modified_at(now - back * day, now);
+            let name = stamp.split(' ').next().unwrap().to_string();
+            assert!(WEEKDAYS.contains(&name.as_str()), "{stamp}");
+            assert!(seen.insert(name), "a weekday repeated within the window");
+        }
+        let eighth = modified_at(now - 7 * day, now);
+        assert!(
+            !WEEKDAYS.contains(&eighth.split(' ').next().unwrap()),
+            "the eighth day back must not be a weekday, got {eighth}"
+        );
+    }
+
+    /// Noon and midnight are where a twelve-hour clock goes wrong.
+    #[test]
+    fn the_twelve_hour_clock_handles_both_ends() {
+        assert_eq!(twelve(0), (12, "AM"));
+        assert_eq!(twelve(11), (11, "AM"));
+        assert_eq!(twelve(12), (12, "PM"));
+        assert_eq!(twelve(13), (1, "PM"));
+        assert_eq!(twelve(23), (11, "PM"));
     }
 
     #[test]

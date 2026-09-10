@@ -664,6 +664,16 @@ export type Action = {
   target: string;
   /** The title-formatting expression, run once per file. */
   script: string;
+  /**
+   * Which recipe built the expression, or `custom` for one written by hand.
+   *
+   * Stored so reopening the editor shows the recipe rather than only its
+   * output — an expression cannot be read backwards into the choice that made
+   * it, and asking the user to pick again every time would defeat the point.
+   */
+  recipe: string;
+  /** The recipe's own inputs, in the order it asks for them. */
+  slots: string[];
 };
 
 /** What an action would do to one file. */

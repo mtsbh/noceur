@@ -13,6 +13,8 @@ import {
 } from "./api";
 import type { Column } from "./columns";
 import { CUSTOM, UI_FONTS, cleanFamily, head, installed } from "./fonts";
+import { recipesFor } from "./recipes";
+import ActionEditor from "./ActionEditor";
 import {
   NEW_QUICK_GROUP,
   QUICK_KEYS,
@@ -31,37 +33,15 @@ export type ArtSize = "small" | "medium" | "large";
  * An empty `target` means the kind has nothing to point at — a rename and a
  * search are entirely their expression — and the box is not shown for it.
  */
-const KINDS: {
-  kind: ActionKind;
-  label: string;
-  target: string;
-  script: string;
-}[] = [
-  { kind: "tag", label: "Set tag", target: "field", script: "$caps2(%artist%)" },
-  { kind: "rename", label: "Rename", target: "", script: "%artist% - %title%" },
-  { kind: "open", label: "Open with", target: "program", script: "\"%_path%\"" },
-  {
-    kind: "url",
-    label: "Search",
-    target: "",
-    script: "https://www.google.com/search?q=%artist%+%title%",
-  },
-  {
-    kind: "copy",
-    label: "Copy to",
-    target: "folder",
-    script: String.raw`optional: %artist% - %album%\%filename%`,
-  },
-  {
-    kind: "move",
-    label: "Move to",
-    target: "folder",
-    script: String.raw`optional: %artist% - %album%\%filename%`,
-  },
-];
-
-const kindOf = (kind: ActionKind) =>
-  KINDS.find((k) => k.kind === kind) ?? KINDS[0];
+/** What each kind is called in the list. The editor owns everything else. */
+const KIND_LABELS: Record<ActionKind, string> = {
+  tag: "Sets a tag",
+  rename: "Renames",
+  open: "Opens in a program",
+  url: "Looks it up",
+  copy: "Copies",
+  move: "Moves",
+};
 
 /**
  * Width of the colour palette, in pixels.
@@ -145,6 +125,9 @@ export default function Settings(props: {
 
   const patch = (next: Partial<S>) => props.onSettings({ ...props.settings, ...next });
 
+  /** Which button is open in the editor, by position. */
+  const [editingAction, setEditingAction] = createSignal<number | null>(null);
+
   /**
    * The offered faces this machine does not have.
    *
@@ -193,9 +176,6 @@ export default function Settings(props: {
       .then(() => setActionError(""))
       .catch((e) => setActionError(String(e)));
   }
-
-  const editAction = (at: number, change: Partial<Action>) =>
-    saveActions(buttons().map((a, i) => (i === at ? { ...a, ...change } : a)));
 
   const [keepDates, setKeepDates] = createSignal(true);
 
@@ -513,101 +493,38 @@ export default function Settings(props: {
               <>
                 <p>
                   Your own actions, run on the selection from the lightning
-                  button in the path bar. Each one is a kind, something to point
-                  it at, and an expression evaluated once per file.
+                  button in the path bar. Click one to edit it: pick what it
+                  does and how, and the expression is written for you.
                 </p>
                 <p>
-                  The expressions are foobar2000's, so anything you already have
-                  for foobar, Mp3tag or OneTagger works as written:{" "}
-                  <code>$caps2(%artist%)</code>, <code>$left(%date%,4)</code>,{" "}
-                  <code>$trim(%title%)</code>. Fields are the tags plus{" "}
-                  <code>%_path%</code>, <code>%filename%</code>,{" "}
-                  <code>%filename_ext%</code>, <code>%directoryname%</code> and{" "}
-                  <code>%ext%</code>.
-                </p>
-                <p>
-                  <code>$replace</code> is literal and takes pairs, exactly as in
-                  foobar2000. It does not take a regular expression, and one
-                  written as a pattern matches nothing.
-                </p>
-                <p>
-                  Anything that changes a file lists every result before it runs.
-                  Opening a program passes your expression as its arguments and
-                  never through a shell, so a track named after a command is an
-                  argument and nothing else.
+                  Anything that changes a file lists every result before it
+                  runs. Opening a program passes your expression as its
+                  arguments and never through a shell, so a track named after a
+                  command is an argument and nothing else.
                 </p>
               </>
             }
           >
+            {/* A line each. The builder is a dialog rather than a block per
+                button: inline, four boxes times eight buttons turned this panel
+                into a wall you had to scroll past to reach anything else. */}
             <For each={buttons()}>
               {(a, at) => (
-                <div class="setquick">
-                  <div class="setrow">
-                    <input
-                      type="text"
-                      class="setquickname"
-                      value={a.label}
-                      placeholder="Name"
-                      spellcheck={false}
-                      onChange={(e) =>
-                        editAction(at(), { label: e.currentTarget.value })
-                      }
-                    />
-                    <select
-                      class="setselect"
-                      value={a.kind}
-                      onChange={(e) =>
-                        editAction(at(), {
-                          kind: e.currentTarget.value as ActionKind,
-                        })
-                      }
-                    >
-                      <For each={KINDS}>
-                        {(k) => <option value={k.kind}>{k.label}</option>}
-                      </For>
-                    </select>
-                    <button
-                      class="setremove"
-                      data-tip="Remove"
-                      data-tip-at="end"
-                      onClick={() =>
-                        saveActions(buttons().filter((_, i) => i !== at()))
-                      }
-                    >
-                      remove
-                    </button>
-                  </div>
-
-                  <Show when={kindOf(a.kind).target}>
-                    <div class="setrow">
-                      <input
-                        type="text"
-                        class="mono"
-                        value={a.target}
-                        placeholder={kindOf(a.kind).target}
-                        spellcheck={false}
-                        onChange={(e) =>
-                          editAction(at(), { target: e.currentTarget.value })
-                        }
-                      />
-                    </div>
-                  </Show>
-
-                  {/* Copy and move take an optional pattern: leave it empty and
-                      everything lands in the folder under the name it has; write
-                      one and each file is filed apart, folders and all. */}
-                  <div class="setrow">
-                    <input
-                      type="text"
-                      class="mono"
-                      value={a.script}
-                      placeholder={kindOf(a.kind).script}
-                      spellcheck={false}
-                      onChange={(e) =>
-                        editAction(at(), { script: e.currentTarget.value })
-                      }
-                    />
-                  </div>
+                <div class="actrow" onClick={() => setEditingAction(at())}>
+                  <span class="actname">{a.label || "Unnamed"}</span>
+                  <span class="actkind">{KIND_LABELS[a.kind]}</span>
+                  <button
+                    class="setremove"
+                    data-tip="Remove"
+                    data-tip-at="end"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingAction(null);
+                      saveActions(buttons().filter((_, i) => i !== at()));
+                    }}
+                  >
+                    remove
+                  </button>
                 </div>
               )}
             </For>
@@ -618,7 +535,8 @@ export default function Settings(props: {
 
             <button
               class="btn"
-              onClick={() =>
+              onClick={() => {
+                const first = recipesFor("tag")[0];
                 saveActions([
                   ...buttons(),
                   {
@@ -626,10 +544,15 @@ export default function Settings(props: {
                     label: "New button",
                     kind: "tag",
                     target: "title",
-                    script: "%title%",
+                    script: first.build("title", []),
+                    recipe: first.id,
+                    slots: [],
                   },
-                ])
-              }
+                ]);
+                // Opens straight into the editor: a button named "New button"
+                // that does nothing yet is not a thing anybody wanted to make.
+                setEditingAction(buttons().length);
+              }}
             >
               New button
             </button>
@@ -882,6 +805,16 @@ export default function Settings(props: {
           </Section>
         </div>
       </div>
+
+      <Show when={editingAction() !== null && buttons()[editingAction()!]}>
+        <ActionEditor
+          action={buttons()[editingAction()!]}
+          onChange={(next) =>
+            saveActions(buttons().map((a, i) => (i === editingAction() ? next : a)))
+          }
+          onClose={() => setEditingAction(null)}
+        />
+      </Show>
     </>
   );
 }

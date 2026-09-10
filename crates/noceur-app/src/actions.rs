@@ -67,6 +67,17 @@ pub struct Action {
     /// The expression, evaluated once per file.
     #[serde(default)]
     pub script: String,
+    /// Which recipe in the frontend built `script`, or `custom`.
+    ///
+    /// Never read here — the backend runs the expression and nothing else. It
+    /// is carried so the editor can show the recipe again rather than only its
+    /// output, and defaulted so a config written before recipes existed still
+    /// loads.
+    #[serde(default)]
+    pub recipe: String,
+    /// The recipe's inputs, kept for the same reason.
+    #[serde(default)]
+    pub slots: Vec<String>,
 }
 
 impl Action {
@@ -604,6 +615,8 @@ mod tests {
             kind,
             target: target.into(),
             script: script.into(),
+            recipe: String::new(),
+            slots: Vec::new(),
         }
     }
 
