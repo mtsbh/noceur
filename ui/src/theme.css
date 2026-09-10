@@ -1076,6 +1076,15 @@ body.resizing * {
 .pane.dropping {
   box-shadow: inset 0 0 0 2px var(--acc-line);
 }
+/* A folder in the tree, under a file drag. Marked the way a tab is rather than
+   the way a pane is: it is one row among many, so it needs to say which row. */
+.tnode.dropping {
+  background: var(--acc-fill);
+  box-shadow: inset 0 0 0 1px var(--acc-line);
+}
+.tnode.dropping .tlabel {
+  color: var(--fg);
+}
 
 /* Cover of what is playing. */
 .tart {

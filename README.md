@@ -70,7 +70,8 @@ tracks in it rather than the cover scans and `.nfo`s that came with them.
 Full-text search across the indexed library. Tabs, and a split into two panes — side by side or
 stacked — each with its own tabs, sort and history, so the folder you are filing tracks *into* is
 on screen beside the one you are filing them *out of*. Drag files in from Explorer, out to
-anything, and between panes or onto any open tab; copy, move and delete through the shell.
+anything, and between panes, onto any open tab, or onto a folder in the tree — which springs
+open if you rest on it; copy, move and delete through the shell.
 
 **Filing.** Drag a selection onto the other pane, or onto a tab that is open but not in front of
 you, and it lands in that folder — copied or moved by the same rule Explorer uses, through the

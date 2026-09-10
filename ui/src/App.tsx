@@ -1177,7 +1177,11 @@ export default function App() {
       </div>
 
       <div class="body">
-        <Tree current={focusPath()} onNavigate={(path) => navigateFocused(path)} />
+        <Tree
+          current={focusPath()}
+          onNavigate={(path) => navigateFocused(path)}
+          dropKey={dropOver()?.key ?? null}
+        />
         <div
           class="vsplit"
           onPointerDown={startTreeDrag}

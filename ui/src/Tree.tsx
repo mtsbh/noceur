@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createEffect, on, For, Show } from "solid-js";
+import { createSignal, createMemo, createEffect, on, onCleanup, For, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { folderIconUrl, roots, subdirs, type Segment } from "./api";
@@ -47,6 +47,13 @@ type Line =
 export default function Tree(props: {
   current: string;
   onNavigate: (path: string) => void;
+  /**
+   * Key of the drop target a file drag is over, so the folder under the pointer
+   * lights up. Hit-tested in `App` against the `data-drop` below, exactly as the
+   * panes and tabs are: dropping onto a folder here is the same gesture as
+   * dropping onto the other pane, and goes through the same shell operation.
+   */
+  dropKey: string | null;
 }) {
   const [rootList, setRootList] = createSignal<Segment[]>([]);
   const [pins, setPins] = createSignal<string[]>(storedPins());
@@ -95,6 +102,26 @@ export default function Tree(props: {
     setOpen(path, next);
     if (next) load(path);
   }
+
+  /**
+   * Explorer's spring-loaded folders: resting a file drag on a closed branch
+   * opens it, so a track can be filed somewhere that was not on screen when the
+   * drag began.
+   *
+   * Only ever opens. Closing a branch under the pointer would move the row being
+   * aimed at out from under it mid-drag, which is the one thing a drop target
+   * must never do. The delay is what separates resting on a folder from passing
+   * over it on the way to another one.
+   */
+  createEffect(() => {
+    const key = props.dropKey;
+    if (!key?.startsWith("tree:")) return;
+    const path = key.slice("tree:".length);
+    if (open[path]) return;
+
+    const timer = window.setTimeout(() => toggle(path), 600);
+    onCleanup(() => window.clearTimeout(timer));
+  });
 
   /**
    * Opens every ancestor of the current path so the list and the tree agree.
@@ -225,10 +252,14 @@ export default function Tree(props: {
                       </div>
                     ) : (
                       <div
-                        class={`tnode ${isCurrent(l.path) ? "on" : ""}`}
+                        class={`tnode ${isCurrent(l.path) ? "on" : ""} ${
+                          props.dropKey === `tree:${l.path}` ? "dropping" : ""
+                        }`}
                         style={{ "padding-left": `${8 + l.depth * 13}px` }}
                         onClick={() => props.onNavigate(l.path)}
                         title={l.path}
+                        data-drop={`tree:${l.path}`}
+                        data-path={l.path}
                       >
                         <span
                           class={`twisty ${open[l.path] ? "open" : ""} ${
