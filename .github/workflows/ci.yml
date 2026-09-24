@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    # Windows is the tested target: the shell integration, the drag payload and
+    # the folder icons are all Win32, and half the suite would be skipped
+    # anywhere else.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The toolchain is pinned by rust-toolchain.toml, so nothing is chosen here.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+
+      # Before the Rust build: the frontend is embedded in the binary, so a
+      # release build with no `ui/dist` is a binary that points at a dev server.
+      - name: Build the frontend
+        run: npm --prefix ui run build
+
+      - name: Typecheck the frontend
+        run: npx --prefix ui tsc --noEmit -p ui/tsconfig.json
+
+      - name: Test the frontend
+        run: npm --prefix ui test
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The ignored tests need a real music library or the network, and are run
+      # by hand — see the README.
+      - name: Tests
+        run: cargo test --workspace

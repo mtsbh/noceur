@@ -1,0 +1,73 @@
+name: Release
+
+# Tag a commit and the installer builds itself:
+#
+#     git tag v0.1.0 && git push origin v0.1.0
+#
+# The binary is deliberately not committed to the repository — it is 19 MB per
+# build and git keeps every one of them forever. It is attached to a GitHub
+# Release instead, which is where people look for it anyway.
+on:
+  push:
+    tags: ["v*"]
+  # So a release can be rebuilt without moving a tag.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+
+      # `tauri build` deliberately does not run this itself: `beforeBuildCommand`
+      # resolves its relative paths against an unpredictable working directory,
+      # so it is absent from tauri.conf.json and the frontend is built here.
+      - name: Build the frontend
+        run: npm --prefix ui run build
+
+      # Sets `custom-protocol` itself, which is what embeds the frontend in the
+      # binary rather than pointing it at a dev server.
+      - name: Build the installer
+        run: npx --yes @tauri-apps/cli@^2 build --config crates/noceur-app/tauri.conf.json
+
+      # Proof the frontend is really inside the binary. Without it the build
+      # succeeds and ships a window reading "can't reach this page" — the one
+      # failure this project has actually shipped, so it is checked every time.
+      - name: Verify the frontend is embedded
+        shell: bash
+        run: |
+          asset=$(basename "$(ls ui/dist/assets/*.js | head -1)")
+          if ! grep -qc "$asset" target/release/noceur-app.exe; then
+            echo "::error::$asset is not in the binary — this is a dev build"
+            exit 1
+          fi
+          echo "embedded: $asset"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/noceur-app.exe
