@@ -1,8 +1,21 @@
 # Noceur — Sub-project 1: Browser Core
 
 **Date:** 2026-08-05
-**Status:** Design approved, ready for planning
+**Status:** Implemented. Kept as the original spec; the README describes the app as built.
 **Scope:** Sub-project 1 of 3
+
+> [!NOTE]
+> **Where this spec and the app differ.** This was written before the build, and two things
+> changed afterwards:
+>
+> - **Sub-project 2 shrank.** BPM and key detection were dropped (Mixed In Key already does it
+>   better); only the spectrogram and a quality check were built. Values read from tags are the
+>   only BPM and key the app shows, so the "Analysed" state in §9.3 never occurs.
+> - **Sub-project 3 was folded in.** Tag writing, Quick Tag, custom fields, artwork and online
+>   metadata fetching (MusicBrainz, Discogs, Deezer, iTunes) all live in the same app, so the
+>   non-goals listed in §2 are no longer non-goals.
+>
+> The decisions and reasoning below still hold; the sub-project boundaries do not.
 
 ---
 

@@ -50,7 +50,8 @@ Either way it stays portable: settings, window position and your own buttons liv
 is on disk that is safe to delete at any time. Nothing is written to the registry or to
 `AppData`.
 
-> **Status: usable, and not finished.** Everything below is built and working.
+> **Status: complete for its planned scope.** Everything below is built and working; see
+> [Not planned](#not-planned) for what is deliberately left out.
 
 ## What it does
 
