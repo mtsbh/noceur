@@ -1599,6 +1599,7 @@ export default function App() {
           sampleRate={transport()?.sampleRate ?? 0}
           durationMs={transport()?.durationMs ?? 0}
           name={transport()?.path ?? ""}
+          onSeek={(ms) => transportCmd("seek", ms).then(setTransport).catch(() => {})}
         />
       </Show>
 
