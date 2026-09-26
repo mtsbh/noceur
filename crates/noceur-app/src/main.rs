@@ -18,6 +18,7 @@ mod dto;
 mod fileops;
 mod format;
 mod identity;
+mod newfolder;
 mod placement;
 mod quality;
 mod renamer;
@@ -124,6 +125,7 @@ fn main() {
             convert::set_ffmpeg_path,
             convert::convert_plan,
             convert::convert_file,
+            newfolder::create_folder,
             commands::reveal,
             commands::path_of,
             commands::start_drag,

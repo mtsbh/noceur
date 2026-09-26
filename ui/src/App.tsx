@@ -48,6 +48,7 @@ import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
 import Converter from "./Converter";
+import NewFolder from "./NewFolder";
 import Titlebar from "./Titlebar";
 import Pane, { type PaneHandle } from "./Pane";
 import Tabs, { type TabDrop } from "./Tabs";
@@ -75,6 +76,7 @@ import {
   CopiesIcon,
   GlobeIcon,
   ImageIcon,
+  NewFolderIcon,
   OpenIcon,
   PigIcon,
   PlayIcon,
@@ -387,6 +389,21 @@ export default function App() {
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
+  /** The folder a new folder is being named in, or null. */
+  const [newFolderIn, setNewFolderIn] = createSignal<string | null>(null);
+  /** Tells the tree to re-read a branch something was just made in. */
+  const [treeReload, setTreeReload] = createSignal<{ path: string; n: number } | null>(null);
+  /** The menu for a folder itself, from the empty space in a listing. */
+  const [folderMenu, setFolderMenu] = createSignal<{ x: number; y: number; path: string } | null>(
+    null,
+  );
+
+  /** A folder was made: show it in the listing and in the tree. */
+  function folderCreated(parent: string) {
+    refetchAll();
+    setTreeReload((r) => ({ path: parent, n: (r?.n ?? 0) + 1 }));
+  }
+
   /** Files the converter is open on, or null when it is closed. */
   const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
@@ -899,6 +916,13 @@ export default function App() {
       },
       {
         kind: "item",
+        label: "New folder…",
+        hint: "ctrl+shift+n",
+        icon: NewFolderIcon,
+        run: () => setNewFolderIn(focusPath()),
+      },
+      {
+        kind: "item",
         label: "Reveal in Explorer",
         icon: OpenIcon,
         run: () => {
@@ -1088,6 +1112,12 @@ export default function App() {
         else handle?.forward();
         return;
       }
+      // Ctrl+Shift+N makes a folder where you are, as it does in Explorer.
+      if (mod && e.shiftKey && e.key.toLowerCase() === "n" && !isTyping(e)) {
+        e.preventDefault();
+        setNewFolderIn(focusPath());
+        return;
+      }
       // Bare Tab moves between panes, per the spec. Safe to take: nothing in
       // the browsing surface is reached by tabbing to it, and while the user is
       // in a text field the guard below has already returned.
@@ -1269,6 +1299,9 @@ export default function App() {
           current={focusPath()}
           onNavigate={(path) => navigateFocused(path)}
           dropKey={dropOver()?.key ?? null}
+          onNewFolder={setNewFolderIn}
+          onOpenTab={(path) => openTab(focusGroup().id, path)}
+          reload={treeReload()}
         />
         <div
           class="vsplit"
@@ -1356,6 +1389,9 @@ export default function App() {
                         columnDragging={dragging()}
                         columnOver={dragOver()}
                         onMenu={openMenu}
+                        onFolderMenu={(e, path) =>
+                          setFolderMenu({ x: e.clientX, y: e.clientY, path })
+                        }
                         onArt={(fileId) => setEditing([fileId])}
                         onPlay={playRow}
                         dropKey={dropOver()?.key ?? null}
@@ -1415,6 +1451,35 @@ export default function App() {
             fileIds={target().fileIds}
             onClose={() => setRunning(null)}
             onDone={refetchAll}
+          />
+        )}
+      </Show>
+
+      <Show when={folderMenu()}>
+        {(m) => (
+          <Menu
+            x={m().x}
+            y={m().y}
+            onClose={() => setFolderMenu(null)}
+            items={[
+              {
+                kind: "item",
+                label: "New folder…",
+                hint: "ctrl+shift+n",
+                icon: NewFolderIcon,
+                run: () => setNewFolderIn(m().path),
+              },
+            ]}
+          />
+        )}
+      </Show>
+
+      <Show when={newFolderIn()}>
+        {(parent) => (
+          <NewFolder
+            parent={parent()}
+            onClose={() => setNewFolderIn(null)}
+            onCreated={() => folderCreated(parent())}
           />
         )}
       </Show>

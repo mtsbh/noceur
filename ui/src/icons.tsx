@@ -476,3 +476,12 @@ export function TabIcon() {
     </Icon>
   );
 }
+
+export function NewFolderIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 4.4a1 1 0 0 1 1-1h2.9l1.3 1.4h4.9a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1Z" />
+      <path d="M8 7.4v3.6M6.2 9.2h3.6" />
+    </Icon>
+  );
+}

@@ -861,3 +861,11 @@ export function convertPlan(fileIds: number[], options: ConvertOptions): Promise
 export function convertFile(fileId: number, options: ConvertOptions): Promise<Converted> {
   return invoke<Converted>("convert_file", { fileId, options });
 }
+
+/**
+ * Makes a folder in `parent` and returns its path. An empty name makes
+ * "New folder", numbered past any that exist.
+ */
+export function createFolder(parent: string, name: string): Promise<string> {
+  return invoke<string>("create_folder", { parent, name });
+}

@@ -132,6 +132,8 @@ export default function Pane(props: {
 
   /** Opens the row menu. The selection travels with it, so the menu acts on what was selected. */
   onMenu: (e: MouseEvent, row: RowDisplay, ids: number[]) => void;
+  /** Opens the menu for the folder itself, from a right-click between rows. */
+  onFolderMenu: (e: MouseEvent, path: string) => void;
   /** Opens the tag editor on one row, from a click on its cover art. */
   onArt: (fileId: number) => void;
   /** Loads a row into the player. */
@@ -839,6 +841,12 @@ export default function Pane(props: {
       <div
         class="list"
         ref={(el) => (scrollEl = el)}
+        // Rows stop their own right-click, so one that arrives here was on the
+        // empty space around them - which is the folder itself, as in Explorer.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          props.onFolderMenu(e, current());
+        }}
         onScroll={() => {
           if (headEl && scrollEl) headEl.scrollLeft = scrollEl.scrollLeft;
         }}
