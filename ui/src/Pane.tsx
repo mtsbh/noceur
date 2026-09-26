@@ -18,6 +18,7 @@ import {
   thumbUrl,
   probeBatch,
   startDrag,
+  writeTags,
   type ArtSize,
   type Order,
   type SortColumn,
@@ -28,6 +29,7 @@ import {
 } from "./api";
 import { currentPath, rememberOrder, type Tab } from "./layout";
 import { cellText, gridTemplate, keyColour, type Column } from "./columns";
+import Stars from "./Stars";
 
 /**
  * Rows per window.
@@ -272,6 +274,46 @@ export default function Pane(props: {
   /** The row at a listing-wide index, or `undefined` while its window is in flight. */
   function rowAt(index: number): RowDisplay | undefined {
     return pages[Math.floor(index / PAGE)]?.[index % PAGE];
+  }
+
+  /**
+   * Sets the stars of a row - or of the whole selection, when the row is part
+   * of it, which is how rating a batch works everywhere else in the list.
+   *
+   * Shown at once and written behind, because a click on a star that took a
+   * round trip to light up would feel broken. A write that fails puts the old
+   * values back. Pressing the stars a track already has clears them.
+   */
+  function rate(row: RowDisplay, stars: number) {
+    const ids = selection().has(row.fileId)
+      ? audioSelection()
+      : row.kind === 1
+        ? [row.fileId]
+        : [];
+    if (ids.length === 0) return;
+    const next = stars === row.rating ? 0 : stars;
+
+    const before = new Map<number, number>();
+    for (const [page, rows] of Object.entries(pages)) {
+      rows.forEach((r, i) => {
+        if (ids.includes(r.fileId)) {
+          before.set(r.fileId, r.rating);
+          setPages(Number(page), i, "rating", next);
+        }
+      });
+    }
+    writeTags(ids, {}, {}, String(next))
+      .then((report) => {
+        if (report.failures.length > 0) throw new Error(report.failures[0].reason);
+      })
+      .catch(() => {
+        for (const [page, rows] of Object.entries(pages)) {
+          rows.forEach((r, i) => {
+            const old = before.get(r.fileId);
+            if (old !== undefined) setPages(Number(page), i, "rating", old);
+          });
+        }
+      });
   }
 
   /** Position of a row in the listing, or -1 if its window is not loaded. */
@@ -927,7 +969,9 @@ export default function Pane(props: {
                                   </span>
                                   <For each={shown()}>
                                     {(col) =>
-                                      col.key === "name" ? (
+                                      col.key === "rating" ? (
+                                        <Stars row={r()} onRate={(n) => rate(r(), n)} />
+                                      ) : col.key === "name" ? (
                                         <span class="name" title={r().name}>
                                           {r().name}
                                           <Show when={r().state}>

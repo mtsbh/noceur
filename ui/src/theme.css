@@ -3266,3 +3266,39 @@ body.resizing-v * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Star ratings in the list ──────────────────────────────────────────────
+   Unrated stars are barely there until the row is hovered, so a folder of
+   unrated tracks is not a column of grey stars. */
+.stars {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: 1px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.star {
+  color: rgba(var(--fg-rgb), 0.07);
+  padding: 0 1px;
+  transition: color 80ms;
+}
+.row:hover .star,
+.row.sel .star {
+  color: var(--fg4);
+}
+.star.on,
+.row:hover .star.on,
+.row.sel .star.on {
+  color: var(--acc);
+}
+/* The preview under the pointer outranks what is set - the doubled class is
+   what lets it beat `.row:hover .star.on`. */
+.stars.stars:hover .star {
+  color: var(--fg4);
+}
+.stars.stars:hover .star:hover,
+.stars.stars:hover .star:hover ~ .star {
+  color: var(--acc);
+}

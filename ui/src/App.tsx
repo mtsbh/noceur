@@ -20,6 +20,7 @@ import {
   dropEffect,
   shellMenu,
   spectrogram,
+  writeTags,
   type TagField,
   actions,
   runAction as runUserAction,
@@ -1110,6 +1111,18 @@ export default function App() {
         const handle = focusHandle();
         if (e.key === "ArrowLeft") handle?.back();
         else handle?.forward();
+        return;
+      }
+      // Alt+1..5 rates the selected tracks, Alt+0 clears. Alt rather than
+      // Ctrl, which already jumps between tabs by number.
+      if (e.altKey && !mod && /^[0-5]$/.test(e.key) && !isTyping(e)) {
+        const ids = audioSelection();
+        if (ids.length > 0) {
+          e.preventDefault();
+          writeTags(ids, {}, {}, e.key)
+            .then(refetchAll)
+            .catch(() => {});
+        }
         return;
       }
       // Ctrl+Shift+N makes a folder where you are, as it does in Explorer.

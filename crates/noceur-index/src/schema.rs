@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 8;
+pub const SCHEMA_VERSION: i32 = 9;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -216,4 +216,14 @@ const V8: &str = r#"
 UPDATE content_tag
 SET read_at = 0
 WHERE content_id IN (SELECT id FROM content WHERE codec IS NULL);
+"#;
+
+/// Star ratings, so the list can show and sort by them.
+///
+/// Every tag row is marked stale, because a rating was never read before and
+/// nothing about the files has changed to make the scanner look again. The
+/// cost is one tag read per file, spread over folders as they are opened.
+const V9: &str = r#"
+ALTER TABLE content_tag ADD COLUMN rating INTEGER;
+UPDATE content_tag SET read_at = 0;
 "#;

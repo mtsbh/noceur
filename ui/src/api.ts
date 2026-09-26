@@ -24,6 +24,8 @@ export type RowDisplay = {
   /** `16 bit`, or empty for formats with no bit depth. */
   bitDepth: string;
   codec: string;
+  /** Stars, 0 for unrated. */
+  rating: number;
   size: string;
   /** `YYYY-MM-DD HH:MM` in UTC — when the file changed, not when it was released. */
   modified: string;
@@ -111,6 +113,7 @@ export type SortColumn =
   | "sampleRate"
   | "bitDepth"
   | "codec"
+  | "rating"
   | "size"
   | "modified";
 

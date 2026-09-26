@@ -45,6 +45,7 @@ export const DEFAULT_COLUMNS: Column[] = [
   { key: "sampleRate", label: "Rate", width: 74, num: true, visible: false },
   { key: "bitDepth", label: "Depth", width: 62, num: true, visible: false },
   { key: "codec", label: "Codec", width: 78, dim: true, visible: false },
+  { key: "rating", label: "Rating", width: 80, visible: true },
   { key: "size", label: "Size", width: 88, num: true, visible: true },
   { key: "modified", label: "Date", width: 120, num: true, visible: false },
 ];
@@ -154,6 +155,8 @@ export function cellText(row: RowDisplay, key: SortColumn): string {
       return row.bitDepth;
     case "codec":
       return row.codec;
+    case "rating":
+      return row.rating ? `${row.rating} of 5 stars` : row.kind === 1 ? "Unrated" : "";
     case "size":
       return row.size;
     case "modified":

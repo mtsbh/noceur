@@ -56,6 +56,9 @@ pub struct RowDisplay {
     /// `16 bit`, or empty for formats that do not have one.
     pub bit_depth: String,
     pub codec: String,
+    /// Stars, 0 for unrated. A number rather than text: the column draws stars
+    /// and sets them by click.
+    pub rating: u8,
     /// Empty when the file is fine; otherwise the reason it is not.
     pub state: String,
     /// Whether this row has an image worth requesting — embedded cover art for
@@ -386,6 +389,11 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         } else {
             blank.clone()
         },
+        rating: if is_audio {
+            row.rating.unwrap_or(0).clamp(0, 5) as u8
+        } else {
+            0
+        },
         size: if row.kind == 0 { blank } else { size(row.size) },
         modified: modified(row.mtime),
         state: if row.state == "ok" {
@@ -428,6 +436,7 @@ mod tests {
             bit_depth: Some(16),
             codec: Some("pcm_s16le".into()),
             has_artwork: true,
+            rating: Some(4),
         }
     }
 
