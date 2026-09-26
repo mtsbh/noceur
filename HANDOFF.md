@@ -21,6 +21,7 @@
 | New folder: tree menu, listing background menu, row menu, Ctrl+Shift+N | `noceur-app/src/newfolder.rs`, `ui/src/NewFolder.tsx`, `Tree.tsx`, `Pane.tsx` |
 | Star ratings: indexed, sortable Rating column, click to set, Alt+0..5 | `noceur-tags/src/meta.rs`, `noceur-index` (schema V9, query, scan), `format.rs`, `ui/src/Stars.tsx` |
 | Spectrogram click/drag to seek with hover time | `ui/src/Spectrogram.tsx` |
+| Tags from file name (`%artist% - %title%`, presets, `%dummy%`, `\` for folders), preview then write | `noceur-app/src/fromname.rs`, `ui/src/FromName.tsx`, toolbar Metadata group + row menu |
 
 ## Architectural decisions
 - **Meters are pre-fader.** A `Tap<S: Source>` sits between the decoder and `rodio::Player` and
@@ -38,18 +39,21 @@
 - **Ratings live in the index** (`content_tag.rating`). Migration V9 sets `read_at = 0` for all
   rows, so tags get re-read lazily as folders are opened. The UI updates optimistically and rolls
   back if the write fails. Clicking the current star clears it.
+- **Filename → tags** matches left to right: a field ends at the first occurrence of the text
+  after it, and the last field takes the rest. Files that don't fit are skipped, never guessed.
+  Unknown `%fields%` become custom tags (upper-cased).
 - **Per-file IPC for long jobs** (convert): the dialog loops over files, so it can show progress
   and stop between files. There are no background events.
 
 ## Files changed (vs `master`)
 - Rust:
   - `noceur-audio/src/{lib.rs,scope.rs}`
-  - `noceur-app/src/{main.rs,commands.rs,config.rs,actions.rs,convert.rs,newfolder.rs,format.rs}`
+  - `noceur-app/src/{main.rs,commands.rs,config.rs,actions.rs,convert.rs,newfolder.rs,fromname.rs,format.rs}`
   - `noceur-app/Cargo.toml` (+`lofty`)
   - `noceur-index/src/{schema.rs,scan.rs,query.rs}`
   - `noceur-tags/src/{meta.rs,edit.rs}`
 - UI:
-  - New: `Meters.tsx`, `themes.ts`, `Converter.tsx`, `NewFolder.tsx`, `Stars.tsx`
+  - New: `Meters.tsx`, `themes.ts`, `Converter.tsx`, `NewFolder.tsx`, `Stars.tsx`, `FromName.tsx`
   - Changed: `App.tsx`, `Transport.tsx`, `Waveform.tsx`, `Spectrogram.tsx`, `Toolbar.tsx`,
     `Menu.tsx`, `Tree.tsx`, `Pane.tsx`, `ActionEditor.tsx`, `SettingsPanel.tsx`, `settings.ts`,
     `columns.ts`, `api.ts`, `icons.tsx`, `theme.css`
@@ -73,6 +77,7 @@
    - New folder from the tree, listing and row menu
    - Rate a selection, then sort by Rating
    - Spectrogram seek
+   - Tags from file name on a folder of "Artist - Title" downloads
 3. Put `ffmpeg.exe` beside `noceur-app.exe` (e.g. from gyan.dev builds) before testing the converter.
 4. Mark PR #4 ready for review and merge. Then tag `v*` to publish a release.
 5. Optional follow-ups:

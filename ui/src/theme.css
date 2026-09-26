@@ -3321,3 +3321,38 @@ body.resizing-v * {
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* ── Tags from file name ───────────────────────────────────────────────────── */
+.fnchips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.fnchip {
+  padding: 2px 7px;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  background: none;
+  color: var(--fg2);
+  font-size: 11px;
+  cursor: pointer;
+}
+.fnchip:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.fnchip.on {
+  border-color: var(--acc-line);
+  background: var(--acc-fill);
+  color: var(--acc);
+}
+.fnfields {
+  display: flex;
+  gap: 12px;
+}
+.fnfield {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

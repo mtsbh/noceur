@@ -485,3 +485,15 @@ export function NewFolderIcon() {
     </Icon>
   );
 }
+
+/** A name turning into a tag: the file-name-to-tags dialog. */
+export function NameToTagIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 4h6M2.4 6.8h4" />
+      <path d="m7 10.4 1.6 1.6L7 13.6" />
+      <path d="M2.4 12h6" />
+      <path d="M9.6 6.6V3.8a.5.5 0 0 1 .5-.5h2.8l1.6 1.6v2.8l-2.4 2.4a.5.5 0 0 1-.7 0l-1.6-1.6a.5.5 0 0 1-.2-.3Z" />
+    </Icon>
+  );
+}

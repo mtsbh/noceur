@@ -17,6 +17,7 @@ mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod fromname;
 mod identity;
 mod newfolder;
 mod placement;
@@ -126,6 +127,8 @@ fn main() {
             convert::convert_plan,
             convert::convert_file,
             newfolder::create_folder,
+            fromname::preview_from_name,
+            fromname::apply_from_name,
             commands::reveal,
             commands::path_of,
             commands::start_drag,

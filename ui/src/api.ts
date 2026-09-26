@@ -872,3 +872,23 @@ export function convertFile(fileId: number, options: ConvertOptions): Promise<Co
 export function createFolder(parent: string, name: string): Promise<string> {
   return invoke<string>("create_folder", { parent, name });
 }
+
+// ── Tags from file name ────────────────────────────────────────────────────
+
+export type FromNameRow = {
+  fileId: number;
+  /** What the pattern was laid over: the name, plus a folder per `\`. */
+  name: string;
+  /** `[label, value]` for each field that will be written. */
+  fields: [string, string][];
+  /** Why nothing will be written; empty when something will. */
+  problem: string;
+};
+
+export function previewFromName(fileIds: number[], pattern: string): Promise<FromNameRow[]> {
+  return invoke<FromNameRow[]>("preview_from_name", { fileIds, pattern });
+}
+
+export function applyFromName(fileIds: number[], pattern: string): Promise<WriteReport> {
+  return invoke<WriteReport>("apply_from_name", { fileIds, pattern });
+}

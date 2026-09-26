@@ -50,6 +50,7 @@ import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
 import Converter from "./Converter";
 import NewFolder from "./NewFolder";
+import FromName from "./FromName";
 import Titlebar from "./Titlebar";
 import Pane, { type PaneHandle } from "./Pane";
 import Tabs, { type TabDrop } from "./Tabs";
@@ -77,6 +78,7 @@ import {
   CopiesIcon,
   GlobeIcon,
   ImageIcon,
+  NameToTagIcon,
   NewFolderIcon,
   OpenIcon,
   PigIcon,
@@ -405,6 +407,8 @@ export default function App() {
     setTreeReload((r) => ({ path: parent, n: (r?.n ?? 0) + 1 }));
   }
 
+  /** Files being tagged from their names, or null when closed. */
+  const [naming, setNaming] = createSignal<number[] | null>(null);
   /** Files the converter is open on, or null when it is closed. */
   const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
@@ -486,6 +490,9 @@ export default function App() {
         break;
       case "convert":
         setConverting(ids);
+        break;
+      case "fromname":
+        setNaming(ids);
         break;
     }
   }
@@ -948,6 +955,13 @@ export default function App() {
         icon: TagIcon,
         disabled: audio,
         run: () => setEditing(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Tags from file name for ${ids.length} tracks…` : "Tags from file name…",
+        icon: NameToTagIcon,
+        disabled: audio,
+        run: () => setNaming(ids),
       },
       {
         kind: "item",
@@ -1494,6 +1508,12 @@ export default function App() {
             onClose={() => setNewFolderIn(null)}
             onCreated={() => folderCreated(parent())}
           />
+        )}
+      </Show>
+
+      <Show when={naming()}>
+        {(ids) => (
+          <FromName fileIds={ids()} onClose={() => setNaming(null)} onDone={refetchAll} />
         )}
       </Show>
 

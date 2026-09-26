@@ -9,6 +9,7 @@ import {
   StarIcon,
   TagIcon,
   ConvertIcon,
+  NameToTagIcon,
 } from "./icons";
 
 /** A thing the toolbar can do to the selection. */
@@ -21,7 +22,8 @@ export type ActionId =
   | "quality"
   | "copies"
   | "quick"
-  | "convert";
+  | "convert"
+  | "fromname";
 
 type Button = {
   id: ActionId;
@@ -44,6 +46,7 @@ const GROUPS: { label: string; buttons: Button[] }[] = [
     buttons: [
       { id: "tags", label: "Edit metadata", icon: TagIcon },
       { id: "match", label: "Find metadata", icon: GlobeIcon },
+      { id: "fromname", label: "Tags from file name", icon: NameToTagIcon },
       { id: "art", label: "Find album art", icon: ImageIcon },
       { id: "quick", label: "Quick tag", icon: StarIcon },
     ],
