@@ -42,6 +42,11 @@
 - **Filename → tags** matches left to right: a field ends at the first occurrence of the text
   after it, and the last field takes the rest. Files that don't fit are skipped, never guessed.
   Unknown `%fields%` become custom tags (upper-cased).
+- **A re-read of the folder on screen keeps its scroll.** `Pane` tells a refresh (same `dirId`)
+  from a navigation. On a refresh it keeps the rows up (no "Reading…" swap, which collapsed the
+  scroll box) and replaces the visible pages in place. Refreshes come from drags, tag writes,
+  ratings and conversions. On Windows a click with a few pixels of movement starts a native drag,
+  whose end refreshes every pane.
 - **Per-file IPC for long jobs** (convert): the dialog loops over files, so it can show progress
   and stop between files. There are no background events.
 

@@ -56,6 +56,8 @@ const TILE_H = 84;
 
 /** Case-insensitive, and blind to a trailing separator: Windows paths are both. */
 const norm = (p: string) => p.replace(/[\\/]+$/, "").toLowerCase();
+const sameFolder = (a?: string, b?: string) =>
+  a !== undefined && b !== undefined && norm(a) === norm(b);
 
 /**
  * What a pane lets the rest of the app do to it.
@@ -191,6 +193,17 @@ export default function Pane(props: {
       },
     ),
   );
+
+  /**
+   * Whether to show "Reading…" instead of the rows.
+   *
+   * Only while a *different* folder is loading. A re-read of the folder already
+   * on screen - after a drag, a tag write, a rating - keeps the rows up. Swapping
+   * them for the placeholder collapsed the scroll box, the browser clamped the
+   * offset to zero, and every refresh threw the list back to the top.
+   */
+  const reading = () =>
+    listing.loading && (listing.state !== "refreshing" || !sameFolder(listing()?.path, current()));
 
   /** Row count of the whole listing — what the virtualizer sizes itself against. */
   const total = () => (listing.error ? 0 : (listing()?.total ?? 0));
@@ -429,6 +442,8 @@ export default function Pane(props: {
    * what tells them apart.
    */
   let restoring = props.tab.scroll;
+  /** The directory the rows on screen came from, so a re-read can be told from a navigation. */
+  let shownDir: number | null = null;
 
   // A new listing invalidates every cached window. Drop them, seed page 0 from
   // the window that arrived with the listing, and go back to the top — otherwise
@@ -436,15 +451,29 @@ export default function Pane(props: {
   createEffect(
     on(listing, (l) => {
       if (!l) return;
-      setPages(reconcile({}));
+      const refresh = shownDir === l.dirId;
+      shownDir = l.dirId;
       inflight = new Set();
       setWindowError("");
       setProbed(0);
-      if (l.first.rows.length > 0) setPages(0, l.first.rows);
-      if (scrollEl) {
-        scrollEl.scrollTop = restoring;
-        restoring = 0;
+      if (refresh) {
+        // The same folder read again: stay where you were. The windows on screen
+        // are replaced in place, so nothing blinks; the rest are dropped so they
+        // are fetched fresh when scrolled to, since rows may have come or gone.
+        const keep = visiblePages();
+        setPages(
+          reconcile(
+            Object.fromEntries(Object.entries(pages).filter(([page]) => keep.has(Number(page)))),
+          ),
+        );
+        if (l.first.rows.length > 0) setPages(0, l.first.rows);
+        refreshVisible(l.dirId);
+      } else {
+        setPages(reconcile({}));
+        if (l.first.rows.length > 0) setPages(0, l.first.rows);
+        if (scrollEl) scrollEl.scrollTop = restoring;
       }
+      restoring = 0;
       applyPending();
       void runProbe(l.dirId);
     }),
@@ -474,6 +503,17 @@ export default function Pane(props: {
       { defer: true },
     ),
   );
+
+  /** The page indices the visible rows fall in. */
+  function visiblePages(): Set<number> {
+    const out = new Set<number>();
+    const items = virtualizer.getVirtualItems();
+    if (items.length === 0) return out;
+    const from = Math.floor(firstOf(items[0].index) / PAGE);
+    const to = Math.floor(lastOf(items[items.length - 1].index) / PAGE);
+    for (let p = from; p <= to; p++) out.add(p);
+    return out;
+  }
 
   /**
    * Re-reads the windows currently on screen.
@@ -898,7 +938,7 @@ export default function Pane(props: {
           fallback={<div class="empty">Could not read {current()}.</div>}
         >
           <Show
-            when={!listing.loading}
+            when={!reading()}
             fallback={<div class="empty">Reading {current()}…</div>}
           >
             <Show when={total() > 0} fallback={<div class="empty">Nothing here.</div>}>
