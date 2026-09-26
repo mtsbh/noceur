@@ -42,6 +42,10 @@ pub struct Config {
     /// repository.
     #[serde(default)]
     pub actions: Vec<crate::actions::Action>,
+    /// Where ffmpeg is, for the converter: the executable or its folder.
+    /// Empty to look beside Noceur and then on `PATH`.
+    #[serde(default)]
+    pub ffmpeg_path: String,
 }
 
 fn yes() -> bool {
@@ -55,6 +59,7 @@ impl Default for Config {
             preserve_dates: true,
             window: None,
             actions: Vec::new(),
+            ffmpeg_path: String::new(),
         }
     }
 }

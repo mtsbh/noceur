@@ -807,3 +807,57 @@ export function previewCleanup(
 export function applyCleanup(items: CleanApply[]): Promise<WriteReport> {
   return invoke<WriteReport>("apply_cleanup", { items });
 }
+
+// ── Converter ──────────────────────────────────────────────────────────────
+
+export type ConvertFormat = "wav" | "aiff" | "flac" | "alac";
+export type ConvertDepth = "source" | "16" | "24";
+
+export type ConvertOptions = {
+  format: ConvertFormat;
+  depth: ConvertDepth;
+  /** Empty for beside each source. */
+  folder: string;
+  replace: boolean;
+  verify: boolean;
+};
+
+/** Which ffmpeg the converter uses. `path` is empty when none was found. */
+export type FfmpegInfo = { path: string; version: string; configured: string };
+
+export type ConvertPlanned = {
+  fileId: number;
+  name: string;
+  from: string;
+  to: string;
+  output: string;
+  /** Whether the output will hold exactly the source's samples. */
+  exact: boolean;
+  /** Why it will be skipped; empty when it will not. */
+  problem: string;
+};
+
+export type Converted = {
+  fileId: number;
+  output: string;
+  ok: boolean;
+  /** True when the audio was compared with the source and matched. */
+  verified: boolean | null;
+  message: string;
+};
+
+export function ffmpegInfo(): Promise<FfmpegInfo> {
+  return invoke<FfmpegInfo>("ffmpeg_info");
+}
+
+export function setFfmpegPath(path: string): Promise<FfmpegInfo> {
+  return invoke<FfmpegInfo>("set_ffmpeg_path", { path });
+}
+
+export function convertPlan(fileIds: number[], options: ConvertOptions): Promise<ConvertPlanned[]> {
+  return invoke<ConvertPlanned[]>("convert_plan", { fileIds, options });
+}
+
+export function convertFile(fileId: number, options: ConvertOptions): Promise<Converted> {
+  return invoke<Converted>("convert_file", { fileId, options });
+}

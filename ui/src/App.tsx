@@ -47,6 +47,7 @@ import Quality from "./Quality";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
+import Converter from "./Converter";
 import Titlebar from "./Titlebar";
 import Pane, { type PaneHandle } from "./Pane";
 import Tabs, { type TabDrop } from "./Tabs";
@@ -66,7 +67,30 @@ import {
   type Layout,
   type Tab,
 } from "./layout";
-import { BoltIcon, PigIcon, SettingsIcon, SplitColsIcon, SplitRowsIcon, actionIcon } from "./icons";
+import {
+  BoltIcon,
+  BroomIcon,
+  ClipboardIcon,
+  ConvertIcon,
+  CopiesIcon,
+  GlobeIcon,
+  ImageIcon,
+  OpenIcon,
+  PigIcon,
+  PlayIcon,
+  RenameIcon,
+  SettingsIcon,
+  SpectrumIcon,
+  SplitColsIcon,
+  SplitRowsIcon,
+  TabIcon,
+  TagIcon,
+  TrashIcon,
+  VideoIcon,
+  VinylIcon,
+  WindowsIcon,
+  actionIcon,
+} from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import { stackFor } from "./fonts";
 import { applyTheme } from "./themes";
@@ -225,6 +249,13 @@ export default function App() {
     return tab ? currentPath(tab) : home();
   };
 
+  /** The folder the other pane shows, when split - where files are filed to. */
+  const otherFolder = () => {
+    const other = layout.groups.find((g) => g.id !== focusGroup().id);
+    const tab = other ? activeTab(other) : undefined;
+    return tab ? currentPath(tab) : undefined;
+  };
+
   const audioSelection = createMemo(() => focusHandle()?.audioSelection() ?? []);
 
   /** Re-reads every visible pane. A write can land in a folder either one shows. */
@@ -356,6 +387,8 @@ export default function App() {
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
+  /** Files the converter is open on, or null when it is closed. */
+  const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
   const [checking, setChecking] = createSignal<number[] | null>(null);
   /** Files the duplicate finder is measuring, or null when it is closed. */
@@ -432,6 +465,9 @@ export default function App() {
         break;
       case "copies":
         setComparing(ids);
+        break;
+      case "convert":
+        setConverting(ids);
         break;
     }
   }
@@ -837,11 +873,15 @@ export default function App() {
     const lookup = [row.artist, row.title || row.name].filter(Boolean).join(" ");
     const audio = row.kind !== 1;
 
+    // Grouped the way the toolbar is - the file itself, what it says, what is
+    // done to it, where to look it up - with the toolbar's icons, so the same
+    // action looks the same wherever it is reached from.
     return [
       {
         kind: "item",
         label: "Play",
         hint: "double-click",
+        icon: PlayIcon,
         disabled: audio,
         run: () => playRow(row, playingTab() ?? (activeTab(focusGroup())?.id ?? 0)),
       },
@@ -849,6 +889,7 @@ export default function App() {
       {
         kind: "item",
         label: "Open in new tab",
+        icon: TabIcon,
         disabled: row.kind !== 0,
         run: () => {
           const here = focusPath();
@@ -859,6 +900,7 @@ export default function App() {
       {
         kind: "item",
         label: "Reveal in Explorer",
+        icon: OpenIcon,
         run: () => {
           reveal(row.fileId).catch(() => {});
         },
@@ -866,46 +908,26 @@ export default function App() {
       {
         kind: "item",
         label: many ? `Copy ${ids.length} paths` : "Copy path",
+        icon: ClipboardIcon,
         run: () => {
           Promise.all(ids.map((id) => pathOf(id)))
             .then((paths) => copyText(paths.join("\r\n")))
             .catch(() => {});
         },
       },
+      { kind: "separator" },
       {
         kind: "item",
         label: many ? `Edit metadata of ${ids.length} tracks…` : "Edit metadata…",
         hint: "f2",
+        icon: TagIcon,
         disabled: audio,
         run: () => setEditing(ids),
       },
       {
         kind: "item",
-        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
-        disabled: audio,
-        run: () => setRenaming(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
-        disabled: audio,
-        run: () => setCleaning(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
-        disabled: audio,
-        run: () => setChecking(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
-        disabled: audio,
-        run: () => setComparing(ids),
-      },
-      {
-        kind: "item",
         label: "Find metadata online…",
+        icon: GlobeIcon,
         disabled: audio,
         // Matched on the row that was right-clicked, applied to whatever is
         // selected — the same rule the rest of the menu follows.
@@ -914,6 +936,7 @@ export default function App() {
       {
         kind: "item",
         label: many ? `Find album art for ${ids.length} tracks…` : "Find album art…",
+        icon: ImageIcon,
         disabled: audio,
         // Searched on the row that was right-clicked, applied to the whole
         // selection: an album's tracks share a sleeve, and searching on each of
@@ -923,7 +946,44 @@ export default function App() {
       { kind: "separator" },
       {
         kind: "item",
+        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
+        icon: RenameIcon,
+        disabled: audio,
+        run: () => setRenaming(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
+        icon: BroomIcon,
+        disabled: audio,
+        run: () => setCleaning(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Convert ${ids.length} tracks…` : "Convert…",
+        icon: ConvertIcon,
+        disabled: audio,
+        run: () => setConverting(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
+        icon: SpectrumIcon,
+        disabled: audio,
+        run: () => setChecking(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
+        icon: CopiesIcon,
+        disabled: audio,
+        run: () => setComparing(ids),
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
         label: "Search Discogs",
+        icon: VinylIcon,
         disabled: audio || lookup === "",
         run: () => {
           openUrl(
@@ -934,6 +994,7 @@ export default function App() {
       {
         kind: "item",
         label: "Search YouTube",
+        icon: VideoIcon,
         disabled: audio || lookup === "",
         run: () => {
           openUrl(
@@ -946,6 +1007,7 @@ export default function App() {
         kind: "item",
         label: many ? `Delete ${ids.length} items` : "Delete",
         hint: "del",
+        icon: TrashIcon,
         danger: true,
         run: deleteSelection,
       },
@@ -954,6 +1016,7 @@ export default function App() {
         kind: "item",
         label: "Windows menu",
         hint: "shift-click",
+        icon: WindowsIcon,
         run: () => openShellMenu(ids),
       },
     ];
@@ -1145,6 +1208,7 @@ export default function App() {
             )}
           </For>
         </div>
+        <div class="tgroup" role="group" aria-label="Panes">
         <button
           class={`gearbtn ${layout.groups.length > 1 ? "on" : ""}`}
           data-tip={layout.groups.length > 1 ? "Single pane" : "Dual pane"}
@@ -1165,6 +1229,8 @@ export default function App() {
             <SplitRowsIcon />
           </button>
         </Show>
+        </div>
+        <div class="tgroup" role="group" aria-label="App">
         <button
           class={`gearbtn ${actionMenu() ? "on" : ""}`}
           data-tip="Functions"
@@ -1195,6 +1261,7 @@ export default function App() {
         >
           <SettingsIcon />
         </button>
+        </div>
       </div>
 
       <div class="body">
@@ -1347,6 +1414,17 @@ export default function App() {
             action={target().action}
             fileIds={target().fileIds}
             onClose={() => setRunning(null)}
+            onDone={refetchAll}
+          />
+        )}
+      </Show>
+
+      <Show when={converting()}>
+        {(ids) => (
+          <Converter
+            fileIds={ids()}
+            otherFolder={otherFolder()}
+            onClose={() => setConverting(null)}
             onDone={refetchAll}
           />
         )}

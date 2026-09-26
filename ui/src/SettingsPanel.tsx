@@ -8,6 +8,9 @@ import {
   setActions,
   setDiscogsToken,
   setPreserveDates,
+  ffmpegInfo,
+  setFfmpegPath,
+  type FfmpegInfo,
   type Action,
   type ActionKind,
 } from "./api";
@@ -183,6 +186,11 @@ export default function Settings(props: {
 
   createEffect(() => {
     preserveDates().then(setKeepDates).catch(() => {});
+  });
+
+  const [ffmpeg, setFfmpeg] = createSignal<FfmpegInfo | null>(null);
+  createEffect(() => {
+    ffmpegInfo().then(setFfmpeg).catch(() => {});
   });
 
   const [token, setToken] = createSignal("");
@@ -724,6 +732,64 @@ export default function Settings(props: {
                 <span>Hide files that are not audio</span>
               </label>
             </div>
+          </Section>
+
+          <Section
+            title="Converter"
+            info={
+              <>
+                <p>
+                  Converting uses ffmpeg. Noceur looks for it here first, then
+                  for <code>ffmpeg.exe</code> beside Noceur (or in an{" "}
+                  <code>ffmpeg</code> or <code>ffmpeg\bin</code> folder beside
+                  it), then on your PATH - so a portable copy next to the app
+                  just works.
+                </p>
+                <p>
+                  The converter keeps each file's bit depth and sample rate, so
+                  WAV, AIFF, FLAC and ALAC convert into each other without losing
+                  a sample, and can check each result against its original.
+                </p>
+              </>
+            }
+          >
+            <div class="setrow">
+              <span class="setlabel">ffmpeg</span>
+              <input
+                type="text"
+                value={ffmpeg()?.configured ?? ""}
+                placeholder="Found automatically"
+                spellcheck={false}
+                onChange={(e) =>
+                  setFfmpegPath(e.currentTarget.value).then(setFfmpeg).catch(() => {})
+                }
+              />
+            </div>
+            <Show when={ffmpeg()}>
+              {(f) => (
+                <p class="acthint">
+                  <Show
+                    when={f().path}
+                    fallback={
+                      <>
+                        Not found.{" "}
+                        <a
+                          class="setlink"
+                          onClick={() =>
+                            openUrl("https://www.gyan.dev/ffmpeg/builds/").catch(() => {})
+                          }
+                        >
+                          Get a Windows build
+                        </a>{" "}
+                        and put ffmpeg.exe beside Noceur.
+                      </>
+                    }
+                  >
+                    {f().version || "ffmpeg"} · {f().path}
+                  </Show>
+                </p>
+              )}
+            </Show>
           </Section>
 
           <Section

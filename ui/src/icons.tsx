@@ -403,3 +403,76 @@ export const ACTION_ICONS: { name: string; label: string; icon: () => JSX.Elemen
 export function actionIcon(name?: string) {
   return name ? ACTION_ICONS.find((i) => i.name === name)?.icon : undefined;
 }
+
+/* ── Menu and converter icons ─────────────────────────────────────────────── */
+
+/** Two arrows chasing each other: one format into another. */
+export function ConvertIcon() {
+  return (
+    <Icon>
+      <path d="M2.8 6.2a5.2 5.2 0 0 1 9.4-2" />
+      <path d="M12.6 2.2v2.4h-2.4" />
+      <path d="M13.2 9.8a5.2 5.2 0 0 1-9.4 2" />
+      <path d="M3.4 13.8v-2.4h2.4" />
+    </Icon>
+  );
+}
+
+export function ClipboardIcon() {
+  return (
+    <Icon>
+      <rect x="3.4" y="3.2" width="9.2" height="10.8" rx="1.1" />
+      <path d="M6 3.2V2.6a.6.6 0 0 1 .6-.6h2.8a.6.6 0 0 1 .6.6v.6" />
+      <path d="M5.8 7.4h4.4M5.8 10h3" />
+    </Icon>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <Icon>
+      <path d="M2.8 4.4h10.4M6.2 4.4V3a.6.6 0 0 1 .6-.6h2.4a.6.6 0 0 1 .6.6v1.4" />
+      <path d="m4 4.4.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6" />
+      <path d="M6.6 7v4.2M9.4 7v4.2" />
+    </Icon>
+  );
+}
+
+export function WindowsIcon() {
+  return (
+    <Icon>
+      <rect x="2.6" y="2.6" width="4.8" height="4.8" rx=".5" />
+      <rect x="8.6" y="2.6" width="4.8" height="4.8" rx=".5" />
+      <rect x="2.6" y="8.6" width="4.8" height="4.8" rx=".5" />
+      <rect x="8.6" y="8.6" width="4.8" height="4.8" rx=".5" />
+    </Icon>
+  );
+}
+
+export function VinylIcon() {
+  return (
+    <Icon>
+      <circle cx="8" cy="8" r="5.8" />
+      <circle cx="8" cy="8" r="1.8" />
+      <path d="M4.6 5.6a4 4 0 0 1 2-1.4" />
+    </Icon>
+  );
+}
+
+export function VideoIcon() {
+  return (
+    <Icon>
+      <rect x="1.8" y="3.6" width="12.4" height="8.8" rx="2" />
+      <path {...solid} d="M6.8 6.1v3.8L10 8Z" />
+    </Icon>
+  );
+}
+
+export function TabIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 13V4.2a.8.8 0 0 1 .8-.8h3.4l1 1.6h5.2a.8.8 0 0 1 .8.8V13a.8.8 0 0 1-.8.8H3.2a.8.8 0 0 1-.8-.8Z" />
+      <path d="M8 7.6v4M6 9.6h4" />
+    </Icon>
+  );
+}

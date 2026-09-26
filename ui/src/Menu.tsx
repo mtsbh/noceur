@@ -32,6 +32,7 @@ export default function Menu(props: {
   onClose: () => void;
 }) {
   let box: HTMLDivElement | undefined;
+  const iconned = () => props.items.some((i) => i.kind === "item" && i.icon);
 
   // Escape closes, and so does any key that is not a menu key: a menu left open
   // while the user starts typing is a menu in the way.
@@ -95,8 +96,10 @@ export default function Menu(props: {
                   <Show when={entry().checked !== undefined}>
                     <span class={`ctxtick ${entry().checked ? "on" : ""}`}>✓</span>
                   </Show>
-                  <Show when={entry().icon}>
-                    {(icon) => <span class="ctxicon">{icon()()}</span>}
+                  {/* A blank of the same width when others in this menu have
+                      an icon, so every label starts on one line. */}
+                  <Show when={entry().icon || iconned()}>
+                    <span class="ctxicon">{entry().icon?.()}</span>
                   </Show>
                   <span class="ctxlabel">{entry().label}</span>
                   <Show when={entry().hint}>

@@ -11,6 +11,7 @@ mod autotag;
 mod cleanup;
 mod commands;
 mod config;
+mod convert;
 mod covers;
 mod dragdrop;
 mod dto;
@@ -119,6 +120,10 @@ fn main() {
             commands::transport_cmd,
             commands::transport_state,
             commands::scope_frames,
+            convert::ffmpeg_info,
+            convert::set_ffmpeg_path,
+            convert::convert_plan,
+            convert::convert_file,
             commands::reveal,
             commands::path_of,
             commands::start_drag,
