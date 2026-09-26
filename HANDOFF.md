@@ -111,7 +111,8 @@ cargo test -p noceur-audio -p noceur-tags -p noceur-index
 npm --prefix ui run build
 npx @tauri-apps/cli@^2 build --config crates/noceur-app/tauri.conf.json
 
-# Or build on GitHub: Actions → Release → "Run workflow" on this branch
-# (draft GitHub Release with noceur-app.exe and *-setup.exe attached)
+# Or build on GitHub: Actions → Release → "Run workflow" on this branch.
+# A branch run attaches noceur-app.exe + *-setup.exe to the run as the
+# "noceur-windows" artifact; pushing a v* tag also publishes a draft Release.
 ```
 Details: `docs/building.md`, `docs/troubleshooting.md`.

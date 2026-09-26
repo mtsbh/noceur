@@ -63,7 +63,19 @@ jobs:
           fi
           echo "embedded: $asset"
 
+      # Always kept on the run itself, so a manual run from a branch - which has
+      # no tag to hang a Release on - still produces something to download.
+      - name: Keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: noceur-windows
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/noceur-app.exe
+          if-no-files-found: error
+
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
