@@ -510,7 +510,7 @@ fn locate(state: &AppState, file_id: i64) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())?
         .filter(|f| f.kind == 1)
         .ok_or_else(|| "not an audio file".to_string())?;
-    Ok(PathBuf::from(found.path))
+    Ok(found.path)
 }
 
 fn ffmpeg_or_err() -> Result<PathBuf, String> {

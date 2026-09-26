@@ -133,7 +133,7 @@ impl<S: Source> Iterator for Tap<S> {
         };
 
         if self.channel < 2 {
-            self.frame[self.channel as usize] = sample as f32;
+            self.frame[self.channel as usize] = sample;
         }
         self.channel += 1;
         if self.channel >= self.channels {
