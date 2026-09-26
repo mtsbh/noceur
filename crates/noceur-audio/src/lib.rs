@@ -8,6 +8,7 @@ pub mod biquad;
 pub mod fft;
 pub mod identity;
 pub mod quality;
+pub mod scope;
 pub mod source;
 pub mod spectrogram;
 
@@ -65,6 +66,7 @@ enum Cmd {
 pub struct Player {
     tx: Sender<Cmd>,
     state: Arc<Mutex<Playback>>,
+    scope: Arc<scope::Scope>,
 }
 
 impl Player {
@@ -77,13 +79,22 @@ impl Player {
         let (tx, rx) = mpsc::channel::<Cmd>();
         let state = Arc::new(Mutex::new(Playback::default()));
         let thread_state = Arc::clone(&state);
+        let scope = Arc::new(scope::Scope::default());
+        let thread_scope = Arc::clone(&scope);
 
         std::thread::Builder::new()
             .name("noceur-audio".into())
-            .spawn(move || run(rx, thread_state))
+            .spawn(move || run(rx, thread_state, thread_scope))
             .expect("spawning the audio thread");
 
-        Player { tx, state }
+        Player { tx, state, scope }
+    }
+
+    /// The newest `frames` stereo frames sent to the output, and their rate.
+    ///
+    /// Read by the meters; see [`scope`] for why it is taken before the volume.
+    pub fn scope(&self, frames: usize) -> (u32, Vec<[f32; 2]>) {
+        self.scope.snapshot(frames)
     }
 
     /// A snapshot of what is playing.
@@ -166,7 +177,7 @@ impl Player {
 }
 
 /// The audio thread's whole life.
-fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>) {
+fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::Scope>) {
     let sink = match rodio::stream::DeviceSinkBuilder::open_default_sink() {
         Ok(sink) => sink,
         Err(e) => {
@@ -207,8 +218,9 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>) {
                         s.duration_ms = None;
                         s.error = None;
                     });
+                    scope.clear();
 
-                    match open(&path, sink.mixer(), volume) {
+                    match open(&path, sink.mixer(), volume, &scope) {
                         Ok((new_player, duration)) => {
                             if !play {
                                 new_player.pause();
@@ -258,6 +270,7 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>) {
                         p.stop();
                     }
                     player = None;
+                    scope.clear();
                     set(&state, |s| {
                         s.path = None;
                         s.playing = false;
@@ -299,6 +312,7 @@ fn open(
     path: &Path,
     mixer: &rodio::mixer::Mixer,
     volume: f32,
+    scope: &Arc<scope::Scope>,
 ) -> Result<(rodio::Player, Option<u64>), AudioError> {
     let full = noceur_extended(path);
     let opened = source::open(&full).map_err(|source| AudioError::Open {
@@ -328,7 +342,7 @@ fn open(
 
     let player = rodio::Player::connect_new(mixer);
     player.set_volume(volume);
-    player.append(decoder);
+    player.append(scope::Tap::new(decoder, Arc::clone(scope)));
 
     Ok((player, duration))
 }

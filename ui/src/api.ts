@@ -329,6 +329,33 @@ export function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }
 
+/** What the meters read: the newest frames sent to the output. */
+export type ScopeFrames = {
+  /** Sample rate the frames play at. */
+  rate: number;
+  left: Float32Array;
+  right: Float32Array;
+};
+
+/**
+ * The newest `frames` stereo frames sent to the output, taken before the volume.
+ *
+ * Comes back as raw bytes - see `scope_frames` in `commands.rs` for the layout.
+ */
+export async function scopeFrames(frames: number): Promise<ScopeFrames> {
+  const buf = await invoke<ArrayBuffer>("scope_frames", { frames });
+  const view = new DataView(buf);
+  const rate = view.byteLength >= 4 ? view.getUint32(0, true) : 44100;
+  const n = Math.max(0, (view.byteLength - 4) >> 2);
+  const left = new Float32Array(n);
+  const right = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    left[i] = view.getInt16(4 + i * 4, true) / 32767;
+    right[i] = view.getInt16(6 + i * 4, true) / 32767;
+  }
+  return { rate, left, right };
+}
+
 /**
  * The amplitude envelope of one file: interleaved [rms, peak] per bucket.
  *
@@ -674,6 +701,8 @@ export type Action = {
   recipe: string;
   /** The recipe's own inputs, in the order it asks for them. */
   slots: string[];
+  /** Name from `ACTION_ICONS`, or empty. A button with an icon is also in the toolbar. */
+  icon?: string;
 };
 
 /** What an action would do to one file. */

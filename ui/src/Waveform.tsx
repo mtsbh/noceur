@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { themeTick } from "./themes";
 
 /** Bytes per bucket in the envelope. Matches `ENVELOPE_BANDS`. */
 const BANDS = 4;
@@ -228,6 +229,8 @@ export default function Waveform(props: {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
+    // Read so a change of theme redraws in the new colours.
+    themeTick();
     const style = getComputedStyle(canvas);
     const token = (name: string, fallback: string) =>
       style.getPropertyValue(name).trim() || fallback;

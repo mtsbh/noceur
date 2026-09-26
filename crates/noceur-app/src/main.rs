@@ -118,6 +118,7 @@ fn main() {
             commands::play,
             commands::transport_cmd,
             commands::transport_state,
+            commands::scope_frames,
             commands::reveal,
             commands::path_of,
             commands::start_drag,

@@ -499,6 +499,28 @@ pub async fn transport_cmd(
     Ok(transport(&state))
 }
 
+/// The newest frames sent to the output, for the meters in the transport.
+///
+/// Raw bytes rather than JSON: this is read on every display frame while
+/// playing, and a few thousand numbers spelled out in decimal sixty times a
+/// second is work for both ends that the meters do not need. The layout is the
+/// sample rate as a little-endian `u32`, then `frames` stereo pairs of
+/// little-endian `i16`, oldest first. Sixteen bits is ninety-odd decibels of
+/// range, well past the bottom of any meter drawn here.
+#[tauri::command]
+pub fn scope_frames(state: State<'_, AppState>, frames: Option<u32>) -> tauri::ipc::Response {
+    let (rate, data) = state.player.scope(frames.unwrap_or(2048) as usize);
+    let mut out = Vec::with_capacity(4 + data.len() * 4);
+    out.extend_from_slice(&rate.to_le_bytes());
+    for [l, r] in data {
+        for s in [l, r] {
+            let v = (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    tauri::ipc::Response::new(out)
+}
+
 /// Polled by the transport bar while something is playing.
 #[tauri::command]
 pub fn transport_state(state: State<'_, AppState>) -> Transport {

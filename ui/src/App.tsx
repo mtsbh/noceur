@@ -66,9 +66,10 @@ import {
   type Layout,
   type Tab,
 } from "./layout";
-import { BoltIcon, PigIcon, SettingsIcon, SplitColsIcon, SplitRowsIcon } from "./icons";
+import { BoltIcon, PigIcon, SettingsIcon, SplitColsIcon, SplitRowsIcon, actionIcon } from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import { stackFor } from "./fonts";
+import { applyTheme } from "./themes";
 import {
   clampWidth,
   loadColumns,
@@ -450,6 +451,8 @@ export default function App() {
     document.documentElement.style.setProperty("--ui-font", stackFor(s.font, s.fontCustom));
   });
 
+  createEffect(() => applyTheme(settings().theme));
+
   function commitColumns(next: Column[]) {
     setColumns(next);
     saveColumns(next);
@@ -634,16 +637,29 @@ export default function App() {
     return buttons().map((action) => ({
       kind: "item" as const,
       label: ids.length > 1 ? `${action.label} — ${ids.length} tracks` : action.label,
+      icon: actionIcon(action.icon),
       disabled: ids.length === 0,
-      run: () => {
-        if (actionWrites(action.kind)) {
-          setRunning({ action, fileIds: ids });
-          return;
-        }
-        runUserAction(action, ids).catch(() => {});
-      },
+      run: () => runButton(action, ids),
     }));
   }
+
+  /** Runs a user-defined button on these files, through the preview if it writes. */
+  function runButton(action: Action, ids: number[]) {
+    if (actionWrites(action.kind)) {
+      setRunning({ action, fileIds: ids });
+      return;
+    }
+    runUserAction(action, ids).catch(() => {});
+  }
+
+  /** Buttons given an icon, which also sit in the toolbar. */
+  const toolbarButtons = () =>
+    buttons().flatMap((action) => {
+      const icon = actionIcon(action.icon);
+      return icon
+        ? [{ id: action.id, label: action.label, icon, run: () => runButton(action, audioSelection()) }]
+        : [];
+    });
 
   /** Loads a row into the player, and remembers which tab it is walking. */
   function playRow(row: RowDisplay, tabId: number) {
@@ -1109,7 +1125,12 @@ export default function App() {
 
       <div class="topbar">
         <span class="grow" />
-        <Toolbar count={audioSelection().length} quickOpen={quickOpen()} onRun={runAction} />
+        <Toolbar
+          count={audioSelection().length}
+          quickOpen={quickOpen()}
+          onRun={runAction}
+          custom={toolbarButtons()}
+        />
         <div class="sizes" role="group" aria-label="Cover art size">
           <For each={ART_SIZES}>
             {(size) => (
@@ -1443,6 +1464,7 @@ export default function App() {
         onArt={(fileId) => setEditing([fileId])}
         onLocate={locatePlaying}
         settings={settings()}
+        onMeter={(meter) => commitSettings({ ...settings(), meter })}
       />
 
       <Show when={finding()}>

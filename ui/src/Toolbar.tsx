@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import {
   BroomIcon,
   CopiesIcon,
@@ -57,6 +57,8 @@ export default function Toolbar(props: {
   /** Whether the quick-tag panel is open, so its button can show it. */
   quickOpen: boolean;
   onRun: (id: ActionId) => void;
+  /** User-defined buttons that were given an icon, after the built-in ones. */
+  custom?: { id: string; label: string; icon: () => import("solid-js").JSX.Element; run: () => void }[];
 }) {
   /** Quick tag works on whatever is playing, so it never needs a selection. */
   const needsSelection = (id: ActionId) => id !== "quick";
@@ -94,6 +96,28 @@ export default function Toolbar(props: {
           );
         }}
       </For>
+      <Show when={props.custom?.length}>
+        <span class="toolsep" />
+        <For each={props.custom}>
+          {(button) => {
+            const off = () => props.count === 0;
+            return (
+              <button
+                class={`toolbtn ${off() ? "off" : ""}`}
+                data-tip={button.label}
+                aria-label={button.label}
+                aria-disabled={off()}
+                onClick={() => {
+                  if (off()) return;
+                  button.run();
+                }}
+              >
+                <button.icon />
+              </button>
+            );
+          }}
+        </For>
+      </Show>
     </div>
   );
 }

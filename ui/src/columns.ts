@@ -182,7 +182,10 @@ export function keyColour(canonical: number | null): string | undefined {
   const minor = canonical % 2 === 0;
   const hue = (160 - (number - 1) * 30 + 360) % 360;
 
-  return minor ? `hsl(${hue} 42% 66%)` : `hsl(${hue} 64% 66%)`;
+  // Lightness comes from the theme, so the wheel stays readable on a light one.
+  return minor
+    ? `hsl(${hue} 42% var(--key-l, 66%))`
+    : `hsl(${hue} 64% var(--key-l, 66%))`;
 }
 
 /** Moves a column to a new position, returning a new array. */

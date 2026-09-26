@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, For, Show } from "solid-js";
+import { createEffect, onCleanup, For, Show, type JSX } from "solid-js";
 
 /** One line of a menu: an action, or a rule between groups. */
 export type MenuItem =
@@ -13,6 +13,8 @@ export type MenuItem =
       disabled?: boolean;
       /** Draws a tick, for entries that toggle something on and off. */
       checked?: boolean;
+      /** Drawn before the label. */
+      icon?: () => JSX.Element;
       run: () => void;
     };
 
@@ -92,6 +94,9 @@ export default function Menu(props: {
                 >
                   <Show when={entry().checked !== undefined}>
                     <span class={`ctxtick ${entry().checked ? "on" : ""}`}>✓</span>
+                  </Show>
+                  <Show when={entry().icon}>
+                    {(icon) => <span class="ctxicon">{icon()()}</span>}
                   </Show>
                   <span class="ctxlabel">{entry().label}</span>
                   <Show when={entry().hint}>

@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup, Show } from "solid-js";
 import { transportCmd, transportState, thumbUrl, envelope, type Transport as T } from "./api";
 import Waveform from "./Waveform";
+import Meters, { nextMeter, type MeterMode } from "./Meters";
 import { keyColour } from "./columns";
 import {
   BackIcon,
@@ -10,6 +11,7 @@ import {
   PlayIcon,
   PrevIcon,
   StopIcon,
+  MutedIcon,
   VolumeIcon,
 } from "./icons";
 import { type Settings } from "./settings";
@@ -42,6 +44,8 @@ export default function Transport(props: {
   /** Double-clicking the name goes to the file, in whichever pane has focus. */
   onLocate: () => void;
   settings: Settings;
+  /** A click on the meter box steps to the next kind of meter. */
+  onMeter: (mode: MeterMode) => void;
 }) {
   const [scrubbing, setScrubbing] = createSignal<number | null>(null);
   const [wave, setWave] = createSignal<Uint8Array>(new Uint8Array());
@@ -133,15 +137,43 @@ export default function Transport(props: {
     transportCmd("seek", target).then(props.onState).catch(() => {});
   }
 
-  /** Artist and title if the tags have them, else the file name. */
-  const label = () => {
+  /** The title if the tags have one, else the file name. */
+  const title = () => {
     const s = props.state;
     if (!s) return "";
-    const artist = s.artist.trim();
-    const title = s.title.trim();
-    if (artist && title) return `${artist} - ${title}`;
-    return title || s.name;
+    return s.title.trim() || s.name;
   };
+
+  /** A tag value worth showing: the backend spells a missing one as a dash. */
+  const present = (v?: string | null) => {
+    const t = (v ?? "").trim();
+    return t && t !== "—" ? t : "";
+  };
+
+  /** Everything the name line knows, for the tooltip when it is cut short. */
+  const full = () => {
+    const s = props.state;
+    if (!s?.path) return "";
+    const artist = s.artist.trim();
+    return `${artist ? `${artist} - ` : ""}${title()}\n${s.path}`;
+  };
+
+  /**
+   * The level to go back to when unmuting. Muting is a volume of zero rather
+   * than a separate switch, so the slider always shows what is actually heard;
+   * this remembers where it was.
+   */
+  const [unmuteTo, setUnmuteTo] = createSignal(100);
+  const volume = () => props.state?.volume ?? 100;
+  const muted = () => volume() === 0;
+  function toggleMute() {
+    if (muted()) {
+      transportCmd("volume", unmuteTo() || 100).then(props.onState).catch(() => {});
+    } else {
+      setUnmuteTo(volume());
+      transportCmd("volume", 0).then(props.onState).catch(() => {});
+    }
+  }
 
   return (
     <div class={`transport ${loaded() ? "" : "idle"}`}>
@@ -170,26 +202,31 @@ export default function Transport(props: {
         </Show>
       </span>
 
-      <div class="tmeta">
+      {/* Title on top, artist beneath with the BPM and key beside it - two
+          short lines rather than one long one cut off halfway through the
+          second artist. The whole of it is in the tooltip. */}
+      <div class="tmeta" title={full()}>
         <span
           class={`tname ${loaded() ? "go" : ""}`}
-          title={props.state?.path || ""}
           data-tip={loaded() ? "Go to file" : undefined}
           data-tip-at="above start"
           onDblClick={() => loaded() && props.onLocate()}
         >
-          {label() || "Nothing loaded"}
+          {title() || "Nothing loaded"}
         </span>
         <span class="ttags">
-          <Show when={props.state?.bpm}>
-            <span class="mono">{props.state!.bpm}</span>
+          <Show when={present(props.state?.artist)}>
+            <span class="tartist">{present(props.state?.artist)}</span>
           </Show>
-          <Show when={props.state?.key}>
+          <Show when={present(props.state?.bpm)}>
+            <span class="mono">{present(props.state?.bpm)}</span>
+          </Show>
+          <Show when={present(props.state?.key)}>
             <span
               class="mono"
               style={{ color: keyColour(props.state!.keyNorm ?? null) }}
             >
-              {props.state!.key}
+              {present(props.state?.key)}
             </span>
           </Show>
         </span>
@@ -276,10 +313,25 @@ export default function Transport(props: {
 
       <span class="ttime mono">{props.state?.duration ?? "—"}</span>
 
-      <div class="tvol" title={`Volume ${props.state?.volume ?? 100}%`}>
-        <span class="tvolicon">
-          <VolumeIcon />
-        </span>
+      <Show when={props.settings.meter !== "off"}>
+        <Meters
+          mode={props.settings.meter}
+          playing={Boolean(props.state?.playing)}
+          onCycle={() => props.onMeter(nextMeter(props.settings.meter))}
+        />
+      </Show>
+
+      <div class="tvol" title={`Volume ${volume()}%`}>
+        <button
+          class={`tvolicon ${muted() ? "muted" : ""}`}
+          onClick={toggleMute}
+          data-tip={muted() ? "Unmute" : "Mute"}
+          data-tip-at="above"
+          aria-label={muted() ? "Unmute" : "Mute"}
+          aria-pressed={muted()}
+        >
+          {muted() ? <MutedIcon /> : <VolumeIcon />}
+        </button>
         <input
           type="range"
           min="0"

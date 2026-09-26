@@ -6,18 +6,20 @@
   --bg: #0a0a0c;
   --panel: #0e0e11;
   --raise: #131317;
-  --hair: rgba(238, 234, 228, 0.055);
-  --hair2: rgba(238, 234, 228, 0.1);
-  --fg: #eeeae4;
-  --fg2: rgba(238, 234, 228, 0.54);
-  --fg3: rgba(238, 234, 228, 0.28);
-  --fg4: rgba(238, 234, 228, 0.14);
-  --acc: #e8a55f;
+  --hair: rgba(var(--fg-rgb), 0.055);
+  --hair2: rgba(var(--fg-rgb), 0.1);
+  --fg-rgb: 238, 234, 228;
+  --fg: rgb(var(--fg-rgb));
+  --fg2: rgba(var(--fg-rgb), 0.54);
+  --fg3: rgba(var(--fg-rgb), 0.28);
+  --fg4: rgba(var(--fg-rgb), 0.14);
+  --acc-rgb: 232, 165, 95;
+  --acc: rgb(var(--acc-rgb));
   /* Muted accent, for shapes that fill real area rather than marking a point.
      The accent at full strength is meant for small marks; an 88px tile of it
      overwhelms everything else on screen. */
-  --acc-fill: rgba(232, 165, 95, 0.16);
-  --acc-line: rgba(232, 165, 95, 0.42);
+  --acc-fill: rgba(var(--acc-rgb), 0.16);
+  --acc-line: rgba(var(--acc-rgb), 0.42);
   --row-h: 26px;
   /* The interface face, replaced at runtime from settings. Segoe UI Variable
      Text is Windows 11's own, and is hinted for the 11-12px this is drawn at;
@@ -30,6 +32,111 @@
   --qual-good: #86c46a;
   --qual-bad: #e2685e;
   --qual-meh: #9aa0a6;
+  /* The meters in the transport: the conventional green, amber and red of a
+     level meter, softened to sit on this background. */
+  --meter-lo: #7fc46a;
+  --meter-mid: #e8c35f;
+  --meter-hi: #e2685e;
+  /* Lightness of the Camelot key colours; a light theme needs them darker. */
+  --key-l: 66%;
+}
+
+/* ── Themes ────────────────────────────────────────────────────────────────
+   Each is a set of token overrides on the root element, chosen in settings and
+   applied as `data-theme`. Nothing below the tokens knows which one is active,
+   so a theme is a palette rather than a second stylesheet to keep in step. The
+   default above is Sodium. */
+
+/* Cobalt: deep navy, one cold blue light. */
+:root[data-theme="cobalt"] {
+  --bg: #080b12;
+  --panel: #0b0f18;
+  --raise: #111725;
+  --fg-rgb: 226, 232, 244;
+  --acc-rgb: 98, 166, 255;
+  --meter-lo: #4fc9b0;
+  --meter-mid: #e6c25a;
+  --meter-hi: #ef6a6a;
+}
+
+/* Frost: slate greys and glacier cyan, after the Nord palette. */
+:root[data-theme="frost"] {
+  --bg: #1c2029;
+  --panel: #20252f;
+  --raise: #272d39;
+  --fg-rgb: 229, 233, 240;
+  --acc-rgb: 136, 192, 208;
+  --hair: rgba(var(--fg-rgb), 0.07);
+  --hair2: rgba(var(--fg-rgb), 0.13);
+  --qual-good: #a3be8c;
+  --qual-bad: #bf616a;
+  --meter-lo: #a3be8c;
+  --meter-mid: #ebcb8b;
+  --meter-hi: #bf616a;
+}
+
+/* Velvet: aubergine black and a rose light. */
+:root[data-theme="velvet"] {
+  --bg: #0f0a0e;
+  --panel: #140d13;
+  --raise: #1c1219;
+  --fg-rgb: 242, 229, 236;
+  --acc-rgb: 240, 122, 165;
+  --meter-lo: #9fd08a;
+  --meter-mid: #f0c47a;
+  --meter-hi: #f0607a;
+}
+
+/* Phosphor: a green CRT, for the booth. */
+:root[data-theme="phosphor"] {
+  --bg: #040705;
+  --panel: #060a07;
+  --raise: #0b120d;
+  --fg-rgb: 196, 242, 206;
+  --acc-rgb: 64, 240, 124;
+  --qual-good: #40f07c;
+  --qual-meh: #7fa88a;
+  --meter-lo: #40f07c;
+  --meter-mid: #d8f040;
+  --meter-hi: #f0643e;
+}
+
+/* Graphite: neutral greys, no colour at all but the accent. */
+:root[data-theme="graphite"] {
+  --bg: #141414;
+  --panel: #181818;
+  --raise: #202020;
+  --fg-rgb: 236, 236, 236;
+  --acc-rgb: 240, 240, 240;
+  --hair: rgba(var(--fg-rgb), 0.07);
+  --hair2: rgba(var(--fg-rgb), 0.12);
+  --acc-fill: rgba(var(--acc-rgb), 0.1);
+  --acc-line: rgba(var(--acc-rgb), 0.35);
+}
+
+/* Paper: the one light theme - warm off-white, ink, a burnt orange light.
+   The translucent greys are stronger than on a dark ground, where the same
+   alpha reads twice as bright. */
+:root[data-theme="paper"] {
+  --bg: #f3efe7;
+  --panel: #ede8de;
+  --raise: #e5dfd3;
+  --fg-rgb: 34, 30, 24;
+  --fg2: rgba(var(--fg-rgb), 0.64);
+  --fg3: rgba(var(--fg-rgb), 0.42);
+  --fg4: rgba(var(--fg-rgb), 0.2);
+  --hair: rgba(var(--fg-rgb), 0.09);
+  --hair2: rgba(var(--fg-rgb), 0.16);
+  --acc-rgb: 184, 84, 28;
+  --acc-fill: rgba(var(--acc-rgb), 0.13);
+  --acc-line: rgba(var(--acc-rgb), 0.5);
+  --qual-good: #3d8a2a;
+  --qual-bad: #c0392b;
+  --qual-meh: #6b7075;
+  --meter-lo: #3f9a3a;
+  --meter-mid: #c8961c;
+  --meter-hi: #c8412f;
+  --key-l: 40%;
 }
 
 * {
@@ -190,10 +297,10 @@ body {
   white-space: nowrap;
 }
 .row:hover {
-  background: rgba(238, 234, 228, 0.02);
+  background: rgba(var(--fg-rgb), 0.02);
 }
 .row.sel {
-  background: rgba(238, 234, 228, 0.045);
+  background: rgba(var(--fg-rgb), 0.045);
   box-shadow: inset 2px 0 0 var(--acc);
 }
 .row.dir {
@@ -527,7 +634,7 @@ body {
    about where you are. */
 .tnode.on {
   color: var(--fg);
-  background: rgba(238, 234, 228, 0.045);
+  background: rgba(var(--fg-rgb), 0.045);
   box-shadow: inset 2px 0 0 var(--acc);
 }
 .tlabel {
@@ -648,17 +755,17 @@ body.resizing * {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(238, 234, 228, 0.15);
+  background: rgba(var(--fg-rgb), 0.15);
   border: 3px solid transparent;
   background-clip: padding-box;
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(238, 234, 228, 0.3);
+  background: rgba(var(--fg-rgb), 0.3);
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:active {
-  background: rgba(238, 234, 228, 0.42);
+  background: rgba(var(--fg-rgb), 0.42);
   background-clip: padding-box;
 }
 /* Chromium draws stepper buttons at the ends by default; they have no place
@@ -789,7 +896,7 @@ body.resizing * {
   box-shadow: inset 2px 0 0 transparent;
 }
 .hit.on {
-  background: rgba(238, 234, 228, 0.05);
+  background: rgba(var(--fg-rgb), 0.05);
   box-shadow: inset 2px 0 0 var(--acc);
 }
 .hname {
@@ -892,7 +999,7 @@ body.resizing * {
   font-size: 11px;
 }
 .colopt:hover {
-  background: rgba(238, 234, 228, 0.05);
+  background: rgba(var(--fg-rgb), 0.05);
   color: var(--fg);
 }
 .tick {
@@ -1047,7 +1154,7 @@ body.resizing * {
   color: var(--fg4);
 }
 .ctxitem:hover {
-  background: rgba(238, 234, 228, 0.05);
+  background: rgba(var(--fg-rgb), 0.05);
   color: var(--fg);
 }
 
@@ -1115,7 +1222,7 @@ body.resizing * {
   flex-direction: column;
   justify-content: center;
   gap: 1px;
-  width: 200px;
+  width: 240px;
   flex: none;
   overflow: hidden;
 }
@@ -2946,4 +3053,155 @@ body.resizing-v {
 body.resizing-v * {
   cursor: row-resize !important;
   user-select: none;
+}
+
+/* ── Meters ────────────────────────────────────────────────────────────────
+   The box beside the time in the transport. A fixed size, so switching meter
+   never moves the waveform beside it. */
+.tmeter {
+  flex: none;
+  width: 150px;
+  height: 34px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.tmeter:hover {
+  background: var(--raise);
+}
+
+/* ── Theme picker ────────────────────────────────────────────────────────── */
+.themes {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 5px;
+}
+.themebtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 1px solid var(--hair2);
+  border-radius: 5px;
+  background: none;
+  color: var(--fg2);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.themebtn:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.themebtn.on {
+  border-color: var(--acc-line);
+  background: var(--acc-fill);
+  color: var(--acc);
+}
+/* Background, panel, text and accent, left to right, on the theme's ground. */
+.themesw {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.12);
+}
+.themesw span {
+  width: 7px;
+  height: 12px;
+  border-radius: 1px;
+}
+
+/* ── Icons on user-defined buttons ─────────────────────────────────────────── */
+.setrow.top {
+  align-items: flex-start;
+}
+.setrow.top .setlabel {
+  padding-top: 5px;
+}
+.iconpick {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 26px);
+  gap: 3px;
+}
+.iconbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  background: none;
+  color: var(--fg2);
+  cursor: pointer;
+}
+.iconbtn svg {
+  width: 14px;
+  height: 14px;
+}
+.iconbtn:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.iconbtn.on {
+  border-color: var(--acc-line);
+  background: var(--acc-fill);
+  color: var(--acc);
+}
+.iconbtn.none {
+  color: var(--fg4);
+}
+.acticon,
+.ctxicon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  color: var(--fg2);
+}
+.acticon svg,
+.ctxicon svg {
+  width: 13px;
+  height: 13px;
+}
+/* Between the built-in toolbar buttons and the user's own. */
+.toolsep {
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: var(--hair2);
+}
+
+/* The mute button: the volume glyph itself. */
+.tvolicon {
+  background: none;
+  border: 0;
+  padding: 2px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.tvolicon:hover {
+  color: var(--fg);
+}
+.tvolicon.muted {
+  color: var(--acc);
+}
+/* Second line of the transport's text: artist, then BPM and key. */
+.tartist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg2);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.ttags .mono {
+  flex: none;
+}
+/* The menu's gap is sized for label-to-hint; an icon sits closer. */
+.ctxicon {
+  margin-right: -14px;
 }
