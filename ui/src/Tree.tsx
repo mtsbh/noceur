@@ -2,6 +2,8 @@ import { createSignal, createMemo, createEffect, on, onCleanup, For, Show } from
 import { createStore } from "solid-js/store";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { folderIconUrl, roots, subdirs, type Segment } from "./api";
+import Menu, { type MenuItem } from "./Menu";
+import { NewFolderIcon, StarIcon, TabIcon } from "./icons";
 
 const PIN_KEY = "noceur.pinned";
 const DRIVES_KEY = "noceur.showDrives";
@@ -54,6 +56,15 @@ export default function Tree(props: {
    * dropping onto the other pane, and goes through the same shell operation.
    */
   dropKey: string | null;
+  /** Makes a folder inside this one. */
+  onNewFolder: (parent: string) => void;
+  /** Opens this folder in a new tab of the focused pane. */
+  onOpenTab: (path: string) => void;
+  /**
+   * Re-reads one branch, after something was made inside it. `n` changes on
+   * every request, so asking twice for the same folder still reloads it.
+   */
+  reload: { path: string; n: number } | null;
 }) {
   const [rootList, setRootList] = createSignal<Segment[]>([]);
   const [pins, setPins] = createSignal<string[]>(storedPins());
@@ -168,6 +179,47 @@ export default function Tree(props: {
     ),
   );
 
+  // A branch something was just made in: forget what it held and read it
+  // again, opened, so the new folder is on screen where it was asked for.
+  createEffect(
+    on(
+      () => props.reload,
+      (r) => {
+        if (!r) return;
+        setChildren(r.path, undefined as unknown as Segment[]);
+        loading.delete(r.path);
+        setOpen(r.path, true);
+        load(r.path);
+      },
+      { defer: true },
+    ),
+  );
+
+  const [menu, setMenu] = createSignal<{ x: number; y: number; path: string } | null>(null);
+
+  const menuItems = (path: string): MenuItem[] => [
+    {
+      kind: "item",
+      label: "New folder…",
+      hint: "ctrl+shift+n",
+      icon: NewFolderIcon,
+      run: () => props.onNewFolder(path),
+    },
+    {
+      kind: "item",
+      label: "Open in new tab",
+      icon: TabIcon,
+      run: () => props.onOpenTab(path),
+    },
+    { kind: "separator" },
+    {
+      kind: "item",
+      label: isPinned(path) ? "Unpin" : "Pin",
+      icon: StarIcon,
+      run: () => togglePin(path),
+    },
+  ];
+
   const isCurrent = (path: string) => norm(path) === norm(props.current);
 
   /**
@@ -257,6 +309,11 @@ export default function Tree(props: {
                         }`}
                         style={{ "padding-left": `${8 + l.depth * 13}px` }}
                         onClick={() => props.onNavigate(l.path)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMenu({ x: e.clientX, y: e.clientY, path: l.path });
+                        }}
                         title={l.path}
                         data-drop={`tree:${l.path}`}
                         data-path={l.path}
@@ -303,6 +360,11 @@ export default function Tree(props: {
           }}
         </For>
       </div>
+      <Show when={menu()}>
+        {(m) => (
+          <Menu x={m().x} y={m().y} items={menuItems(m().path)} onClose={() => setMenu(null)} />
+        )}
+      </Show>
     </div>
   );
 }

@@ -60,6 +60,8 @@ pub struct TrackMeta {
     pub lossless: bool,
     /// Whether the file carries embedded artwork. The bytes are not loaded here.
     pub has_artwork: bool,
+    /// Stars, 1..=5, or `None` when the file carries no rating.
+    pub rating: Option<u8>,
 }
 
 /// Reads and normalises the tags and audio properties of one file.
@@ -99,6 +101,20 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
     };
 
     apply_tag(&mut meta, tag);
+
+    // Everything but ID3 keeps the rating as ordinary text. ID3's `POPM` is kept
+    // out of lofty's generic tag, so for those containers it is read directly -
+    // a second look at the tag, and only for the files that need it.
+    meta.rating = tag
+        .get_string(&ItemKey::Popularimeter)
+        .and_then(|v| v.trim().parse::<u8>().ok())
+        .map(crate::rating::stars_from_byte)
+        .or_else(|| {
+            crate::rating::uses_id3(tagged.file_type())
+                .then(|| crate::rating::read_id3(path))
+                .flatten()
+        })
+        .filter(|&stars| stars > 0);
 
     Ok(meta)
 }

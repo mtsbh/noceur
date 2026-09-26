@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
-import { CloseIcon } from "./icons";
+import { ACTION_ICONS, CloseIcon } from "./icons";
 import { type Action, type ActionKind } from "./api";
 import {
   CUSTOM_RECIPE,
@@ -138,6 +138,35 @@ export default function ActionEditor(props: {
               onInput={(e) => patch({ label: e.currentTarget.value })}
             />
           </div>
+
+          <div class="setrow top">
+            <span class="setlabel">Icon</span>
+            <div class="iconpick" role="group" aria-label="Icon">
+              <button
+                class={`iconbtn none ${props.action.icon ? "" : "on"}`}
+                data-tip="None - menu only"
+                onClick={() => patch({ icon: "" })}
+              >
+                —
+              </button>
+              <For each={ACTION_ICONS}>
+                {(i) => (
+                  <button
+                    class={`iconbtn ${props.action.icon === i.name ? "on" : ""}`}
+                    data-tip={i.label}
+                    aria-label={i.label}
+                    aria-pressed={props.action.icon === i.name}
+                    onClick={() => patch({ icon: i.name })}
+                  >
+                    <i.icon />
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+          <Show when={props.action.icon}>
+            <p class="acthint">Buttons with an icon also sit in the toolbar.</p>
+          </Show>
 
           <div class="setrow">
             <span class="setlabel">Does</span>

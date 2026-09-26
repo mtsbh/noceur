@@ -1,4 +1,4 @@
-import { For, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 /** Bands up the height. Must match `BANDS` in `noceur-audio`. */
 const BANDS = 256;
@@ -93,9 +93,41 @@ export default function Spectrogram(props: {
   durationMs: number;
   /** Shown above the picture, as Spek does. */
   name: string;
+  /** Moves playback to a position, in milliseconds. */
+  onSeek: (ms: number) => void;
 }) {
   let canvas: HTMLCanvasElement | undefined;
   const [size, setSize] = createSignal({ w: 0, h: 0 });
+  /** Fraction under the pointer while dragging, which the playhead follows. */
+  const [scrubbing, setScrubbing] = createSignal<number | null>(null);
+  /** Where the pointer is over the plot, for the time readout. */
+  const [hover, setHover] = createSignal<number | null>(null);
+
+  const fractionAt = (e: PointerEvent) => {
+    if (!canvas) return 0;
+    const box = canvas.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+  };
+
+  /**
+   * Click or drag to seek, as on the waveform: the playhead follows the drag
+   * and the seek is sent once, on release, rather than on every move.
+   */
+  function startScrub(e: PointerEvent) {
+    if (props.durationMs <= 0 || e.button !== 0) return;
+    e.preventDefault();
+    setScrubbing(fractionAt(e));
+    const move = (ev: PointerEvent) => setScrubbing(fractionAt(ev));
+    const stop = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      const at = fractionAt(ev);
+      setScrubbing(null);
+      props.onSeek(Math.round(at * props.durationMs));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
 
   const columns = () =>
     props.grid.length > 0 ? Math.floor(props.grid.length / BANDS) : 0;
@@ -198,7 +230,8 @@ export default function Spectrogram(props: {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(image, 0, 0, box.w, box.h);
 
-    const at = Math.round(box.w * Math.min(1, Math.max(0, props.progress)));
+    const played = scrubbing() ?? props.progress;
+    const at = Math.round(box.w * Math.min(1, Math.max(0, played)));
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.fillRect(at, 0, 1, box.h);
   }
@@ -232,8 +265,24 @@ export default function Spectrogram(props: {
           </For>
         </div>
 
-        <div class="spekplot">
+        <div
+          class={`spekplot ${props.durationMs > 0 ? "seekable" : ""}`}
+          onPointerDown={startScrub}
+          onPointerMove={(e) => setHover(fractionAt(e))}
+          onPointerLeave={() => setHover(null)}
+        >
           <canvas ref={(el) => (canvas = el)} />
+          <Show when={props.durationMs > 0 && (scrubbing() ?? hover()) !== null}>
+            <span
+              class="spekat mono"
+              style={{
+                left: `${(scrubbing() ?? hover()!) * 100}%`,
+                "--f": String(scrubbing() ?? hover()!),
+              }}
+            >
+              {clock((scrubbing() ?? hover()!) * seconds())}
+            </span>
+          </Show>
         </div>
 
         <div class="speklegend">

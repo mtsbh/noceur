@@ -78,6 +78,10 @@ pub struct Action {
     /// The recipe's inputs, kept for the same reason.
     #[serde(default)]
     pub slots: Vec<String>,
+    /// Name of the icon the button is drawn with, or empty for none. Only the
+    /// frontend knows the set; a button with one also sits in the toolbar.
+    #[serde(default)]
+    pub icon: String,
 }
 
 impl Action {
@@ -617,6 +621,7 @@ mod tests {
             script: script.into(),
             recipe: String::new(),
             slots: Vec::new(),
+            icon: String::new(),
         }
     }
 

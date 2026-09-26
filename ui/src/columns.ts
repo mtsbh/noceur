@@ -45,6 +45,7 @@ export const DEFAULT_COLUMNS: Column[] = [
   { key: "sampleRate", label: "Rate", width: 74, num: true, visible: false },
   { key: "bitDepth", label: "Depth", width: 62, num: true, visible: false },
   { key: "codec", label: "Codec", width: 78, dim: true, visible: false },
+  { key: "rating", label: "Rating", width: 80, visible: true },
   { key: "size", label: "Size", width: 88, num: true, visible: true },
   { key: "modified", label: "Date", width: 120, num: true, visible: false },
 ];
@@ -154,6 +155,8 @@ export function cellText(row: RowDisplay, key: SortColumn): string {
       return row.bitDepth;
     case "codec":
       return row.codec;
+    case "rating":
+      return row.rating ? `${row.rating} of 5 stars` : row.kind === 1 ? "Unrated" : "";
     case "size":
       return row.size;
     case "modified":
@@ -182,7 +185,10 @@ export function keyColour(canonical: number | null): string | undefined {
   const minor = canonical % 2 === 0;
   const hue = (160 - (number - 1) * 30 + 360) % 360;
 
-  return minor ? `hsl(${hue} 42% 66%)` : `hsl(${hue} 64% 66%)`;
+  // Lightness comes from the theme, so the wheel stays readable on a light one.
+  return minor
+    ? `hsl(${hue} 42% var(--key-l, 66%))`
+    : `hsl(${hue} 64% var(--key-l, 66%))`;
 }
 
 /** Moves a column to a new position, returning a new array. */

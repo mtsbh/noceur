@@ -24,6 +24,8 @@ export type RowDisplay = {
   /** `16 bit`, or empty for formats with no bit depth. */
   bitDepth: string;
   codec: string;
+  /** Stars, 0 for unrated. */
+  rating: number;
   size: string;
   /** `YYYY-MM-DD HH:MM` in UTC — when the file changed, not when it was released. */
   modified: string;
@@ -111,6 +113,7 @@ export type SortColumn =
   | "sampleRate"
   | "bitDepth"
   | "codec"
+  | "rating"
   | "size"
   | "modified";
 
@@ -327,6 +330,33 @@ export function shellMenu(fileIds: number[]): Promise<void> {
 /** Opens a link in the default browser. Only http and https are accepted. */
 export function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
+}
+
+/** What the meters read: the newest frames sent to the output. */
+export type ScopeFrames = {
+  /** Sample rate the frames play at. */
+  rate: number;
+  left: Float32Array;
+  right: Float32Array;
+};
+
+/**
+ * The newest `frames` stereo frames sent to the output, taken before the volume.
+ *
+ * Comes back as raw bytes - see `scope_frames` in `commands.rs` for the layout.
+ */
+export async function scopeFrames(frames: number): Promise<ScopeFrames> {
+  const buf = await invoke<ArrayBuffer>("scope_frames", { frames });
+  const view = new DataView(buf);
+  const rate = view.byteLength >= 4 ? view.getUint32(0, true) : 44100;
+  const n = Math.max(0, (view.byteLength - 4) >> 2);
+  const left = new Float32Array(n);
+  const right = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    left[i] = view.getInt16(4 + i * 4, true) / 32767;
+    right[i] = view.getInt16(6 + i * 4, true) / 32767;
+  }
+  return { rate, left, right };
 }
 
 /**
@@ -674,6 +704,8 @@ export type Action = {
   recipe: string;
   /** The recipe's own inputs, in the order it asks for them. */
   slots: string[];
+  /** Name from `ACTION_ICONS`, or empty. A button with an icon is also in the toolbar. */
+  icon?: string;
 };
 
 /** What an action would do to one file. */
@@ -777,4 +809,86 @@ export function previewCleanup(
 /** Applies exactly what the preview showed. */
 export function applyCleanup(items: CleanApply[]): Promise<WriteReport> {
   return invoke<WriteReport>("apply_cleanup", { items });
+}
+
+// ── Converter ──────────────────────────────────────────────────────────────
+
+export type ConvertFormat = "wav" | "aiff" | "flac" | "alac";
+export type ConvertDepth = "source" | "16" | "24";
+
+export type ConvertOptions = {
+  format: ConvertFormat;
+  depth: ConvertDepth;
+  /** Empty for beside each source. */
+  folder: string;
+  replace: boolean;
+  verify: boolean;
+};
+
+/** Which ffmpeg the converter uses. `path` is empty when none was found. */
+export type FfmpegInfo = { path: string; version: string; configured: string };
+
+export type ConvertPlanned = {
+  fileId: number;
+  name: string;
+  from: string;
+  to: string;
+  output: string;
+  /** Whether the output will hold exactly the source's samples. */
+  exact: boolean;
+  /** Why it will be skipped; empty when it will not. */
+  problem: string;
+};
+
+export type Converted = {
+  fileId: number;
+  output: string;
+  ok: boolean;
+  /** True when the audio was compared with the source and matched. */
+  verified: boolean | null;
+  message: string;
+};
+
+export function ffmpegInfo(): Promise<FfmpegInfo> {
+  return invoke<FfmpegInfo>("ffmpeg_info");
+}
+
+export function setFfmpegPath(path: string): Promise<FfmpegInfo> {
+  return invoke<FfmpegInfo>("set_ffmpeg_path", { path });
+}
+
+export function convertPlan(fileIds: number[], options: ConvertOptions): Promise<ConvertPlanned[]> {
+  return invoke<ConvertPlanned[]>("convert_plan", { fileIds, options });
+}
+
+export function convertFile(fileId: number, options: ConvertOptions): Promise<Converted> {
+  return invoke<Converted>("convert_file", { fileId, options });
+}
+
+/**
+ * Makes a folder in `parent` and returns its path. An empty name makes
+ * "New folder", numbered past any that exist.
+ */
+export function createFolder(parent: string, name: string): Promise<string> {
+  return invoke<string>("create_folder", { parent, name });
+}
+
+// ── Tags from file name ────────────────────────────────────────────────────
+
+export type FromNameRow = {
+  fileId: number;
+  /** What the pattern was laid over: the name, plus a folder per `\`. */
+  name: string;
+  /** `[label, value]` for each field that will be written. */
+  fields: [string, string][];
+  /** Why nothing will be written; empty when something will. */
+  problem: string;
+};
+
+export function previewFromName(fileIds: number[], pattern: string): Promise<FromNameRow[]> {
+  return invoke<FromNameRow[]>("preview_from_name", { fileIds, pattern });
+}
+
+export function applyFromName(fileIds: number[], pattern: string): Promise<WriteReport> {
+  return invoke<WriteReport>("apply_from_name", { fileIds, pattern });
 }

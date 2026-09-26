@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
-import { CloseIcon } from "./icons";
+import { CloseIcon, actionIcon } from "./icons";
 import {
   actions,
   credentials,
@@ -8,6 +8,9 @@ import {
   setActions,
   setDiscogsToken,
   setPreserveDates,
+  ffmpegInfo,
+  setFfmpegPath,
+  type FfmpegInfo,
   type Action,
   type ActionKind,
 } from "./api";
@@ -15,6 +18,8 @@ import type { Column } from "./columns";
 import { CUSTOM, UI_FONTS, cleanFamily, head, installed } from "./fonts";
 import { recipesFor } from "./recipes";
 import ActionEditor from "./ActionEditor";
+import { THEMES } from "./themes";
+import { METER_MODES } from "./Meters";
 import {
   NEW_QUICK_GROUP,
   QUICK_KEYS,
@@ -183,6 +188,11 @@ export default function Settings(props: {
     preserveDates().then(setKeepDates).catch(() => {});
   });
 
+  const [ffmpeg, setFfmpeg] = createSignal<FfmpegInfo | null>(null);
+  createEffect(() => {
+    ffmpegInfo().then(setFfmpeg).catch(() => {});
+  });
+
   const [token, setToken] = createSignal("");
   const [hasDiscogs, setHasDiscogs] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
@@ -220,6 +230,64 @@ export default function Settings(props: {
             }
           }}
         >
+          <Section
+            title="Appearance"
+            info={
+              <>
+                <p>
+                  Each <b>theme</b> recolours the whole window, the waveform and
+                  the meters with it. Paper is the one light theme.
+                </p>
+                <p>
+                  The <b>meter</b> is the small box beside the time in the
+                  transport. Clicking it steps to the next kind. It reads the
+                  audio before the volume slider, so it shows how loud the file
+                  is rather than how loud you have it: a peak meter like AIMP's,
+                  a pair of VU needles, an oscilloscope, a vectorscope with a
+                  phase correlation bar, or a spectrum.
+                </p>
+              </>
+            }
+          >
+            <div class="setrow">
+              <span class="setlabel">Theme</span>
+              <div class="themes" role="group">
+                <For each={THEMES}>
+                  {(t) => (
+                    <button
+                      class={`themebtn ${props.settings.theme === t.name ? "on" : ""}`}
+                      onClick={() => patch({ theme: t.name })}
+                      aria-pressed={props.settings.theme === t.name}
+                    >
+                      <span class="themesw" style={{ background: t.swatch[0] }}>
+                        <span style={{ background: t.swatch[1] }} />
+                        <span style={{ background: t.swatch[2] }} />
+                        <span style={{ background: t.swatch[3] }} />
+                      </span>
+                      {t.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+
+            <div class="setrow">
+              <span class="setlabel">Meter</span>
+              <div class="setseg wrap" role="group">
+                <For each={[{ value: "off", short: "Off" } as const, ...METER_MODES]}>
+                  {(m) => (
+                    <button
+                      class={`segbtn ${props.settings.meter === m.value ? "on" : ""}`}
+                      onClick={() => patch({ meter: m.value })}
+                    >
+                      {m.short}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Section>
+
           <Section
             title="Waveform"
             info={
@@ -511,6 +579,9 @@ export default function Settings(props: {
             <For each={buttons()}>
               {(a, at) => (
                 <div class="actrow" onClick={() => setEditingAction(at())}>
+                  <Show when={actionIcon(a.icon)}>
+                    {(icon) => <span class="acticon">{icon()()}</span>}
+                  </Show>
                   <span class="actname">{a.label || "Unnamed"}</span>
                   <span class="actkind">{KIND_LABELS[a.kind]}</span>
                   <button
@@ -661,6 +732,64 @@ export default function Settings(props: {
                 <span>Hide files that are not audio</span>
               </label>
             </div>
+          </Section>
+
+          <Section
+            title="Converter"
+            info={
+              <>
+                <p>
+                  Converting uses ffmpeg. Noceur looks for it here first, then
+                  for <code>ffmpeg.exe</code> beside Noceur (or in an{" "}
+                  <code>ffmpeg</code> or <code>ffmpeg\bin</code> folder beside
+                  it), then on your PATH - so a portable copy next to the app
+                  just works.
+                </p>
+                <p>
+                  The converter keeps each file's bit depth and sample rate, so
+                  WAV, AIFF, FLAC and ALAC convert into each other without losing
+                  a sample, and can check each result against its original.
+                </p>
+              </>
+            }
+          >
+            <div class="setrow">
+              <span class="setlabel">ffmpeg</span>
+              <input
+                type="text"
+                value={ffmpeg()?.configured ?? ""}
+                placeholder="Found automatically"
+                spellcheck={false}
+                onChange={(e) =>
+                  setFfmpegPath(e.currentTarget.value).then(setFfmpeg).catch(() => {})
+                }
+              />
+            </div>
+            <Show when={ffmpeg()}>
+              {(f) => (
+                <p class="acthint">
+                  <Show
+                    when={f().path}
+                    fallback={
+                      <>
+                        Not found.{" "}
+                        <a
+                          class="setlink"
+                          onClick={() =>
+                            openUrl("https://www.gyan.dev/ffmpeg/builds/").catch(() => {})
+                          }
+                        >
+                          Get a Windows build
+                        </a>{" "}
+                        and put ffmpeg.exe beside Noceur.
+                      </>
+                    }
+                  >
+                    {f().version || "ffmpeg"} · {f().path}
+                  </Show>
+                </p>
+              )}
+            </Show>
           </Section>
 
           <Section

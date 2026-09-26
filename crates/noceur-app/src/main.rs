@@ -11,12 +11,15 @@ mod autotag;
 mod cleanup;
 mod commands;
 mod config;
+mod convert;
 mod covers;
 mod dragdrop;
 mod dto;
 mod fileops;
 mod format;
+mod fromname;
 mod identity;
+mod newfolder;
 mod placement;
 mod quality;
 mod renamer;
@@ -118,6 +121,14 @@ fn main() {
             commands::play,
             commands::transport_cmd,
             commands::transport_state,
+            commands::scope_frames,
+            convert::ffmpeg_info,
+            convert::set_ffmpeg_path,
+            convert::convert_plan,
+            convert::convert_file,
+            newfolder::create_folder,
+            fromname::preview_from_name,
+            fromname::apply_from_name,
             commands::reveal,
             commands::path_of,
             commands::start_drag,

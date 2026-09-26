@@ -243,15 +243,15 @@ fn probe_target(
     db.conn().execute(
         "INSERT INTO content_tag (content_id, artist, title, album, album_artist, genre,
                                   year, track_no, comment, isrc, bpm_tag, key_tag,
-                                  key_norm, has_artwork, read_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
+                                  key_norm, has_artwork, read_at, rating)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
          ON CONFLICT(content_id) DO UPDATE SET
              artist=excluded.artist, title=excluded.title, album=excluded.album,
              album_artist=excluded.album_artist, genre=excluded.genre,
              year=excluded.year, track_no=excluded.track_no, comment=excluded.comment,
              isrc=excluded.isrc, bpm_tag=excluded.bpm_tag, key_tag=excluded.key_tag,
              key_norm=excluded.key_norm, has_artwork=excluded.has_artwork,
-             read_at=excluded.read_at",
+             read_at=excluded.read_at, rating=excluded.rating",
         params![
             content_id,
             meta.artist,
@@ -276,6 +276,7 @@ fn probe_target(
             // re-read it forever. Recording the mtime we actually read says
             // what is true: the tags are current as of that stamp.
             now().max(file_mtime),
+            meta.rating.map(|v| v as i64),
         ],
     )?;
 
@@ -971,6 +972,56 @@ mod tests {
 
     /// The row has to agree with Explorer about the file's size after an edit,
     /// and a stale mtime would also convince the next scan nothing had changed.
+    /// A rating set from the list is written to the file and re-read from it,
+    /// so the index must pick it up on a reprobe - and sort by it.
+    #[test]
+    fn a_rating_is_read_into_the_index_and_sorts() {
+        let (db, dir, vol) = setup();
+        for (name, stars) in [("low.wav", "2"), ("high.wav", "5"), ("none.wav", "")] {
+            let path = dir.path().join(name);
+            write_wav(&path);
+            if !stars.is_empty() {
+                noceur_tags::edit::write(
+                    &path,
+                    &noceur_tags::Edit {
+                        rating: noceur_tags::Change::Set(stars.into()),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            }
+        }
+        let dir_id = scan_dir(&db, vol, dir.path()).unwrap();
+        probe_dir(&db, dir_id).unwrap();
+
+        let rows = crate::query::list(
+            &db,
+            dir_id,
+            crate::query::ListOptions {
+                sort: crate::query::SortColumn::Rating,
+                desc: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let rated: Vec<(String, Option<i64>)> = rows
+            .into_iter()
+            .filter(|r| {
+                r.name.ends_with(".wav")
+                    && ["low.wav", "high.wav", "none.wav"].contains(&r.name.as_str())
+            })
+            .map(|r| (r.name, r.rating))
+            .collect();
+        assert_eq!(
+            rated,
+            vec![
+                ("high.wav".to_string(), Some(5)),
+                ("low.wav".to_string(), Some(2)),
+                ("none.wav".to_string(), None),
+            ]
+        );
+    }
+
     #[test]
     fn reprobing_refreshes_the_size_the_listing_shows() {
         let (db, dir, vol) = setup();

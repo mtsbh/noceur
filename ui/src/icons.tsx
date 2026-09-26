@@ -260,3 +260,240 @@ export function SplitRowsIcon() {
     </Icon>
   );
 }
+
+/** The volume glyph with the waves struck out, for a muted transport. */
+export function MutedIcon() {
+  return (
+    <Icon>
+      <path {...solid} d="M7.2 3.1 4.4 5.4H2.6a.6.6 0 0 0-.6.6v4a.6.6 0 0 0 .6.6h1.8l2.8 2.3a.6.6 0 0 0 .98-.47V3.57a.6.6 0 0 0-.98-.47Z" />
+      <path d="m10.4 6.2 3.2 3.6M13.6 6.2l-3.2 3.6" />
+    </Icon>
+  );
+}
+
+/* ── Icons for user-defined buttons ─────────────────────────────────────────
+   A small fixed set rather than anything free-form, drawn on the same grid as
+   the toolbar's own so a custom button sits beside them without looking
+   borrowed. */
+
+export function DriveIcon() {
+  return (
+    <Icon>
+      <rect x="2.2" y="4.2" width="11.6" height="7.6" rx="1.3" />
+      <path d="M2.4 9h11.2" />
+      <circle cx="11.2" cy="10.4" r=".5" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+export function UsbIcon() {
+  return (
+    <Icon>
+      <rect x="5" y="6.2" width="6" height="7.6" rx="1" />
+      <path d="M6.2 6.2V2.4h3.6v3.8" />
+      <path d="M7.2 4h.01M8.8 4h.01" />
+    </Icon>
+  );
+}
+
+export function FolderIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 4.4a1 1 0 0 1 1-1h2.9l1.3 1.4h4.9a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1Z" />
+    </Icon>
+  );
+}
+
+export function MoveIcon() {
+  return (
+    <Icon>
+      <path d="M2.6 8h9.6" />
+      <path d="m9.2 4.8 3.2 3.2-3.2 3.2" />
+      <path d="M13.6 3v10" />
+    </Icon>
+  );
+}
+
+export function OpenIcon() {
+  return (
+    <Icon>
+      <path d="M12.6 9v3.4a1 1 0 0 1-1 1H3.6a1 1 0 0 1-1-1V4.4a1 1 0 0 1 1-1H7" />
+      <path d="M9.6 2.6h3.8v3.8M13.2 2.8 7.6 8.4" />
+    </Icon>
+  );
+}
+
+export function SearchIcon() {
+  return (
+    <Icon>
+      <circle cx="7" cy="7" r="4.2" />
+      <path d="m10.1 10.1 3.4 3.4" />
+    </Icon>
+  );
+}
+
+export function NoteIcon() {
+  return (
+    <Icon>
+      <path d="M6 11.6V3.4l6.4-1.2v8" />
+      <circle cx="4.4" cy="11.6" r="1.6" />
+      <circle cx="10.8" cy="10.2" r="1.6" />
+    </Icon>
+  );
+}
+
+export function HeartIcon() {
+  return (
+    <Icon>
+      <path d="M8 13.2S2.4 10 2.4 6.2a2.9 2.9 0 0 1 5.6-1.1 2.9 2.9 0 0 1 5.6 1.1C13.6 10 8 13.2 8 13.2Z" />
+    </Icon>
+  );
+}
+
+export function FlagIcon() {
+  return (
+    <Icon>
+      <path d="M3.4 14V2.6" />
+      <path d="M3.4 3h8.4l-1.8 2.9 1.8 2.9H3.4" />
+    </Icon>
+  );
+}
+
+export function HeadphonesIcon() {
+  return (
+    <Icon>
+      <path d="M2.8 10.4V8a5.2 5.2 0 0 1 10.4 0v2.4" />
+      <rect x="2.4" y="9.4" width="2.6" height="4" rx=".8" />
+      <rect x="11" y="9.4" width="2.6" height="4" rx=".8" />
+    </Icon>
+  );
+}
+
+export function CrateIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 5.2h11.2v7.6a.8.8 0 0 1-.8.8H3.2a.8.8 0 0 1-.8-.8Z" />
+      <path d="M5.4 5.2 6.4 2.4M10.6 5.2 9.6 2.4M5.2 8.6h5.6" />
+    </Icon>
+  );
+}
+
+/** What a user-defined button can wear, in the order the picker shows them. */
+export const ACTION_ICONS: { name: string; label: string; icon: () => JSX.Element }[] = [
+  { name: "bolt", label: "Bolt", icon: BoltIcon },
+  { name: "drive", label: "Drive", icon: DriveIcon },
+  { name: "usb", label: "USB stick", icon: UsbIcon },
+  { name: "folder", label: "Folder", icon: FolderIcon },
+  { name: "move", label: "Move", icon: MoveIcon },
+  { name: "copy", label: "Copy", icon: CopiesIcon },
+  { name: "open", label: "Open", icon: OpenIcon },
+  { name: "search", label: "Search", icon: SearchIcon },
+  { name: "globe", label: "Web", icon: GlobeIcon },
+  { name: "tag", label: "Tag", icon: TagIcon },
+  { name: "rename", label: "Rename", icon: RenameIcon },
+  { name: "note", label: "Music", icon: NoteIcon },
+  { name: "headphones", label: "Headphones", icon: HeadphonesIcon },
+  { name: "crate", label: "Crate", icon: CrateIcon },
+  { name: "star", label: "Star", icon: StarIcon },
+  { name: "heart", label: "Heart", icon: HeartIcon },
+  { name: "flag", label: "Flag", icon: FlagIcon },
+];
+
+/** The icon a button was given, or `undefined` for none or one this build lacks. */
+export function actionIcon(name?: string) {
+  return name ? ACTION_ICONS.find((i) => i.name === name)?.icon : undefined;
+}
+
+/* ── Menu and converter icons ─────────────────────────────────────────────── */
+
+/** Two arrows chasing each other: one format into another. */
+export function ConvertIcon() {
+  return (
+    <Icon>
+      <path d="M2.8 6.2a5.2 5.2 0 0 1 9.4-2" />
+      <path d="M12.6 2.2v2.4h-2.4" />
+      <path d="M13.2 9.8a5.2 5.2 0 0 1-9.4 2" />
+      <path d="M3.4 13.8v-2.4h2.4" />
+    </Icon>
+  );
+}
+
+export function ClipboardIcon() {
+  return (
+    <Icon>
+      <rect x="3.4" y="3.2" width="9.2" height="10.8" rx="1.1" />
+      <path d="M6 3.2V2.6a.6.6 0 0 1 .6-.6h2.8a.6.6 0 0 1 .6.6v.6" />
+      <path d="M5.8 7.4h4.4M5.8 10h3" />
+    </Icon>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <Icon>
+      <path d="M2.8 4.4h10.4M6.2 4.4V3a.6.6 0 0 1 .6-.6h2.4a.6.6 0 0 1 .6.6v1.4" />
+      <path d="m4 4.4.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6" />
+      <path d="M6.6 7v4.2M9.4 7v4.2" />
+    </Icon>
+  );
+}
+
+export function WindowsIcon() {
+  return (
+    <Icon>
+      <rect x="2.6" y="2.6" width="4.8" height="4.8" rx=".5" />
+      <rect x="8.6" y="2.6" width="4.8" height="4.8" rx=".5" />
+      <rect x="2.6" y="8.6" width="4.8" height="4.8" rx=".5" />
+      <rect x="8.6" y="8.6" width="4.8" height="4.8" rx=".5" />
+    </Icon>
+  );
+}
+
+export function VinylIcon() {
+  return (
+    <Icon>
+      <circle cx="8" cy="8" r="5.8" />
+      <circle cx="8" cy="8" r="1.8" />
+      <path d="M4.6 5.6a4 4 0 0 1 2-1.4" />
+    </Icon>
+  );
+}
+
+export function VideoIcon() {
+  return (
+    <Icon>
+      <rect x="1.8" y="3.6" width="12.4" height="8.8" rx="2" />
+      <path {...solid} d="M6.8 6.1v3.8L10 8Z" />
+    </Icon>
+  );
+}
+
+export function TabIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 13V4.2a.8.8 0 0 1 .8-.8h3.4l1 1.6h5.2a.8.8 0 0 1 .8.8V13a.8.8 0 0 1-.8.8H3.2a.8.8 0 0 1-.8-.8Z" />
+      <path d="M8 7.6v4M6 9.6h4" />
+    </Icon>
+  );
+}
+
+export function NewFolderIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 4.4a1 1 0 0 1 1-1h2.9l1.3 1.4h4.9a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1Z" />
+      <path d="M8 7.4v3.6M6.2 9.2h3.6" />
+    </Icon>
+  );
+}
+
+/** A name turning into a tag: the file-name-to-tags dialog. */
+export function NameToTagIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 4h6M2.4 6.8h4" />
+      <path d="m7 10.4 1.6 1.6L7 13.6" />
+      <path d="M2.4 12h6" />
+      <path d="M9.6 6.6V3.8a.5.5 0 0 1 .5-.5h2.8l1.6 1.6v2.8l-2.4 2.4a.5.5 0 0 1-.7 0l-1.6-1.6a.5.5 0 0 1-.2-.3Z" />
+    </Icon>
+  );
+}

@@ -20,6 +20,7 @@ import {
   dropEffect,
   shellMenu,
   spectrogram,
+  writeTags,
   type TagField,
   actions,
   runAction as runUserAction,
@@ -47,6 +48,9 @@ import Quality from "./Quality";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
+import Converter from "./Converter";
+import NewFolder from "./NewFolder";
+import FromName from "./FromName";
 import Titlebar from "./Titlebar";
 import Pane, { type PaneHandle } from "./Pane";
 import Tabs, { type TabDrop } from "./Tabs";
@@ -66,9 +70,35 @@ import {
   type Layout,
   type Tab,
 } from "./layout";
-import { BoltIcon, PigIcon, SettingsIcon, SplitColsIcon, SplitRowsIcon } from "./icons";
+import {
+  BoltIcon,
+  BroomIcon,
+  ClipboardIcon,
+  ConvertIcon,
+  CopiesIcon,
+  GlobeIcon,
+  ImageIcon,
+  NameToTagIcon,
+  NewFolderIcon,
+  OpenIcon,
+  PigIcon,
+  PlayIcon,
+  RenameIcon,
+  SettingsIcon,
+  SpectrumIcon,
+  SplitColsIcon,
+  SplitRowsIcon,
+  TabIcon,
+  TagIcon,
+  TrashIcon,
+  VideoIcon,
+  VinylIcon,
+  WindowsIcon,
+  actionIcon,
+} from "./icons";
 import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
 import { stackFor } from "./fonts";
+import { applyTheme } from "./themes";
 import {
   clampWidth,
   loadColumns,
@@ -224,6 +254,13 @@ export default function App() {
     return tab ? currentPath(tab) : home();
   };
 
+  /** The folder the other pane shows, when split - where files are filed to. */
+  const otherFolder = () => {
+    const other = layout.groups.find((g) => g.id !== focusGroup().id);
+    const tab = other ? activeTab(other) : undefined;
+    return tab ? currentPath(tab) : undefined;
+  };
+
   const audioSelection = createMemo(() => focusHandle()?.audioSelection() ?? []);
 
   /** Re-reads every visible pane. A write can land in a folder either one shows. */
@@ -355,6 +392,25 @@ export default function App() {
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
+  /** The folder a new folder is being named in, or null. */
+  const [newFolderIn, setNewFolderIn] = createSignal<string | null>(null);
+  /** Tells the tree to re-read a branch something was just made in. */
+  const [treeReload, setTreeReload] = createSignal<{ path: string; n: number } | null>(null);
+  /** The menu for a folder itself, from the empty space in a listing. */
+  const [folderMenu, setFolderMenu] = createSignal<{ x: number; y: number; path: string } | null>(
+    null,
+  );
+
+  /** A folder was made: show it in the listing and in the tree. */
+  function folderCreated(parent: string) {
+    refetchAll();
+    setTreeReload((r) => ({ path: parent, n: (r?.n ?? 0) + 1 }));
+  }
+
+  /** Files being tagged from their names, or null when closed. */
+  const [naming, setNaming] = createSignal<number[] | null>(null);
+  /** Files the converter is open on, or null when it is closed. */
+  const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
   const [checking, setChecking] = createSignal<number[] | null>(null);
   /** Files the duplicate finder is measuring, or null when it is closed. */
@@ -432,6 +488,12 @@ export default function App() {
       case "copies":
         setComparing(ids);
         break;
+      case "convert":
+        setConverting(ids);
+        break;
+      case "fromname":
+        setNaming(ids);
+        break;
     }
   }
 
@@ -449,6 +511,8 @@ export default function App() {
     const s = settings();
     document.documentElement.style.setProperty("--ui-font", stackFor(s.font, s.fontCustom));
   });
+
+  createEffect(() => applyTheme(settings().theme));
 
   function commitColumns(next: Column[]) {
     setColumns(next);
@@ -634,16 +698,29 @@ export default function App() {
     return buttons().map((action) => ({
       kind: "item" as const,
       label: ids.length > 1 ? `${action.label} — ${ids.length} tracks` : action.label,
+      icon: actionIcon(action.icon),
       disabled: ids.length === 0,
-      run: () => {
-        if (actionWrites(action.kind)) {
-          setRunning({ action, fileIds: ids });
-          return;
-        }
-        runUserAction(action, ids).catch(() => {});
-      },
+      run: () => runButton(action, ids),
     }));
   }
+
+  /** Runs a user-defined button on these files, through the preview if it writes. */
+  function runButton(action: Action, ids: number[]) {
+    if (actionWrites(action.kind)) {
+      setRunning({ action, fileIds: ids });
+      return;
+    }
+    runUserAction(action, ids).catch(() => {});
+  }
+
+  /** Buttons given an icon, which also sit in the toolbar. */
+  const toolbarButtons = () =>
+    buttons().flatMap((action) => {
+      const icon = actionIcon(action.icon);
+      return icon
+        ? [{ id: action.id, label: action.label, icon, run: () => runButton(action, audioSelection()) }]
+        : [];
+    });
 
   /** Loads a row into the player, and remembers which tab it is walking. */
   function playRow(row: RowDisplay, tabId: number) {
@@ -821,11 +898,15 @@ export default function App() {
     const lookup = [row.artist, row.title || row.name].filter(Boolean).join(" ");
     const audio = row.kind !== 1;
 
+    // Grouped the way the toolbar is - the file itself, what it says, what is
+    // done to it, where to look it up - with the toolbar's icons, so the same
+    // action looks the same wherever it is reached from.
     return [
       {
         kind: "item",
         label: "Play",
         hint: "double-click",
+        icon: PlayIcon,
         disabled: audio,
         run: () => playRow(row, playingTab() ?? (activeTab(focusGroup())?.id ?? 0)),
       },
@@ -833,6 +914,7 @@ export default function App() {
       {
         kind: "item",
         label: "Open in new tab",
+        icon: TabIcon,
         disabled: row.kind !== 0,
         run: () => {
           const here = focusPath();
@@ -842,7 +924,15 @@ export default function App() {
       },
       {
         kind: "item",
+        label: "New folder…",
+        hint: "ctrl+shift+n",
+        icon: NewFolderIcon,
+        run: () => setNewFolderIn(focusPath()),
+      },
+      {
+        kind: "item",
         label: "Reveal in Explorer",
+        icon: OpenIcon,
         run: () => {
           reveal(row.fileId).catch(() => {});
         },
@@ -850,46 +940,33 @@ export default function App() {
       {
         kind: "item",
         label: many ? `Copy ${ids.length} paths` : "Copy path",
+        icon: ClipboardIcon,
         run: () => {
           Promise.all(ids.map((id) => pathOf(id)))
             .then((paths) => copyText(paths.join("\r\n")))
             .catch(() => {});
         },
       },
+      { kind: "separator" },
       {
         kind: "item",
         label: many ? `Edit metadata of ${ids.length} tracks…` : "Edit metadata…",
         hint: "f2",
+        icon: TagIcon,
         disabled: audio,
         run: () => setEditing(ids),
       },
       {
         kind: "item",
-        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
+        label: many ? `Tags from file name for ${ids.length} tracks…` : "Tags from file name…",
+        icon: NameToTagIcon,
         disabled: audio,
-        run: () => setRenaming(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
-        disabled: audio,
-        run: () => setCleaning(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
-        disabled: audio,
-        run: () => setChecking(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
-        disabled: audio,
-        run: () => setComparing(ids),
+        run: () => setNaming(ids),
       },
       {
         kind: "item",
         label: "Find metadata online…",
+        icon: GlobeIcon,
         disabled: audio,
         // Matched on the row that was right-clicked, applied to whatever is
         // selected — the same rule the rest of the menu follows.
@@ -898,6 +975,7 @@ export default function App() {
       {
         kind: "item",
         label: many ? `Find album art for ${ids.length} tracks…` : "Find album art…",
+        icon: ImageIcon,
         disabled: audio,
         // Searched on the row that was right-clicked, applied to the whole
         // selection: an album's tracks share a sleeve, and searching on each of
@@ -907,7 +985,44 @@ export default function App() {
       { kind: "separator" },
       {
         kind: "item",
+        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
+        icon: RenameIcon,
+        disabled: audio,
+        run: () => setRenaming(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
+        icon: BroomIcon,
+        disabled: audio,
+        run: () => setCleaning(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Convert ${ids.length} tracks…` : "Convert…",
+        icon: ConvertIcon,
+        disabled: audio,
+        run: () => setConverting(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
+        icon: SpectrumIcon,
+        disabled: audio,
+        run: () => setChecking(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
+        icon: CopiesIcon,
+        disabled: audio,
+        run: () => setComparing(ids),
+      },
+      { kind: "separator" },
+      {
+        kind: "item",
         label: "Search Discogs",
+        icon: VinylIcon,
         disabled: audio || lookup === "",
         run: () => {
           openUrl(
@@ -918,6 +1033,7 @@ export default function App() {
       {
         kind: "item",
         label: "Search YouTube",
+        icon: VideoIcon,
         disabled: audio || lookup === "",
         run: () => {
           openUrl(
@@ -930,6 +1046,7 @@ export default function App() {
         kind: "item",
         label: many ? `Delete ${ids.length} items` : "Delete",
         hint: "del",
+        icon: TrashIcon,
         danger: true,
         run: deleteSelection,
       },
@@ -938,6 +1055,7 @@ export default function App() {
         kind: "item",
         label: "Windows menu",
         hint: "shift-click",
+        icon: WindowsIcon,
         run: () => openShellMenu(ids),
       },
     ];
@@ -1007,6 +1125,24 @@ export default function App() {
         const handle = focusHandle();
         if (e.key === "ArrowLeft") handle?.back();
         else handle?.forward();
+        return;
+      }
+      // Alt+1..5 rates the selected tracks, Alt+0 clears. Alt rather than
+      // Ctrl, which already jumps between tabs by number.
+      if (e.altKey && !mod && /^[0-5]$/.test(e.key) && !isTyping(e)) {
+        const ids = audioSelection();
+        if (ids.length > 0) {
+          e.preventDefault();
+          writeTags(ids, {}, {}, e.key)
+            .then(refetchAll)
+            .catch(() => {});
+        }
+        return;
+      }
+      // Ctrl+Shift+N makes a folder where you are, as it does in Explorer.
+      if (mod && e.shiftKey && e.key.toLowerCase() === "n" && !isTyping(e)) {
+        e.preventDefault();
+        setNewFolderIn(focusPath());
         return;
       }
       // Bare Tab moves between panes, per the spec. Safe to take: nothing in
@@ -1109,7 +1245,12 @@ export default function App() {
 
       <div class="topbar">
         <span class="grow" />
-        <Toolbar count={audioSelection().length} quickOpen={quickOpen()} onRun={runAction} />
+        <Toolbar
+          count={audioSelection().length}
+          quickOpen={quickOpen()}
+          onRun={runAction}
+          custom={toolbarButtons()}
+        />
         <div class="sizes" role="group" aria-label="Cover art size">
           <For each={ART_SIZES}>
             {(size) => (
@@ -1124,6 +1265,7 @@ export default function App() {
             )}
           </For>
         </div>
+        <div class="tgroup" role="group" aria-label="Panes">
         <button
           class={`gearbtn ${layout.groups.length > 1 ? "on" : ""}`}
           data-tip={layout.groups.length > 1 ? "Single pane" : "Dual pane"}
@@ -1144,6 +1286,8 @@ export default function App() {
             <SplitRowsIcon />
           </button>
         </Show>
+        </div>
+        <div class="tgroup" role="group" aria-label="App">
         <button
           class={`gearbtn ${actionMenu() ? "on" : ""}`}
           data-tip="Functions"
@@ -1174,6 +1318,7 @@ export default function App() {
         >
           <SettingsIcon />
         </button>
+        </div>
       </div>
 
       <div class="body">
@@ -1181,6 +1326,9 @@ export default function App() {
           current={focusPath()}
           onNavigate={(path) => navigateFocused(path)}
           dropKey={dropOver()?.key ?? null}
+          onNewFolder={setNewFolderIn}
+          onOpenTab={(path) => openTab(focusGroup().id, path)}
+          reload={treeReload()}
         />
         <div
           class="vsplit"
@@ -1268,6 +1416,9 @@ export default function App() {
                         columnDragging={dragging()}
                         columnOver={dragOver()}
                         onMenu={openMenu}
+                        onFolderMenu={(e, path) =>
+                          setFolderMenu({ x: e.clientX, y: e.clientY, path })
+                        }
                         onArt={(fileId) => setEditing([fileId])}
                         onPlay={playRow}
                         dropKey={dropOver()?.key ?? null}
@@ -1326,6 +1477,52 @@ export default function App() {
             action={target().action}
             fileIds={target().fileIds}
             onClose={() => setRunning(null)}
+            onDone={refetchAll}
+          />
+        )}
+      </Show>
+
+      <Show when={folderMenu()}>
+        {(m) => (
+          <Menu
+            x={m().x}
+            y={m().y}
+            onClose={() => setFolderMenu(null)}
+            items={[
+              {
+                kind: "item",
+                label: "New folder…",
+                hint: "ctrl+shift+n",
+                icon: NewFolderIcon,
+                run: () => setNewFolderIn(m().path),
+              },
+            ]}
+          />
+        )}
+      </Show>
+
+      <Show when={newFolderIn()}>
+        {(parent) => (
+          <NewFolder
+            parent={parent()}
+            onClose={() => setNewFolderIn(null)}
+            onCreated={() => folderCreated(parent())}
+          />
+        )}
+      </Show>
+
+      <Show when={naming()}>
+        {(ids) => (
+          <FromName fileIds={ids()} onClose={() => setNaming(null)} onDone={refetchAll} />
+        )}
+      </Show>
+
+      <Show when={converting()}>
+        {(ids) => (
+          <Converter
+            fileIds={ids()}
+            otherFolder={otherFolder()}
+            onClose={() => setConverting(null)}
             onDone={refetchAll}
           />
         )}
@@ -1422,6 +1619,7 @@ export default function App() {
           sampleRate={transport()?.sampleRate ?? 0}
           durationMs={transport()?.durationMs ?? 0}
           name={transport()?.path ?? ""}
+          onSeek={(ms) => transportCmd("seek", ms).then(setTransport).catch(() => {})}
         />
       </Show>
 
@@ -1443,6 +1641,7 @@ export default function App() {
         onArt={(fileId) => setEditing([fileId])}
         onLocate={locatePlaying}
         settings={settings()}
+        onMeter={(meter) => commitSettings({ ...settings(), meter })}
       />
 
       <Show when={finding()}>

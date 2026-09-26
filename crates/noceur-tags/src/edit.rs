@@ -416,7 +416,17 @@ pub fn custom_key(tag_type: lofty::tag::TagType, name: &str) -> ItemKey {
     if !matches!(by_readable_name, ItemKey::Unknown(_)) {
         return by_readable_name;
     }
-    ItemKey::from_key(tag_type, name)
+    let key = ItemKey::from_key(tag_type, name);
+    // MP4 has no plain named fields: an atom is four bytes, and anything else
+    // lives in a freeform atom under a reverse-DNS mean. iTunes' own namespace
+    // is the one foobar2000, Mp3tag and every DJ program read, and without it
+    // the field is dropped on save because it is not a valid atom.
+    if tag_type == lofty::tag::TagType::Mp4Ilst && !name.starts_with("----") {
+        if let ItemKey::Unknown(_) = key {
+            return ItemKey::Unknown(format!("----:com.apple.iTunes:{name}"));
+        }
+    }
+    key
 }
 
 /// Whether ID3v2 would mistake a field name for a frame identifier.
@@ -891,12 +901,26 @@ mod tests {
                     ..Default::default()
                 },
             );
+            // Looked up the way the reader does: MP4 keeps it in a freeform
+            // atom, whose key is not the bare name.
             assert_eq!(
-                t.get_string(&ItemKey::Unknown("ENERGY".into())),
+                t.get_string(&custom_key(kind, "ENERGY")),
                 Some("4"),
                 "{kind:?} lost its custom field"
             );
         }
+    }
+
+    /// A bare name is not a valid MP4 atom and is dropped on save, so custom
+    /// fields go where foobar2000, Mp3tag and DJ software look for them.
+    #[test]
+    fn mp4_custom_fields_are_freeform_itunes_atoms() {
+        assert_eq!(
+            custom_key(TagType::Mp4Ilst, "ENERGY"),
+            ItemKey::Unknown("----:com.apple.iTunes:ENERGY".into())
+        );
+        // Fields with a real mapping keep it.
+        assert_eq!(custom_key(TagType::Mp4Ilst, "MOOD"), ItemKey::Mood);
     }
 
     #[test]

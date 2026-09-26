@@ -24,11 +24,12 @@ pub enum SortColumn {
     SampleRate,
     BitDepth,
     Codec,
+    Rating,
 }
 
 impl SortColumn {
     /// Every column, in the order the list shows them.
-    pub fn all() -> [SortColumn; 18] {
+    pub fn all() -> [SortColumn; 19] {
         [
             SortColumn::Name,
             SortColumn::Bpm,
@@ -46,6 +47,7 @@ impl SortColumn {
             SortColumn::SampleRate,
             SortColumn::BitDepth,
             SortColumn::Codec,
+            SortColumn::Rating,
             SortColumn::Size,
             SortColumn::Modified,
         ]
@@ -72,6 +74,7 @@ impl SortColumn {
             SortColumn::SampleRate => "sampleRate",
             SortColumn::BitDepth => "bitDepth",
             SortColumn::Codec => "codec",
+            SortColumn::Rating => "rating",
         }
     }
 
@@ -105,6 +108,7 @@ impl SortColumn {
             SortColumn::SampleRate => "c.sample_rate",
             SortColumn::BitDepth => "c.bit_depth",
             SortColumn::Codec => "c.codec COLLATE NOCASE",
+            SortColumn::Rating => "ct.rating",
         }
     }
 }
@@ -194,6 +198,8 @@ pub struct ListRow {
     pub codec: Option<String>,
     /// Whether the file carries embedded cover art, from the last probe.
     pub has_artwork: bool,
+    /// Stars, 1..=5, or `None` when unrated.
+    pub rating: Option<i64>,
 }
 
 const SELECT: &str = "
@@ -201,7 +207,7 @@ SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        ct.artist, ct.title, ct.album, ct.bpm_tag, ct.key_tag, ct.key_norm,
        c.duration_ms, COALESCE(ct.has_artwork, 0),
        ct.album_artist, ct.genre, ct.year, ct.track_no, ct.comment, ct.isrc,
-       c.sample_rate, c.bit_depth, c.codec
+       c.sample_rate, c.bit_depth, c.codec, ct.rating
 FROM file f
 LEFT JOIN content     c  ON c.id  = f.content_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
@@ -248,6 +254,7 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
             sample_rate: r.get(21)?,
             bit_depth: r.get(22)?,
             codec: r.get(23)?,
+            rating: r.get(24)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)

@@ -1,5 +1,7 @@
 import type { WaveColour, WaveShape } from "./Waveform";
 import { CUSTOM, DEFAULT_FONT, UI_FONTS, cleanFamily } from "./fonts";
+import { DEFAULT_THEME, isTheme, type ThemeName } from "./themes";
+import type { MeterMode } from "./Meters";
 
 /**
  * Everything the app remembers about how it should look.
@@ -141,6 +143,10 @@ export type Settings = {
    * folder of folders spends a whole screen's width saying nothing.
    */
   folderGrid: boolean;
+  /** Colour scheme - see `THEMES` in `themes.ts`. */
+  theme: ThemeName;
+  /** What the meter box in the transport shows, or `off` for no box. */
+  meter: MeterMode;
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -209,12 +215,15 @@ export const DEFAULTS: Settings = {
   font: DEFAULT_FONT.name,
   fontCustom: "",
   folderGrid: true,
+  theme: DEFAULT_THEME,
+  meter: "vu",
 };
 
 const KEY = "noceur.settings";
 
 const SHAPES: WaveShape[] = ["filled", "bars"];
 const COLOURS: WaveColour[] = ["rgb", "threeband", "blue", "accent"];
+const METERS: MeterMode[] = ["off", "vu", "needle", "scope", "vector", "spectrum"];
 
 /**
  * Reads stored settings, falling back field by field.
@@ -246,6 +255,8 @@ export function loadSettings(): Settings {
       fontCustom:
         typeof parsed.fontCustom === "string" ? cleanFamily(parsed.fontCustom) : "",
       folderGrid: parsed.folderGrid !== false,
+      theme: isTheme(parsed.theme) ? parsed.theme : DEFAULTS.theme,
+      meter: parsed.meter && METERS.includes(parsed.meter) ? parsed.meter : DEFAULTS.meter,
     };
   } catch {
     return DEFAULTS;
