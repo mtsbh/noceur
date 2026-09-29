@@ -46,6 +46,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "discogs.com",
     // Beatport's image CDN, `geo-media.beatport.com`.
     "beatport.com",
+    // Bandcamp's image CDN, `f4.bcbits.com`.
+    "bcbits.com",
 ];
 
 /// Whether an image URL may be fetched.
@@ -140,6 +142,7 @@ mod tests {
         assert!(is_allowed(
             "https://geo-media.beatport.com/image_size/1400x1400/x.jpg"
         ));
+        assert!(is_allowed("https://f4.bcbits.com/img/a4230057167_10.jpg"));
     }
 
     #[test]

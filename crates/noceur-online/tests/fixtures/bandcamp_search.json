@@ -1,0 +1,25 @@
+{
+  "auto": {
+    "results": [
+      {
+        "type": "t",
+        "id": 2897150402,
+        "art_id": 4230057167,
+        "img_id": null,
+        "name": "Rev8617",
+        "band_id": 2477152813,
+        "band_name": "Skee Mask",
+        "album_name": "ITLP04 - Compro",
+        "item_url_root": "https://iliantape.bandcamp.com",
+        "item_url_path": "https://iliantape.bandcamp.com/track/rev8617",
+        "img": "https://f4.bcbits.com/img/4230057167_3.jpg",
+        "album_id": 450473414,
+        "stat_params": "search_item_id=2897150402&search_item_type=t&search_match_part=%3F&search_page_id=5805740498&search_page_no=0&search_rank=1"
+      }
+    ],
+    "stat_params_for_tag": "search_item_id=2&search_item_type=%40&search_match_part=%3F&search_page_id=5805740498&search_page_no=0&search_rank=1",
+    "time_ms": 15
+  },
+  "tag": {},
+  "genre": {}
+}

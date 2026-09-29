@@ -71,6 +71,8 @@ pub async fn match_track(
         for m in matches.iter_mut().take(4) {
             if m.source == noceur_online::deezer::NAME {
                 let _ = noceur_online::deezer::enrich(m);
+            } else if m.source == noceur_online::bandcamp::NAME {
+                let _ = noceur_online::bandcamp::enrich(m);
             }
         }
 

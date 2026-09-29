@@ -229,6 +229,39 @@ fn beatport_supplies_bpm_key_and_label() {
     ));
 }
 
+/// Neither Bandcamp endpoint is published, so this is the check that both
+/// still look the way the parsers expect.
+#[test]
+#[ignore = "reaches the network"]
+fn bandcamp_finds_a_track_and_its_page_fills_in_the_rest() {
+    let mut found = noceur_online::bandcamp::search_tracks("Skee Mask", "Rev8617", 5)
+        .expect("Bandcamp should answer");
+    assert!(
+        !found.is_empty(),
+        "the search parsed to nothing; has it changed?"
+    );
+
+    let best = &mut found[0];
+    noceur_online::bandcamp::enrich(best).expect("the track page should load");
+    println!(
+        "  {} — {} | {:?} | {:?} | {:?} | {:?} | {:?}",
+        best.artist(),
+        best.title,
+        best.album,
+        best.label,
+        best.release_date,
+        best.isrc,
+        best.track_no
+    );
+    assert!(
+        best.release_date.is_some(),
+        "the page's JSON-LD has moved or changed"
+    );
+    assert!(noceur_online::sources::is_allowed(
+        best.art.as_deref().unwrap()
+    ));
+}
+
 /// Discogs needs a token, so this only runs when one is in the environment:
 ///
 /// ```text

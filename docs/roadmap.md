@@ -8,7 +8,7 @@ it does.
 
 ## Metadata sources
 
-MusicBrainz, Deezer, iTunes, Discogs and Beatport are in `noceur-online`. Every new source plugs into
+MusicBrainz, Deezer, iTunes, Discogs, Beatport and Bandcamp are in `noceur-online`. Every new source plugs into
 the same `TrackMatch` / `Candidate` types, so the Find metadata and Find album art dialogs pick it
 up without changes of their own.
 
@@ -17,7 +17,7 @@ up without changes of their own.
       track carries BPM, key, genre, label, catalogue number, ISRC, mix name, release date and
       1400 px artwork, which covers what a DJ tags. It is not a published API, so the parser is
       pinned by a saved-page test and fails soft (no results, not an error) if the page changes.
-- [ ] **3. Bandcamp.** No API key needed: search through the site's own autocomplete endpoint
+- [x] **3. Bandcamp.** No API key needed: search through the site's own autocomplete endpoint
       (`bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic`), then read the track or
       album page's JSON-LD for title, artists, label, release date, track number and artwork.
 - [ ] **4. Tidal.** Official catalogue API (`openapi.tidal.com`, client-credentials flow). Needs
