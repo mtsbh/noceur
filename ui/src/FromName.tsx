@@ -231,9 +231,7 @@ export default function FromName(props: {
         <footer class="tagfoot">
           <span class="sethint credit">
             <Show when={rows() && fits().length < rows()!.length}>
-              {rows()!.length - fits().length}{" "}
-              {rows()!.length - fits().length === 1 ? "does" : "do"} not fit and will be left
-              alone.
+              {rows()!.length - fits().length} skipped
             </Show>
           </span>
           <button class="btn" onClick={props.onClose}>

@@ -140,8 +140,9 @@ export default function CoverPicker(props: {
               when={shown().length > 0}
               fallback={
                 <p class="sethint">
-                  Nothing found with artwork. The search uses the track's album
-                  and artist tags — filling those in first usually finds it.
+                  <span data-tip="Try adding album and artist" data-tip-at="start">
+                    No cover found
+                  </span>
                 </p>
               }
             >
@@ -194,9 +195,7 @@ export default function CoverPicker(props: {
         </div>
 
         <footer class="tagfoot">
-          <span class="sethint credit">
-            Covers from the Cover Art Archive, Apple and Deezer.
-          </span>
+          <span class="sethint credit" />
           <button class="btn" onClick={props.onClose}>
             Close
           </button>

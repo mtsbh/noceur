@@ -857,6 +857,48 @@ fn show_shell_menu(_app: tauri::AppHandle, _paths: Vec<PathBuf>) -> Result<(), S
     Err("the shell context menu is only implemented on Windows".into())
 }
 
+/// Opens files in another program, all of them in one launch.
+///
+/// One process with every path as an argument, rather than one per file: an
+/// editor like Mp3tag handed forty files should open one window, not forty.
+#[tauri::command]
+pub async fn open_with(
+    state: State<'_, AppState>,
+    program: String,
+    file_ids: Vec<i64>,
+) -> Result<(), String> {
+    let program = program.trim().trim_matches('"').to_string();
+    if program.is_empty() {
+        return Err("no program set".into());
+    }
+    let db = state.db.clone();
+    let paths = tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        Ok::<_, String>(
+            file_ids
+                .iter()
+                .filter_map(|id| noceur_index::thumb::locate(&db, *id).ok().flatten())
+                .map(|f| {
+                    let p = f.path.display().to_string();
+                    // Programs rarely understand the extended-length prefix.
+                    p.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(p)
+                })
+                .collect::<Vec<_>>(),
+        )
+    })
+    .await
+    .map_err(|e| format!("lookup task failed: {e}"))??;
+
+    if paths.is_empty() {
+        return Err("nothing to open".into());
+    }
+    std::process::Command::new(&program)
+        .args(&paths)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("cannot start {program}: {e}"))
+}
+
 /// Opens a URL in the default browser.
 ///
 /// Used by the search actions in the row menu — looking a track up on Discogs is

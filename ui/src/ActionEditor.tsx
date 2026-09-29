@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { ACTION_ICONS, CloseIcon } from "./icons";
 import { type Action, type ActionKind } from "./api";
+import SyntaxHelp from "./SyntaxHelp";
 import {
   CUSTOM_RECIPE,
   TAG_FIELDS,
@@ -38,9 +39,13 @@ export default function ActionEditor(props: {
 }) {
   const [advanced, setAdvanced] = createSignal(props.action.recipe === CUSTOM_RECIPE);
 
+  /** Whether the syntax help is open over this editor. */
+  const [help, setHelp] = createSignal(false);
+
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      // The help closes itself first; one Escape should not close both.
+      if (e.key === "Escape" && !help()) props.onClose();
     };
     window.addEventListener("keydown", onKey, true);
     onCleanup(() => window.removeEventListener("keydown", onKey, true));
@@ -271,11 +276,21 @@ export default function ActionEditor(props: {
                 }
               />
             </div>
-            <p class="sethint">
-              foobar2000 syntax, so anything you already have for foobar, Mp3tag
-              or OneTagger works as written. Editing this makes the button your
-              own — the recipe stops rewriting it.
-            </p>
+            <button class="actlink" onClick={() => setHelp(true)}>
+              Syntax help
+            </button>
+          </Show>
+          <Show when={help()}>
+            <SyntaxHelp
+              onUse={(script) => {
+                patch({ script, recipe: CUSTOM_RECIPE });
+                setHelp(false);
+              }}
+              onInsert={(code) =>
+                patch({ script: props.action.script + code, recipe: CUSTOM_RECIPE })
+              }
+              onClose={() => setHelp(false)}
+            />
           </Show>
         </div>
 

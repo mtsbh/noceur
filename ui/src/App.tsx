@@ -6,6 +6,7 @@ import {
   untrack,
   For,
   Show,
+  type JSX,
 } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { listen } from "@tauri-apps/api/event";
@@ -26,6 +27,8 @@ import {
   runAction as runUserAction,
   actionWrites,
   openUrl,
+  openWith,
+  folderIconUrl,
   type Action,
   type Transport as TransportState,
   type ArtSize,
@@ -36,14 +39,14 @@ import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
 import Transport from "./Transport";
 import Menu, { type MenuItem } from "./Menu";
-import SettingsPanel from "./SettingsPanel";
+import SettingsPanel, { setSettingsTab } from "./SettingsPanel";
 import TagEditor from "./TagEditor";
 import CoverPicker from "./CoverPicker";
 import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
-import Toolbar, { type ActionId } from "./Toolbar";
+import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
 import Quality from "./Quality";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
@@ -81,22 +84,29 @@ import {
   NameToTagIcon,
   NewFolderIcon,
   OpenIcon,
+  OpenWithIcon,
   PigIcon,
   PlayIcon,
   RenameIcon,
+  SearchIcon,
   SettingsIcon,
   SpectrumIcon,
   SplitColsIcon,
   SplitRowsIcon,
+  StarIcon,
   TabIcon,
   TagIcon,
   TrashIcon,
-  VideoIcon,
-  VinylIcon,
   WindowsIcon,
   actionIcon,
 } from "./icons";
-import { loadSettings, saveSettings, type Settings as SettingsState } from "./settings";
+import {
+  loadSettings,
+  saveSettings,
+  searchUrl,
+  type Launcher,
+  type Settings as SettingsState,
+} from "./settings";
 import { stackFor } from "./fonts";
 import { applyTheme } from "./themes";
 import {
@@ -193,6 +203,37 @@ function targetAt(x: number, y: number): { key: string; path: string } | null {
 }
 
 /** Whether a key event is somebody typing rather than reaching for a shortcut. */
+/** A program's own icon, as Explorer shows it, falling back to a plain glyph. */
+function programIcon(path: string) {
+  return () => <ImageGlyph src={folderIconUrl(path.trim().replace(/^"|"$/g, ""))} fallback={OpenWithIcon} />;
+}
+
+/** A site's favicon, from the site itself, falling back to a globe. */
+function siteIcon(template: string) {
+  let origin = "";
+  try {
+    origin = new URL(template.replace(/\{\w+\}/g, "x")).origin;
+  } catch {
+    // Not an address yet - half typed in settings.
+  }
+  return () => <ImageGlyph src={origin ? `${origin}/favicon.ico` : ""} fallback={GlobeIcon} />;
+}
+
+function ImageGlyph(props: { src: string; fallback: () => JSX.Element }) {
+  const [broken, setBroken] = createSignal(!props.src);
+  return (
+    <Show when={!broken()} fallback={<props.fallback />}>
+      <img
+        class="glyphimg"
+        src={props.src}
+        alt=""
+        draggable={false}
+        onError={() => setBroken(true)}
+      />
+    </Show>
+  );
+}
+
 function isTyping(e: KeyboardEvent): boolean {
   return (
     e.target instanceof HTMLElement &&
@@ -713,14 +754,173 @@ export default function App() {
     runUserAction(action, ids).catch(() => {});
   }
 
-  /** Buttons given an icon, which also sit in the toolbar. */
-  const toolbarButtons = () =>
-    buttons().flatMap((action) => {
-      const icon = actionIcon(action.icon);
-      return icon
-        ? [{ id: action.id, label: action.label, icon, run: () => runButton(action, audioSelection()) }]
-        : [];
+  /** Whether the top bar is being arranged. */
+  const [barEditing, setBarEditing] = createSignal(false);
+  const [barMenu, setBarMenu] = createSignal<{ x: number; y: number } | null>(null);
+
+  /**
+   * Everything that can sit in the top bar. Settings is not among them: it is
+   * always there, at the far end, so the bar can never be arranged into a state
+   * with no way back to the settings.
+   */
+  const barItems = createMemo<BarItem[]>(() => {
+    const none = () => audioSelection().length === 0;
+    const tool = (id: ActionId, label: string, icon: () => JSX.Element): BarItem => ({
+      id,
+      label,
+      icon,
+      off: id === "quick" ? undefined : none,
+      on: id === "quick" ? quickOpen : undefined,
+      run: () => runAction(id),
     });
+    return [
+      tool("tags", "Edit metadata", TagIcon),
+      tool("match", "Find metadata", GlobeIcon),
+      tool("fromname", "Tags from file name", NameToTagIcon),
+      tool("art", "Find album art", ImageIcon),
+      tool("quick", "Quick tag", StarIcon),
+      tool("rename", "Rename", RenameIcon),
+      tool("clean", "Clean up", BroomIcon),
+      tool("quality", "Check quality", SpectrumIcon),
+      tool("copies", "Find duplicates", CopiesIcon),
+      tool("convert", "Convert", ConvertIcon),
+      // Your own buttons. Ones with an icon arrive in the bar by themselves;
+      // the rest wait in the tray until you drag them up.
+      ...buttons().map<BarItem>((action) => ({
+        id: `user:${action.id}`,
+        label: action.label,
+        icon: actionIcon(action.icon),
+        auto: Boolean(actionIcon(action.icon)),
+        off: none,
+        run: () => runButton(action, audioSelection()),
+      })),
+      // Your programs and sites. In the bar only when switched on for it.
+      ...settings().openWith.map<BarItem>((program) => ({
+        id: `open:${program.id}`,
+        label: `Open in ${program.name}`,
+        icon: programIcon(program.target),
+        forced: program.inBar,
+        off: () => (focusHandle()?.selection().length ?? 0) === 0,
+        onToggle: (on) => setInBar("openWith", program.id, on),
+        run: () => launch(program),
+      })),
+      ...settings().searchIn.map<BarItem>((site) => ({
+        id: `search:${site.id}`,
+        label: `Search ${site.name}`,
+        icon: siteIcon(site.target),
+        forced: site.inBar,
+        off: none,
+        onToggle: (on) => setInBar("searchIn", site.id, on),
+        run: () => searchIn(site),
+      })),
+      {
+        id: "sizes",
+        label: "Cover size",
+        render: () => (
+          <div class="sizes" role="group" aria-label="Cover art size">
+            <For each={ART_SIZES}>
+              {(size) => (
+                <button
+                  class={`sizebtn ${artSize() === size ? "on" : ""}`}
+                  data-tip={`${size[0].toUpperCase()}${size.slice(1)}`}
+                  aria-label={`${size} cover art`}
+                  onClick={() => chooseArtSize(size)}
+                >
+                  {size[0].toUpperCase()}
+                </button>
+              )}
+            </For>
+          </div>
+        ),
+      },
+      {
+        id: "split",
+        label: "Dual pane",
+        icon: SplitColsIcon,
+        on: () => layout.groups.length > 1,
+        run: splitOrJoin,
+      },
+      {
+        id: "splitdir",
+        label: "Split direction",
+        icon: SplitRowsIcon,
+        absent: () => layout.groups.length < 2,
+        run: flipSplit,
+      },
+      {
+        id: "functions",
+        label: "Functions",
+        icon: BoltIcon,
+        on: () => Boolean(actionMenu()),
+        run: (e) => {
+          const box = e.currentTarget.getBoundingClientRect();
+          setActionMenu(actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 });
+        },
+      },
+      {
+        id: "spek",
+        label: "Spek",
+        icon: PigIcon,
+        on: spekOpen,
+        run: () => setSpekOpen((open) => !open),
+      },
+    ];
+  });
+
+  /* ── Open with, Search in ─────────────────────────────────────────────── */
+
+  /** Opens the selection (or `ids`) in one of your programs. */
+  function launch(program: Launcher, ids: number[] = focusHandle()?.selection() ?? []) {
+    if (ids.length === 0) return;
+    openWith(program.target, ids).catch(() => {});
+  }
+
+  /**
+   * Searches a site for the selected tracks. One browser tab per track, capped
+   * at five - a slip of the mouse over a whole folder should not open forty.
+   */
+  function searchIn(site: Launcher, ids: number[] = focusHandle()?.selection() ?? []) {
+    const handle = focusHandle();
+    for (const id of ids.slice(0, 5)) {
+      const row = handle?.rowOf(id);
+      if (!row || row.kind === 0) continue;
+      openUrl(searchUrl(site.target, row)).catch(() => {});
+    }
+  }
+
+  /** Turns one entry's toolbar switch on or off. */
+  function setInBar(list: "openWith" | "searchIn", id: string, inBar: boolean) {
+    const s = settings();
+    commitSettings({ ...s, [list]: s[list].map((l) => (l.id === id ? { ...l, inBar } : l)) });
+  }
+
+  /** Opens settings on one tab - the "Add…" at the foot of each submenu. */
+  function settingsAt(tab: "actions") {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  }
+
+  /** The out-of-the-box arrangement, with your iconned buttons after the tools. */
+  const barDefaults = () => {
+    const mine = buttons()
+      .filter((a) => actionIcon(a.icon))
+      .map((a) => `user:${a.id}`);
+    return [
+      "flex:start",
+      "tags", "match", "fromname", "art", "quick",
+      "sep:a",
+      "rename", "clean", "quality", "copies", "convert",
+      ...(mine.length ? ["sep:b", ...mine] : []),
+      "sep:c",
+      "sizes",
+      "sep:d",
+      "split", "splitdir",
+      "sep:e",
+      "functions", "spek",
+    ];
+  };
+
+  const barLayout = createMemo(() => resolveBar(settings().bar, barItems(), barDefaults()));
 
   /** Loads a row into the player, and remembers which tab it is walking. */
   function playRow(row: RowDisplay, tabId: number) {
@@ -1021,25 +1221,36 @@ export default function App() {
       { kind: "separator" },
       {
         kind: "item",
-        label: "Search Discogs",
-        icon: VinylIcon,
-        disabled: audio || lookup === "",
-        run: () => {
-          openUrl(
-            `https://www.discogs.com/search/?q=${encodeURIComponent(lookup)}&type=release`,
-          ).catch(() => {});
-        },
+        label: "Open with",
+        icon: OpenWithIcon,
+        run: () => {},
+        children: [
+          ...settings().openWith.map<MenuItem>((program) => ({
+            kind: "item",
+            label: program.name,
+            icon: programIcon(program.target),
+            run: () => launch(program, ids),
+          })),
+          ...(settings().openWith.length ? [{ kind: "separator" } as MenuItem] : []),
+          { kind: "item", label: "Add program…", run: () => settingsAt("actions") },
+        ],
       },
       {
         kind: "item",
-        label: "Search YouTube",
-        icon: VideoIcon,
+        label: "Search in",
+        icon: SearchIcon,
         disabled: audio || lookup === "",
-        run: () => {
-          openUrl(
-            `https://www.youtube.com/results?search_query=${encodeURIComponent(lookup)}`,
-          ).catch(() => {});
-        },
+        run: () => {},
+        children: [
+          ...settings().searchIn.map<MenuItem>((site) => ({
+            kind: "item",
+            label: site.name,
+            icon: siteIcon(site.target),
+            run: () => searchIn(site, ids),
+          })),
+          ...(settings().searchIn.length ? [{ kind: "separator" } as MenuItem] : []),
+          { kind: "item", label: "Add site…", run: () => settingsAt("actions") },
+        ],
       },
       { kind: "separator" },
       {
@@ -1243,74 +1454,24 @@ export default function App() {
     >
       <Titlebar />
 
-      <div class="topbar">
-        <span class="grow" />
+      <div
+        class="topbar"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (!barEditing()) setBarMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
         <Toolbar
-          count={audioSelection().length}
-          quickOpen={quickOpen()}
-          onRun={runAction}
-          custom={toolbarButtons()}
+          items={barItems()}
+          layout={barLayout()}
+          editing={barEditing()}
+          onLayout={(bar) => commitSettings({ ...settings(), bar })}
+          onReset={() => commitSettings({ ...settings(), bar: null })}
+          onDone={() => setBarEditing(false)}
         />
-        <div class="sizes" role="group" aria-label="Cover art size">
-          <For each={ART_SIZES}>
-            {(size) => (
-              <button
-                class={`sizebtn ${artSize() === size ? "on" : ""}`}
-                data-tip={`${size[0].toUpperCase()}${size.slice(1)}`}
-                aria-label={`${size} cover art`}
-                onClick={() => chooseArtSize(size)}
-              >
-                {size[0].toUpperCase()}
-              </button>
-            )}
-          </For>
-        </div>
-        <div class="tgroup" role="group" aria-label="Panes">
+        <span class="tsep fixed" />
         <button
-          class={`gearbtn ${layout.groups.length > 1 ? "on" : ""}`}
-          data-tip={layout.groups.length > 1 ? "Single pane" : "Dual pane"}
-          data-tip-at="end"
-          aria-label="Split"
-          onClick={splitOrJoin}
-        >
-          <SplitColsIcon />
-        </button>
-        <Show when={layout.groups.length > 1}>
-          <button
-            class="gearbtn"
-            data-tip={layout.dir === "row" ? "Stack" : "Side by side"}
-          data-tip-at="end"
-            aria-label="Split orientation"
-            onClick={flipSplit}
-          >
-            <SplitRowsIcon />
-          </button>
-        </Show>
-        </div>
-        <div class="tgroup" role="group" aria-label="App">
-        <button
-          class={`gearbtn ${actionMenu() ? "on" : ""}`}
-          data-tip="Functions"
-          data-tip-at="end"
-          aria-label="Functions"
-          onClick={(e) => {
-            const box = e.currentTarget.getBoundingClientRect();
-            setActionMenu(actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 });
-          }}
-        >
-          <BoltIcon />
-        </button>
-        <button
-          class={`gearbtn ${spekOpen() ? "on" : ""}`}
-          data-tip="Spek"
-          data-tip-at="end"
-          aria-label="Spectrogram"
-          onClick={() => setSpekOpen((open) => !open)}
-        >
-          <PigIcon />
-        </button>
-        <button
-          class={`gearbtn ${settingsOpen() ? "on" : ""}`}
+          class={`toolbtn ${settingsOpen() ? "on" : ""}`}
           data-tip="Settings"
           data-tip-at="end"
           aria-label="Settings"
@@ -1318,8 +1479,21 @@ export default function App() {
         >
           <SettingsIcon />
         </button>
-        </div>
       </div>
+
+      <Show when={barMenu()}>
+        {(m) => (
+          <Menu
+            x={m().x}
+            y={m().y}
+            onClose={() => setBarMenu(null)}
+            items={[
+              { kind: "item", label: "Customize toolbar…", run: () => setBarEditing(true) },
+              { kind: "item", label: "Reset toolbar", run: () => commitSettings({ ...settings(), bar: null }) },
+            ]}
+          />
+        )}
+      </Show>
 
       <div class="body">
         <Tree

@@ -302,7 +302,7 @@ export default function Converter(props: {
                   <Show when={(plan() ?? []).length - todo().length > 0}>
                     {(plan() ?? []).length - todo().length} skipped ·{" "}
                   </Show>
-                  Tags, art and the file date come along.
+                  tags & art kept
                 </>
               }
             >

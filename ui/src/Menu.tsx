@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, For, Show, type JSX } from "solid-js";
 
 /** One line of a menu: an action, or a rule between groups. */
 export type MenuItem =
@@ -15,6 +15,8 @@ export type MenuItem =
       checked?: boolean;
       /** Drawn before the label. */
       icon?: () => JSX.Element;
+      /** A submenu, opened by hovering. `run` is then ignored. */
+      children?: MenuItem[];
       run: () => void;
     };
 
@@ -76,41 +78,90 @@ export default function Menu(props: {
         ref={(el) => (box = el)}
         style={{ left: `${props.x}px`, top: `${props.y}px` }}
       >
-        <For each={props.items}>
-          {(item) => (
-            <Show
-              when={item.kind === "item" ? item : null}
-              fallback={<div class="ctxsep" />}
-            >
-              {(entry) => (
-                <div
-                  class={`ctxitem ${entry().danger ? "danger" : ""} ${
-                    entry().disabled ? "off" : ""
-                  }`}
-                  onClick={() => {
-                    if (entry().disabled) return;
-                    entry().run();
-                    props.onClose();
-                  }}
-                >
-                  <Show when={entry().checked !== undefined}>
-                    <span class={`ctxtick ${entry().checked ? "on" : ""}`}>✓</span>
-                  </Show>
-                  {/* A blank of the same width when others in this menu have
-                      an icon, so every label starts on one line. */}
-                  <Show when={entry().icon || iconned()}>
-                    <span class="ctxicon">{entry().icon?.()}</span>
-                  </Show>
-                  <span class="ctxlabel">{entry().label}</span>
-                  <Show when={entry().hint}>
-                    <span class="ctxhint">{entry().hint}</span>
-                  </Show>
-                </div>
-              )}
-            </Show>
-          )}
-        </For>
+        <Items items={props.items} iconned={iconned()} onClose={props.onClose} />
       </div>
+    </>
+  );
+}
+
+/** The entries of one menu box, and the submenu hovering one of them opens. */
+function Items(props: { items: MenuItem[]; iconned: boolean; onClose: () => void }) {
+  const [sub, setSub] = createSignal<{ items: MenuItem[]; x: number; y: number; left: number } | null>(null);
+  let subBox: HTMLDivElement | undefined;
+
+  // Kept on screen: flips to the left of its parent when it would run off the right.
+  createEffect(() => {
+    const open = sub();
+    if (!open || !subBox) return;
+    const rect = subBox.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 6) {
+      subBox.style.left = `${Math.max(6, open.left - rect.width + 2)}px`;
+    }
+    if (rect.bottom > window.innerHeight - 6) {
+      subBox.style.top = `${Math.max(6, window.innerHeight - rect.height - 6)}px`;
+    }
+  });
+
+  return (
+    <>
+      <For each={props.items}>
+        {(item) => (
+          <Show
+            when={item.kind === "item" ? item : null}
+            fallback={<div class="ctxsep" />}
+          >
+            {(entry) => (
+              <div
+                class={`ctxitem ${entry().danger ? "danger" : ""} ${
+                  entry().disabled ? "off" : ""
+                } ${entry().children ? "parent" : ""}`}
+                onPointerEnter={(e) => {
+                  const kids = entry().children;
+                  if (!kids || entry().disabled) return setSub(null);
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setSub({ items: kids, x: r.right - 2, y: r.top - 5, left: r.left });
+                }}
+                onClick={() => {
+                  if (entry().disabled || entry().children) return;
+                  entry().run();
+                  props.onClose();
+                }}
+              >
+                <Show when={entry().checked !== undefined}>
+                  <span class={`ctxtick ${entry().checked ? "on" : ""}`}>✓</span>
+                </Show>
+                {/* A blank of the same width when others in this menu have
+                    an icon, so every label starts on one line. */}
+                <Show when={entry().icon || props.iconned}>
+                  <span class="ctxicon">{entry().icon?.()}</span>
+                </Show>
+                <span class="ctxlabel">{entry().label}</span>
+                <Show when={entry().hint}>
+                  <span class="ctxhint">{entry().hint}</span>
+                </Show>
+                <Show when={entry().children}>
+                  <span class="ctxmore">›</span>
+                </Show>
+              </div>
+            )}
+          </Show>
+        )}
+      </For>
+      <Show when={sub()}>
+        {(open) => (
+          <div
+            class="ctxmenu sub"
+            ref={(el) => (subBox = el)}
+            style={{ left: `${open().x}px`, top: `${open().y}px` }}
+          >
+            <Items
+              items={open().items}
+              iconned={open().items.some((i) => i.kind === "item" && i.icon)}
+              onClose={props.onClose}
+            />
+          </div>
+        )}
+      </Show>
     </>
   );
 }

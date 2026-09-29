@@ -328,6 +328,11 @@ export function shellMenu(fileIds: number[]): Promise<void> {
 }
 
 /** Opens a link in the default browser. Only http and https are accepted. */
+/** Opens files in a program, all of them in one launch. */
+export function openWith(program: string, fileIds: number[]): Promise<void> {
+  return invoke<void>("open_with", { program, fileIds });
+}
+
 export function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }

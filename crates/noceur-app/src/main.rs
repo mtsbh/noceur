@@ -137,6 +137,7 @@ fn main() {
             commands::drop_effect,
             commands::shell_menu,
             commands::open_url,
+            commands::open_with,
             commands::envelope,
             commands::spectrogram,
             tagedit::read_tags,

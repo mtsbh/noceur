@@ -125,9 +125,9 @@ export default function MatchPicker(props: {
               when={matches()!.length > 0}
               fallback={
                 <p class="sethint">
-                  No confident match. The search uses the track's artist and
-                  title, falling back to the file name — an untagged file named
-                  <code> Artist - Title</code> usually finds it.
+                  <span data-tip="Try adding artist and title" data-tip-at="start">
+                    No match
+                  </span>
                 </p>
               }
             >
@@ -180,9 +180,7 @@ export default function MatchPicker(props: {
         </div>
 
         <footer class="tagfoot">
-          <span class="sethint credit">
-            Nothing is written until you save in the editor.
-          </span>
+          <span class="sethint credit" />
           <button class="btn" onClick={props.onClose}>
             Close
           </button>

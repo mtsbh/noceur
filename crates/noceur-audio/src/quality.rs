@@ -364,15 +364,17 @@ pub struct Report {
 
 /// Where each encoder setting stops, roughly.
 ///
-/// LAME's defaults, which is what nearly everything in circulation was made
-/// with. The numbers are the low end of each band's usual range, so a file is
-/// credited with the lower bitrate when it sits on a boundary — accusing a
-/// genuine file is the expensive error here, not excusing a bad one.
+/// Measured, not quoted: a genuine WAV encoded by LAME 3.100 at each CBR rate,
+/// decoded back and run through [`Spectrum::cutoff_hz`], stopped at 16.2, 16.8,
+/// 18.2, 18.8 and 19.6 kHz for 128, 160, 192, 256 and 320. Each boundary sits
+/// between two neighbours. The old table was quoted from LAME's nominal lowpass
+/// values, which sit a few hundred hertz above where the measurement lands, and
+/// it called every 256 kbps source 192.
 const CUTOFFS: &[(f32, u32)] = &[
     (16_500.0, 128),
-    (17_750.0, 160),
-    (19_000.0, 192),
-    (20_000.0, 256),
+    (17_500.0, 160),
+    (18_500.0, 192),
+    (19_200.0, 256),
 ];
 
 /// The bitrate a cutoff is typical of.
@@ -400,13 +402,6 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
     let cutoff = spectrum.cutoff_hz();
     let brickwalled = spectrum.brickwalled();
     let ends_early = spectrum.ends_early();
-    // How the content ends, for the wording. A cliff and a slope carry the same
-    // conclusion and deserve different confidence in how it is put.
-    let stops = if brickwalled {
-        "stops dead at"
-    } else {
-        "falls away to nothing by"
-    };
     let nyquist = spectrum.sample_rate as f32 / 2.0;
     let implied = implied_kbps(cutoff);
 
@@ -422,7 +417,7 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
     };
 
     if !spectrum.usable() {
-        report.reason = "too quiet or too plain to measure".into();
+        report.reason = "too quiet to measure".into();
         return report;
     }
 
@@ -437,11 +432,7 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
         if let Some(source) = upsampled_from(spectrum.sample_rate, cutoff) {
             report.verdict = Verdict::Upsampled;
             report.implied_kbps = None;
-            report.reason = format!(
-                "{stops} {:.1} kHz — resampled up from {:.1} kHz, no detail added",
-                cutoff / 1000.0,
-                source as f32 / 1000.0
-            );
+            report.reason = format!("upsampled from {:.1} kHz", source as f32 / 1000.0);
             return report;
         }
     }
@@ -451,11 +442,8 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
         Claim::Lossy(None) => {
             report.verdict = Verdict::Unsure;
             report.reason = match implied {
-                Some(kbps) => format!(
-                    "bitrate unreadable; stops at {:.1} kHz, which suggests {kbps} kbps",
-                    cutoff / 1000.0
-                ),
-                None => format!("bitrate unreadable; content to {:.1} kHz", cutoff / 1000.0),
+                Some(kbps) => format!("bitrate unknown · ~{kbps} kbps"),
+                None => "bitrate unknown".into(),
             };
         }
 
@@ -463,22 +451,21 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
         Claim::Lossless => {
             if reaches_top || !ends_early {
                 report.verdict = Verdict::Genuine;
-                report.reason = format!("content to {:.1} kHz, no cutoff", cutoff / 1000.0);
+                report.reason = "full range".into();
             } else if cutoff < 19_000.0 {
                 report.verdict = Verdict::Transcoded;
                 report.reason = match implied {
-                    Some(kbps) => format!(
-                        "{stops} {:.1} kHz — was lossy, about {kbps} kbps",
-                        cutoff / 1000.0
-                    ),
-                    None => format!("{stops} {:.1} kHz", cutoff / 1000.0),
+                    Some(kbps) => format!("lossy source · ~{kbps} kbps"),
+                    None => "lossy source".into(),
                 };
             } else {
                 report.verdict = Verdict::Unsure;
-                report.reason = format!(
-                    "cutoff at {:.1} kHz — high for a transcode, low for lossless",
-                    cutoff / 1000.0
-                );
+                // Where a 256 or 320 kbps source would stop, and where a steep
+                // mastering lowpass sometimes does too. Named, not accused.
+                report.reason = match implied {
+                    Some(kbps) => format!("maybe lossy · ~{kbps} kbps"),
+                    None => "maybe lossy".into(),
+                };
             }
         }
 
@@ -490,21 +477,12 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
             if cutoff + 2_000.0 < expected {
                 report.verdict = Verdict::Upscaled;
                 report.reason = match implied {
-                    Some(kbps) => format!(
-                        "claims {claimed} kbps but stops at {:.1} kHz — encoded around {kbps} kbps",
-                        cutoff / 1000.0
-                    ),
-                    None => format!(
-                        "claims {claimed} kbps but stops at {:.1} kHz",
-                        cutoff / 1000.0
-                    ),
+                    Some(kbps) => format!("really ~{kbps} kbps"),
+                    None => format!("below {claimed} kbps"),
                 };
             } else {
                 report.verdict = Verdict::Genuine;
-                report.reason = format!(
-                    "{claimed} kbps, cutoff at {:.1} kHz as expected",
-                    cutoff / 1000.0
-                );
+                report.reason = "as claimed".into();
             }
         }
     }
@@ -1063,8 +1041,9 @@ mod tests {
     fn a_cutoff_maps_to_the_bitrate_it_suggests() {
         assert_eq!(implied_kbps(16_000.0), Some(128));
         assert_eq!(implied_kbps(17_000.0), Some(160));
-        assert_eq!(implied_kbps(18_500.0), Some(192));
-        assert_eq!(implied_kbps(19_500.0), Some(256));
+        assert_eq!(implied_kbps(18_200.0), Some(192));
+        assert_eq!(implied_kbps(18_800.0), Some(256));
+        assert_eq!(implied_kbps(19_600.0), Some(320));
         assert_eq!(implied_kbps(20_200.0), Some(320));
         assert_eq!(implied_kbps(21_000.0), None, "lossless territory");
     }

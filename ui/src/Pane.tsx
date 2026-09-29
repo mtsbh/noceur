@@ -19,6 +19,8 @@ import {
   probeBatch,
   startDrag,
   writeTags,
+  applyRename,
+  type TagField,
   type ArtSize,
   type Order,
   type SortColumn,
@@ -78,6 +80,8 @@ export type PaneHandle = {
   selection: () => number[];
   /** The selected ids that are audio files — what the dialogs act on. */
   audioSelection: () => number[];
+  /** A loaded row by id, for things that need its tags — a web search. */
+  rowOf: (fileId: number) => RowDisplay | undefined;
   /**
    * The audio row `by` steps from `fileId`, in this pane's order, or null when
    * there is none or its window is not loaded.
@@ -382,6 +386,13 @@ export default function Pane(props: {
       tabId: props.tab.id,
       path: current,
       refetch: () => refetchListing(),
+      rowOf: (fileId) => {
+        for (const rows of Object.values(pages)) {
+          const hit = rows.find((r) => r.fileId === fileId);
+          if (hit) return hit;
+        }
+        return undefined;
+      },
       selection: () => [...selection()],
       audioSelection,
       step: (fileId, by) => {
@@ -731,6 +742,133 @@ export default function Pane(props: {
     window.addEventListener("pointerup", stop);
   }
 
+  /**
+   * Which columns can be edited in place, and what writing one does.
+   *
+   * The name renames the file; the rest write that one tag. Audio rows only -
+   * a folder or a stray text file has no tags, and renaming those belongs to
+   * Explorer.
+   */
+  const EDITABLE = new Set<SortColumn>([
+    "name", "title", "artist", "album", "albumArtist", "genre",
+    "year", "trackNo", "comment", "isrc", "bpm", "key",
+  ]);
+  const canEdit = (row: RowDisplay, col: SortColumn) => row.kind === 1 && EDITABLE.has(col);
+
+  const [editing, setEditing] = createSignal<{ fileId: number; col: SortColumn } | null>(null);
+  const [editError, setEditError] = createSignal("");
+  /**
+   * The row that was already the only selection when it was pressed, and the
+   * cell pressed in. A second, unhurried click on a selected row edits, the way
+   * Explorer does - a double-click still plays.
+   */
+  let armed: { fileId: number; col: SortColumn } | null = null;
+  let editTimer: number | undefined;
+  onCleanup(() => clearTimeout(editTimer));
+
+  function beginEdit(fileId: number, col: SortColumn) {
+    clearTimeout(editTimer);
+    setEditError("");
+    setEditing({ fileId, col });
+  }
+
+  /** Writes an edited cell, or renames the file for the name column. */
+  async function commitEdit(row: RowDisplay, col: SortColumn, value: string) {
+    const before = String(row[col as keyof RowDisplay] ?? "");
+    if (value === before || (col === "name" && !value.trim())) {
+      setEditing(null);
+      return;
+    }
+    if (col === "name") {
+      try {
+        const report = await applyRename([[row.fileId, value.trim()]]);
+        if (report.failures.length > 0) throw new Error(report.failures[0].reason);
+        setEditing(null);
+        refetchListing();
+      } catch (e) {
+        // Left open with the reason, so the name can be fixed rather than retyped.
+        setEditError(e instanceof Error ? e.message : String(e));
+      }
+      return;
+    }
+
+    // Shown at once and taken back if the write fails, as ratings are.
+    const put = (v: string) => {
+      for (const [page, rows] of Object.entries(pages)) {
+        const at = rows.findIndex((r) => r.fileId === row.fileId);
+        if (at >= 0) setPages(Number(page), at, col as keyof RowDisplay, v as never);
+      }
+    };
+    setEditing(null);
+    put(value);
+    writeTags([row.fileId], { [col as TagField]: value })
+      .then((report) => {
+        if (report.failures.length > 0) throw new Error(report.failures[0].reason);
+      })
+      .catch(() => put(before));
+  }
+
+  /** The box a cell turns into while it is being edited. */
+  function CellEditor(p: { row: RowDisplay; col: SortColumn }) {
+    const start = String(p.row[p.col as keyof RowDisplay] ?? "");
+    // `done` once closed, so the blur that follows removing the box does not
+    // write the same edit a second time.
+    let busy = false;
+    let done = false;
+    const commit = async (el: HTMLInputElement) => {
+      if (busy || done) return;
+      busy = true;
+      await commitEdit(p.row, p.col, el.value);
+      busy = false;
+      if (editing() === null) done = true;
+    };
+    return (
+      <input
+        class={`celledit ${editError() ? "bad" : ""}`}
+        value={start}
+        title={editError() || undefined}
+        spellcheck={false}
+        ref={(el) =>
+          queueMicrotask(() => {
+            el.focus();
+            // The name without its extension, as Explorer selects it.
+            const dot = p.col === "name" ? start.lastIndexOf(".") : -1;
+            el.setSelectionRange(0, dot > 0 ? dot : start.length);
+          })
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onDblClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.stopPropagation()}
+        onInput={() => setEditError("")}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void commit(e.currentTarget);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            done = true;
+            setEditing(null);
+          }
+        }}
+        onBlur={(e) => {
+          if (done) return;
+          // A failed rename keeps its box while focused; leaving it gives up.
+          if (editError()) {
+            done = true;
+            setEditing(null);
+          }
+          else void commit(e.currentTarget);
+        }}
+      />
+    );
+  }
+
+  /** Whether this cell of this row is the one open for editing. */
+  const isEditing = (row: RowDisplay, col: SortColumn) =>
+    editing()?.fileId === row.fileId && editing()?.col === col;
+
   function onRow(row: RowDisplay) {
     // Selection is handled by the pointer handler; this is the open action.
     if (row.kind === 0) {
@@ -753,14 +891,37 @@ export default function Pane(props: {
       onPointerDown: (e: PointerEvent) => {
         const r = row();
         if (!r) return;
+        const cell = (e.target as HTMLElement).closest<HTMLElement>("[data-edit]");
+        const col = cell?.dataset.edit as SortColumn | undefined;
+        armed =
+          col &&
+          props.focused &&
+          e.button === 0 &&
+          !e.shiftKey &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          selected() === r.fileId &&
+          selection().size === 1 &&
+          canEdit(r, col)
+            ? { fileId: r.fileId, col }
+            : null;
+        clearTimeout(editTimer);
         selectRow(r, e);
         startRowDrag(e, r);
       },
       onClick: () => {
         const r = row();
-        if (r) onRow(r);
+        if (!r) return;
+        onRow(r);
+        const a = armed;
+        armed = null;
+        // Late enough that a double-click cancels it first.
+        if (a && a.fileId === r.fileId) {
+          editTimer = window.setTimeout(() => beginEdit(a.fileId, a.col), 450);
+        }
       },
       onDblClick: () => {
+        clearTimeout(editTimer);
         const r = row();
         if (r) props.onPlay(r, props.tab.id);
       },
@@ -965,7 +1126,7 @@ export default function Pane(props: {
                             {...itemHandlers(row)}
                           >
                             <Show when={row()} fallback={<span class="ph" />}>
-                              {(r) => (
+                              {(r) => { return (
                                 <>
                                   {/* Only rows the probe found a picture in get
                                       an image at all; the rest render the empty
@@ -1011,8 +1172,23 @@ export default function Pane(props: {
                                     {(col) =>
                                       col.key === "rating" ? (
                                         <Stars row={r()} onRate={(n) => rate(r(), n)} />
-                                      ) : col.key === "name" ? (
-                                        <span class="name" title={r().name}>
+                                      ) : (
+                                        <Show
+                                          when={isEditing(r(), col.key)}
+                                          fallback={cell(col)}
+                                        >
+                                          <span class="cellbox">
+                                            <CellEditor row={r()} col={col.key} />
+                                          </span>
+                                        </Show>
+                                      )
+                                    }
+                                  </For>
+                                </>
+                              );
+                              function cell(col: Column) {
+                                return col.key === "name" ? (
+                                        <span class="name" title={r().name} data-edit="name">
                                           {r().name}
                                           <Show when={r().state}>
                                             <span class="bad"> [{r().state}]</span>
@@ -1020,6 +1196,7 @@ export default function Pane(props: {
                                         </span>
                                       ) : (
                                         <span
+                                          data-edit={EDITABLE.has(col.key) ? col.key : undefined}
                                           class={`${
                                             col.num ? "num mono" : col.dim ? "dim" : "mono"
                                           }${col.key === "key" ? " keycol" : ""}`}
@@ -1032,11 +1209,9 @@ export default function Pane(props: {
                                         >
                                           {cellText(r(), col.key)}
                                         </span>
-                                      )
-                                    }
-                                  </For>
-                                </>
-                              )}
+                                      );
+                              }
+                            }}
                             </Show>
                           </div>
                         );

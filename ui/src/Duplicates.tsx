@@ -118,19 +118,13 @@ export default function Duplicates(props: {
           <Show
             when={groups()}
             fallback={
-              <p class="sethint">
-                Reading each track end to end — tags are not part of the audio,
-                so this is the only way to know.
-              </p>
+              <p class="sethint">Analyzing…</p>
             }
           >
             <Show
               when={groups()!.length > 0}
               fallback={
-                <p class="sethint">
-                  Nothing here appears twice. Only files that have been read are
-                  compared — a copy somewhere you have not looked is not counted.
-                </p>
+                <p class="sethint">No duplicates</p>
               }
             >
               <For each={groups()}>
@@ -171,10 +165,8 @@ export default function Duplicates(props: {
         <footer class="tagfoot">
           <span class="sethint credit">
             <Show when={groups() && groups()!.length > 0}>
-              {copies()} files, {groups()!.length} recordings ·{" "}
+              {copies()} files · {groups()!.length} recordings
             </Show>
-            Matched on the audio, not the tags. Click a row to show it in
-            Explorer.
           </span>
           <button class="btn" onClick={props.onClose}>
             {measuring() ? "Stop" : "Close"}

@@ -250,16 +250,6 @@ export default function TagEditor(props: {
               </For>
             </div>
 
-            <p class="sethint">
-              <Show
-                when={(form()?.count ?? 0) > 1}
-                fallback="Emptying a box removes that tag from the file."
-              >
-                Only the boxes you type in are written — the rest are left as each
-                file has them. Emptying a box removes that tag from every selected
-                file.
-              </Show>
-            </p>
           </Show>
 
           {/* Artwork, at a size worth judging — "is this the right cover, and
@@ -338,11 +328,6 @@ export default function TagEditor(props: {
                     onChange={(e) => setEmbedArt(e.currentTarget.checked)}
                   />
                   Embed this cover art
-                </span>
-                <span class="sethint">
-                  From the same release as the fields above. Written into the
-                  {(form()?.count ?? 0) > 1 ? " files" : " file"} on Save,
-                  replacing any artwork already there.
                 </span>
               </span>
             </label>

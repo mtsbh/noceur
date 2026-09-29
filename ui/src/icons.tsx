@@ -497,3 +497,42 @@ export function NameToTagIcon() {
     </Icon>
   );
 }
+
+/**
+ * Every glyph a toolbar button can be given when the bar is customised.
+ *
+ * The button icons first, then the ones the built-in tools wear, so a user
+ * button can borrow a tool's look and a tool can take a plainer one.
+ */
+export const BAR_ICONS: { name: string; label: string; icon: () => JSX.Element }[] = [
+  ...ACTION_ICONS,
+  { name: "image", label: "Image", icon: ImageIcon },
+  { name: "nametotag", label: "Name to tag", icon: NameToTagIcon },
+  { name: "broom", label: "Broom", icon: BroomIcon },
+  { name: "spectrum", label: "Spectrum", icon: SpectrumIcon },
+  { name: "convert", label: "Convert", icon: ConvertIcon },
+  { name: "pig", label: "Pig", icon: PigIcon },
+  { name: "splitcols", label: "Columns", icon: SplitColsIcon },
+  { name: "splitrows", label: "Rows", icon: SplitRowsIcon },
+  { name: "vinyl", label: "Vinyl", icon: VinylIcon },
+  { name: "clipboard", label: "Clipboard", icon: ClipboardIcon },
+  { name: "trash", label: "Trash", icon: TrashIcon },
+  { name: "newfolder", label: "New folder", icon: NewFolderIcon },
+  { name: "tab", label: "Tab", icon: TabIcon },
+  { name: "video", label: "Video", icon: VideoIcon },
+];
+
+export function barIcon(name?: string) {
+  return name ? BAR_ICONS.find((i) => i.name === name)?.icon : undefined;
+}
+
+/** A window with an arrow leaving it: open in another program. */
+export function OpenWithIcon() {
+  return (
+    <Icon>
+      <rect x="2.4" y="4.4" width="9.2" height="9.2" rx="1.2" />
+      <path d="M8.4 2.4h5.2v5.2" />
+      <path d="m13.6 2.4-6 6" />
+    </Icon>
+  );
+}

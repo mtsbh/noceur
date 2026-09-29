@@ -1,8 +1,9 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
-import { CloseIcon, actionIcon } from "./icons";
+import { CloseIcon, GlobeIcon, OpenWithIcon, actionIcon } from "./icons";
 import {
   actions,
   credentials,
+  folderIconUrl,
   openUrl,
   preserveDates,
   setActions,
@@ -26,11 +27,32 @@ import {
   TAG_COLOURS,
   valueColour,
   valuesFrom,
+  newLauncherId,
+  type Launcher,
   type QuickGroup,
   type Settings as S,
 } from "./settings";
 
 export type ArtSize = "small" | "medium" | "large";
+
+/** The settings box's tabs, in the order the sidebar lists them. */
+const TABS = [
+  { id: "look", label: "Appearance" },
+  { id: "list", label: "Library" },
+  { id: "quick", label: "Tagging" },
+  { id: "actions", label: "Actions" },
+  { id: "files", label: "Files" },
+  { id: "sources", label: "Sources" },
+] as const;
+
+export type SettingsTab = (typeof TABS)[number]["id"];
+
+/**
+ * The open tab. Outside the component, so settings reopen where you left them
+ * and the rest of the app can open them on a particular tab.
+ */
+const [settingsTab, setSettingsTabSignal] = createSignal<SettingsTab>("look");
+export const setSettingsTab = (tab: SettingsTab) => setSettingsTabSignal(tab);
 
 /**
  * The kinds of button, and what each one's two boxes are for.
@@ -68,12 +90,14 @@ const POPOVER = 150;
  */
 function Section(props: {
   title: string;
+  tab: SettingsTab;
   info?: JSX.Element;
   children: JSX.Element;
 }) {
   const [open, setOpen] = createSignal(false);
 
   return (
+    <Show when={settingsTab() === props.tab}>
     <section class="setgroup">
       <h3>
         {props.title}
@@ -94,6 +118,100 @@ function Section(props: {
       </Show>
       {props.children}
     </section>
+    </Show>
+  );
+}
+
+/**
+ * The list behind "Open with" or "Search in": a name, a program or an address,
+ * and a switch for a toolbar button of its own.
+ */
+function LauncherList(props: {
+  items: Launcher[];
+  kind: "open" | "search";
+  onChange: (next: Launcher[]) => void;
+}) {
+  const edit = (id: string, change: Partial<Launcher>) =>
+    props.onChange(props.items.map((l) => (l.id === id ? { ...l, ...change } : l)));
+  const icon = (l: Launcher) => {
+    if (props.kind === "open") return l.target.trim() ? folderIconUrl(l.target.trim().replace(/^"|"$/g, "")) : "";
+    try {
+      return `${new URL(l.target.replace(/\{\w+\}/g, "x")).origin}/favicon.ico`;
+    } catch {
+      return "";
+    }
+  };
+
+  return (
+    <>
+      <For each={props.items}>
+        {(l) => (
+          <div class="setrow launcher">
+            <span class="launchicon">
+              <LauncherIcon src={icon(l)} kind={props.kind} />
+            </span>
+            <input
+              type="text"
+              class="launchname"
+              value={l.name}
+              placeholder="Name"
+              spellcheck={false}
+              onChange={(e) => edit(l.id, { name: e.currentTarget.value })}
+            />
+            <input
+              type="text"
+              class="launchtarget mono"
+              value={l.target}
+              placeholder={
+                props.kind === "open"
+                  ? "C:\\Program Files\\…\\app.exe"
+                  : "https://site.com/search?q={query}"
+              }
+              spellcheck={false}
+              onChange={(e) => edit(l.id, { target: e.currentTarget.value.trim() })}
+            />
+            <label class="setcheck" data-tip="Show in toolbar" data-tip-at="end">
+              <input
+                type="checkbox"
+                checked={l.inBar}
+                onChange={(e) => edit(l.id, { inBar: e.currentTarget.checked })}
+              />
+              <span>Toolbar</span>
+            </label>
+            <button
+              class="setremove"
+              onClick={() => props.onChange(props.items.filter((x) => x.id !== l.id))}
+            >
+              remove
+            </button>
+          </div>
+        )}
+      </For>
+      <button
+        class="btn"
+        onClick={() =>
+          props.onChange([
+            ...props.items,
+            { id: newLauncherId(), name: "", target: props.kind === "search" ? "https://" : "", inBar: false },
+          ])
+        }
+      >
+        {props.kind === "open" ? "Add program" : "Add site"}
+      </button>
+    </>
+  );
+}
+
+function LauncherIcon(props: { src: string; kind: "open" | "search" }) {
+  const [broken, setBroken] = createSignal(false);
+  createEffect(() => {
+    props.src;
+    setBroken(!props.src);
+  });
+  return (
+    <Show when={!broken()} fallback={props.kind === "open" ? <OpenWithIcon /> : <GlobeIcon />}>
+      <img class="glyphimg" src={props.src} alt="" onError={() => setBroken(true)} />
+    </Show>
   );
 }
 
@@ -222,6 +340,19 @@ export default function Settings(props: {
 
         {/* A click anywhere else puts the palette away, which is what anyone
             expects of something that opened over the page. */}
+        <div class="setframe">
+        <nav class="setnav" aria-label="Settings sections">
+          <For each={TABS}>
+            {(t) => (
+              <button
+                class={`setnavbtn ${settingsTab() === t.id ? "on" : ""}`}
+                onClick={() => setSettingsTabSignal(t.id)}
+              >
+                {t.label}
+              </button>
+            )}
+          </For>
+        </nav>
         <div
           class="setbody"
           onClick={(e) => {
@@ -231,23 +362,9 @@ export default function Settings(props: {
           }}
         >
           <Section
+            tab="look"
             title="Appearance"
-            info={
-              <>
-                <p>
-                  Each <b>theme</b> recolours the whole window, the waveform and
-                  the meters with it. Paper is the one light theme.
-                </p>
-                <p>
-                  The <b>meter</b> is the small box beside the time in the
-                  transport. Clicking it steps to the next kind. It reads the
-                  audio before the volume slider, so it shows how loud the file
-                  is rather than how loud you have it: a peak meter like AIMP's,
-                  a pair of VU needles, an oscilloscope, a vectorscope with a
-                  phase correlation bar, or a spectrum.
-                </p>
-              </>
-            }
+            info={<p>Click the meter to cycle modes. It shows file level, not volume.</p>}
           >
             <div class="setrow">
               <span class="setlabel">Theme</span>
@@ -289,17 +406,9 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="look"
             title="Waveform"
-            info={
-              <p>
-                All four read the same three frequency bands and only differ in
-                how they draw them. <b>RGB</b> blends bass, body and air into one
-                colour, as Traktor and Virtual DJ do. <b>3-band</b> draws them as
-                separate shapes - blue bass, orange body, pale highs - the way a
-                CDJ does. <b>Blue</b> is one colour that pales where the hats
-                are. <b>Mono</b> uses the app's own accent.
-              </p>
-            }
+            info={<p>RGB blends bands · 3-band splits them</p>}
           >
             <div class="setrow">
               <span class="setlabel">Shape</span>
@@ -356,35 +465,9 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="quick"
             title="Quick tag"
-            info={
-              <>
-                <p>
-                  Rows of values you can apply to the playing track by keyboard.
-                  Every library has its own vocabulary, so the field names are
-                  yours too - <code>ENERGY</code> and <code>MOOD</code> are only
-                  defaults.
-                </p>
-                <p>
-                  A name a format already knows goes to its proper home:{" "}
-                  <code>MOOD</code> becomes ID3's <code>TMOO</code> frame.
-                  Anything else becomes a user-defined field - <code>TXXX</code>{" "}
-                  in MP3, WAV and AIFF, a plain key in FLAC, an iTunes atom in
-                  M4A - which is where Mp3tag, OneTagger and Serato look.
-                </p>
-                <p>
-                  Rekordbox displays only a handful of fields, so for something
-                  visible on a CDJ point a row at <code>COMMENT</code> or{" "}
-                  <code>GROUPING</code> rather than a name of your own. The star
-                  rating is separate and always goes where Rekordbox reads it.
-                </p>
-                <p>
-                  A field name of exactly four capitals - <code>VIBE</code> - is
-                  refused: ID3 reads any four capitals as a frame identifier, so
-                  it would be written as something no reader understands.
-                </p>
-              </>
-            }
+            info={<p>Keys tag the playing track. Use COMMENT or GROUPING to see it in Rekordbox.</p>}
           >
             <div class="setrow">
               <span class="setlabel">Stars</span>
@@ -556,22 +639,8 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="actions"
             title="Buttons"
-            info={
-              <>
-                <p>
-                  Your own actions, run on the selection from the lightning
-                  button in the path bar. Click one to edit it: pick what it
-                  does and how, and the expression is written for you.
-                </p>
-                <p>
-                  Anything that changes a file lists every result before it
-                  runs. Opening a program passes your expression as its
-                  arguments and never through a shell, so a track named after a
-                  command is an argument and nothing else.
-                </p>
-              </>
-            }
           >
             {/* A line each. The builder is a dialog rather than a block per
                 button: inline, four boxes times eight buttons turned this panel
@@ -629,17 +698,30 @@ export default function Settings(props: {
             </button>
           </Section>
 
+          <Section tab="actions" title="Open with">
+            <LauncherList
+              kind="open"
+              items={props.settings.openWith}
+              onChange={(openWith) => patch({ openWith })}
+            />
+          </Section>
+
+          <Section tab="actions" title="Search in">
+            <p class="sethint">
+              Use <code>{"{artist}"}</code>, <code>{"{title}"}</code>,{" "}
+              <code>{"{album}"}</code> or <code>{"{query}"}</code> in the address.
+            </p>
+            <LauncherList
+              kind="search"
+              items={props.settings.searchIn}
+              onChange={(searchIn) => patch({ searchIn })}
+            />
+          </Section>
+
           <Section
+            tab="sources"
             title="Metadata sources"
-            info={
-              <p>
-                Deezer, iTunes and MusicBrainz need nothing. Discogs needs a
-                personal access token from your own account, and is the only one
-                here that reliably knows a record's label and catalogue number.
-                The token is stored in plain text beside the app and is only ever
-                sent to Discogs.
-              </p>
-            }
+            info={<p>Only Discogs needs a token. It's sent only to Discogs.</p>}
           >
             <div class="setrow">
               <span class="setlabel">Discogs</span>
@@ -685,26 +767,8 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="files"
             title="Files"
-            info={
-              <>
-                <p>
-                  Writing a tag rewrites the file, and the filesystem stamps it
-                  with the time it was rewritten. For a music library that is
-                  destructive in a quiet way: "date modified" is what you sort by
-                  to find what arrived last week, and retagging a folder moves
-                  every track in it to the top of that sort at once. The old
-                  dates are not recoverable, which is why this starts on.
-                </p>
-                <p>
-                  Hiding non-audio files drops the cover scans, cue sheets,
-                  .nfo files and stray archives a download leaves in a release
-                  folder. Folders themselves always stay — they are what you
-                  navigate with. It only changes what is shown: nothing is
-                  moved or deleted, and the hidden files are still there.
-                </p>
-              </>
-            }
           >
             <div class="setrow">
               <span class="setlabel">Dates</span>
@@ -735,23 +799,9 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="files"
             title="Converter"
-            info={
-              <>
-                <p>
-                  Converting uses ffmpeg. Noceur looks for it here first, then
-                  for <code>ffmpeg.exe</code> beside Noceur (or in an{" "}
-                  <code>ffmpeg</code> or <code>ffmpeg\bin</code> folder beside
-                  it), then on your PATH - so a portable copy next to the app
-                  just works.
-                </p>
-                <p>
-                  The converter keeps each file's bit depth and sample rate, so
-                  WAV, AIFF, FLAC and ALAC convert into each other without losing
-                  a sample, and can check each result against its original.
-                </p>
-              </>
-            }
+            info={<p>Needs ffmpeg: set a path, or put ffmpeg.exe next to Noceur.</p>}
           >
             <div class="setrow">
               <span class="setlabel">ffmpeg</span>
@@ -793,17 +843,9 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="look"
             title="Text"
-            info={
-              <p>
-                Everything offered here except Inter ships with Windows, so the
-                list is what this machine already has rather than a list of
-                things to install — a face it turns out not to have is marked
-                as missing rather than quietly drawn in another one. "Other"
-                takes the exact name of any font installed on the machine, as
-                spelled in Windows' own font list.
-              </p>
-            }
+            info={<p>Other: type any installed font's name</p>}
           >
             <div class="setrow">
               <span class="setlabel">Font</span>
@@ -862,15 +904,8 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="list"
             title="List"
-            info={
-              <p>
-                A folder holding no audio at all is a set of places rather than
-                a table of values — every column but the name is empty for a
-                directory — so it is drawn as icons instead. One track in it and
-                the columns mean something again, and the list comes back.
-              </p>
-            }
           >
             <div class="setrow">
               <span class="setlabel">Folders</span>
@@ -909,12 +944,8 @@ export default function Settings(props: {
           </Section>
 
           <Section
+            tab="list"
             title="Columns"
-            info={
-              <p>
-                Right-clicking the list header opens the same list.
-              </p>
-            }
           >
             <div class="setcols">
               <For each={props.columns}>
@@ -932,6 +963,7 @@ export default function Settings(props: {
               </For>
             </div>
           </Section>
+        </div>
         </div>
       </div>
 

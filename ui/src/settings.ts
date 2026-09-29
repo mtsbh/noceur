@@ -147,6 +147,54 @@ export type Settings = {
   theme: ThemeName;
   /** What the meter box in the transport shows, or `off` for no box. */
   meter: MeterMode;
+  /** The top bar as arranged by hand, or `null` for the default arrangement. */
+  bar: BarLayout | null;
+  /** Programs offered under "Open with". */
+  openWith: Launcher[];
+  /** Sites offered under "Search in". */
+  searchIn: Launcher[];
+};
+
+/**
+ * One entry of "Open with" or "Search in".
+ *
+ * `target` is a program's path for the first, and a web address for the
+ * second — with `{artist}`, `{title}`, `{album}` or `{query}` where the track
+ * goes, or nothing, in which case artist and title are added to the end.
+ */
+export type Launcher = {
+  id: string;
+  name: string;
+  target: string;
+  /** Whether it also has a button in the top bar. Off until asked for. */
+  inBar: boolean;
+};
+
+export const newLauncherId = () => Math.random().toString(36).slice(2, 10);
+
+export const DEFAULT_SEARCH: Launcher[] = [
+  { id: "google", name: "Google", target: "https://www.google.com/search?q={query}", inBar: false },
+  {
+    id: "youtube",
+    name: "YouTube",
+    target: "https://www.youtube.com/results?search_query={query}",
+    inBar: false,
+  },
+];
+
+/**
+ * The top bar's arrangement.
+ *
+ * `order` holds item ids and spacers (`sep:…`, `space:…`, `flex:…`, each with a
+ * unique suffix so the same kind can appear twice). `hidden` remembers what was
+ * taken off, so a tool added by a later build — or a new button of your own —
+ * turns up by itself without bringing back the ones you removed.
+ */
+export type BarLayout = {
+  order: string[];
+  hidden: string[];
+  /** Icon chosen per item, by name from `BAR_ICONS`. */
+  icons: Record<string, string>;
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -217,6 +265,9 @@ export const DEFAULTS: Settings = {
   folderGrid: true,
   theme: DEFAULT_THEME,
   meter: "vu",
+  bar: null,
+  openWith: [],
+  searchIn: DEFAULT_SEARCH,
 };
 
 const KEY = "noceur.settings";
@@ -257,10 +308,63 @@ export function loadSettings(): Settings {
       folderGrid: parsed.folderGrid !== false,
       theme: isTheme(parsed.theme) ? parsed.theme : DEFAULTS.theme,
       meter: parsed.meter && METERS.includes(parsed.meter) ? parsed.meter : DEFAULTS.meter,
+      bar: readBar(parsed.bar),
+      openWith: readLaunchers(parsed.openWith) ?? DEFAULTS.openWith,
+      searchIn: readLaunchers(parsed.searchIn) ?? DEFAULTS.searchIn,
     };
   } catch {
     return DEFAULTS;
   }
+}
+
+/** Guards a stored launcher list; `undefined` when there is none to read. */
+function readLaunchers(raw: unknown): Launcher[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw
+    .filter((l) => l && typeof l.name === "string" && typeof l.target === "string")
+    .map((l) => ({
+      id: typeof l.id === "string" && l.id ? l.id : newLauncherId(),
+      name: l.name,
+      target: l.target,
+      inBar: l.inBar === true,
+    }));
+}
+
+/**
+ * The address a search opens, for one track.
+ *
+ * Every value is URL-encoded on its way in, so an artist called "Simon & Garfunkel"
+ * searches for that rather than for "Simon" and a stray parameter.
+ */
+export function searchUrl(
+  template: string,
+  track: { artist: string; title: string; album: string; name: string },
+): string {
+  const stem = track.name.replace(/\.[^.]+$/, "");
+  const title = track.title || (track.artist ? "" : stem);
+  const query = [track.artist, title].filter(Boolean).join(" ") || stem;
+  const enc = encodeURIComponent;
+  const values: Record<string, string> = {
+    artist: enc(track.artist),
+    title: enc(title),
+    album: enc(track.album),
+    query: enc(query),
+  };
+  const filled = template.replace(/\{(artist|title|album|query)\}/gi, (_, k: string) => values[k.toLowerCase()]);
+  return filled === template ? template + enc(query) : filled;
+}
+
+/** Guards a stored bar layout, since this file is editable by hand. */
+function readBar(raw: unknown): BarLayout | null {
+  const b = raw as Partial<BarLayout> | null | undefined;
+  if (!b || !Array.isArray(b.order)) return null;
+  const strings = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  const icons: Record<string, string> = {};
+  if (b.icons && typeof b.icons === "object") {
+    for (const [k, v] of Object.entries(b.icons)) if (typeof v === "string") icons[k] = v;
+  }
+  return { order: strings(b.order), hidden: strings(b.hidden), icons };
 }
 
 /** Whether a stored font name is one this build offers. */

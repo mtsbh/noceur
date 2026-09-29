@@ -179,16 +179,9 @@ export default function Quality(props: {
 
         <footer class="tagfoot">
           <span class="sethint credit">
-            <Show
-              when={!running()}
-              fallback="Reading each track end to end — about half a second each."
-            >
-              <Show
-                when={suspect() > 0}
-                fallback="Nothing here looks re-encoded."
-              >
-                {suspect()} worth looking at. A cutoff well below what the
-                bitrate claims means the file was encoded lower and re-wrapped.
+            <Show when={!running()} fallback="Analyzing…">
+              <Show when={suspect() > 0} fallback="No issues">
+                {suspect()} of {rows().length} suspect
               </Show>
             </Show>
           </span>

@@ -186,9 +186,10 @@ body {
    It stays above the split, because a second copy of the settings button per
    pane would be two ways to open one panel. */
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--hair);
   flex: none;
@@ -1351,19 +1352,93 @@ body.resizing * {
    A panel down the right rather than a centred modal: most of what it changes
    — waveform, cover size, columns — is visible in the window behind it, and a
    dialog in the middle would cover the thing you are adjusting. */
+/* A box in the middle of the window, a tab per subject down its left side. */
 .settings {
   position: fixed;
   z-index: 14;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 400px;
-  max-width: 100vw;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 32px));
+  height: min(600px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-left: 1px solid var(--hair2);
-  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.setframe {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.setnav {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 150px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--hair);
+  overflow-y: auto;
+}
+.setnavbtn {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg3);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.setnavbtn:hover {
+  color: var(--fg);
+  background: var(--raise);
+}
+.setnavbtn.on {
+  color: var(--fg);
+  background: var(--raise);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+@media (max-width: 560px) {
+  .setframe {
+    flex-direction: column;
+  }
+  .setnav {
+    flex-direction: row;
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--hair);
+    overflow-x: auto;
+  }
+  .setnavbtn {
+    white-space: nowrap;
+  }
+}
+/* Open with, Search in. */
+.setrow.launcher {
+  gap: 6px;
+}
+.launchicon {
+  flex: none;
+  display: flex;
+  width: 16px;
+  color: var(--fg3);
+}
+.launchname {
+  flex: 0 0 110px;
+  min-width: 0;
+}
+.launchtarget {
+  flex: 1;
+  min-width: 0;
+}
+.setrow.launcher .setremove {
+  float: none;
 }
 .sethead {
   flex: none;
@@ -1399,6 +1474,7 @@ body.resizing * {
 .setbody {
   flex: 1;
   overflow-y: auto;
+  min-width: 0;
   padding: 4px 16px 20px;
 }
 .setgroup {
@@ -2524,22 +2600,237 @@ body.resizing * {
    Shortcuts to the right-click menu, in the path bar. Disabled rather than
    hidden without a selection: buttons that appear and disappear as rows are
    clicked are harder to aim at than ones that stay put. */
-/* The top bar is a row of small groups - metadata, files, your own buttons,
-   art size, panes, the app - each in its own faint tray with space between,
-   so the eye finds a group first and the button in it second. */
+/* The top bar: flat buttons, divided by hairlines and spaces the user places.
+   Arranged by hand - right-click the bar, Customize toolbar. */
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
 }
-.tgroup {
+.baritem {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 1px;
-  padding: 2px;
-  border: 1px solid var(--hair);
-  border-radius: 6px;
+}
+.tspacer.sep,
+.tsep {
+  width: 1px;
+  height: 16px;
+  margin: 0 7px;
+  background: var(--hair2);
+}
+.tsep.fixed {
+  margin: 0 8px 0 10px;
+}
+.tspacer.space {
+  width: 14px;
+  height: 22px;
+}
+.tspacer.flex {
+  flex: 1;
+  height: 22px;
+}
+/* Customising: everything wobbles into place, nothing fires. */
+.toolbar.editing .baritem {
+  cursor: grab;
+  border-radius: 5px;
+  outline: 1px dashed var(--hair2);
+  outline-offset: 1px;
+}
+.toolbar.editing .baritem:hover {
+  outline-color: var(--acc);
+}
+.toolbar.editing .baritem > * {
+  pointer-events: none;
+}
+.toolbar.editing .baritem > .barx {
+  pointer-events: auto;
+}
+.toolbar.editing [data-tip]::after {
+  display: none;
+}
+.toolbar.editing .tspacer.sep {
+  width: 7px;
+  margin: 0 4px;
+  background: linear-gradient(var(--hair2), var(--hair2)) center / 1px 100% no-repeat;
+}
+.toolbar.editing .tspacer.flex {
+  min-width: 28px;
+  background: repeating-linear-gradient(90deg, transparent 0 4px, var(--hair) 4px 5px);
+}
+.toolbar.editing .tspacer.space {
+  background: var(--hair);
+}
+.baritem.dragging {
+  opacity: 0.35;
+}
+.baritem.absent {
+  opacity: 0.45;
+}
+.barx {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 50%;
+  background: var(--raise);
+  color: var(--fg2);
+  cursor: pointer;
+}
+.barx svg {
+  width: 8px;
+  height: 8px;
+}
+.baritem:hover > .barx {
+  display: flex;
+}
+.barx:hover {
+  color: var(--acc);
+  border-color: var(--acc);
+}
+.barghost {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  border: 1px solid var(--acc);
+  border-radius: 5px;
+  background: var(--raise);
+  color: var(--fg);
+  font-size: 10px;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.barghostx {
+  color: var(--acc);
+}
+/* What is not in the bar, under it. */
+.bartray {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 14px;
+  z-index: 40;
+  width: min(620px, calc(100vw - 28px));
+  padding: 10px;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: var(--raise);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.bartrayitems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.barchip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 6px;
+  border: 1px solid var(--hair2);
+  border-radius: 5px;
+  color: var(--fg2);
+  font-size: 11px;
+  cursor: grab;
+  user-select: none;
+}
+.barchip:hover {
+  color: var(--fg);
+  border-color: var(--acc);
+}
+.barchip svg {
+  width: 14px;
+  height: 14px;
+}
+.chipword {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.chipspacer {
+  width: 14px;
+  height: 14px;
+}
+.chipspacer.sep {
+  background: linear-gradient(var(--fg3), var(--fg3)) center / 1px 100% no-repeat;
+}
+.chipspacer.space {
+  border: 1px dashed var(--fg4);
+  border-radius: 2px;
+}
+.chipspacer.flex {
+  background: repeating-linear-gradient(90deg, transparent 0 3px, var(--fg4) 3px 4px);
+}
+.bartrayfoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+.barhint {
+  flex: 1;
+  color: var(--fg4);
+  font-size: 10px;
+}
+/* Icon picker for one bar button. */
+.baricons {
+  position: fixed;
+  z-index: 61;
+  display: grid;
+  grid-template-columns: repeat(8, 26px);
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--hair2);
+  border-radius: 7px;
+  background: var(--raise);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.bariconbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg3);
+  cursor: pointer;
+}
+.bariconbtn:hover {
   background: var(--panel);
+  color: var(--fg);
+}
+.bariconbtn.on {
+  color: var(--acc);
+}
+.bariconreset {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 4px;
+  border: 0;
+  border-top: 1px solid var(--hair);
+  background: none;
+  color: var(--fg3);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.bariconreset:hover {
+  color: var(--fg);
 }
 .toolbtn {
   position: relative;
@@ -2602,7 +2893,6 @@ body.resizing * {
   bottom: calc(100% + 7px);
 }
 [data-tip-at~="end"]::after,
-.toolbtn:last-child[data-tip]::after,
 .swatch:last-child[data-tip]::after {
   left: auto;
   right: 0;
@@ -3355,4 +3645,169 @@ body.resizing-v * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Editing a cell in place ─────────────────────────────────────────────── */
+.cellbox {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-right: 6px;
+}
+.celledit {
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--row-h) - 6px);
+  max-height: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--acc);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+}
+.celledit.bad {
+  border-color: var(--qual-bad, #e2685e);
+}
+
+/* Submenus: Open with, Search in. */
+.ctxmenu.sub {
+  z-index: 13;
+}
+.ctxmore {
+  margin-left: -14px;
+  color: var(--fg4);
+  font-size: 13px;
+  line-height: 1;
+}
+.ctxitem.parent:hover .ctxmore {
+  color: var(--fg2);
+}
+
+/* A program's or a site's own icon, where a glyph would be. */
+.glyphimg {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 2px;
+}
+.setrow.launcher .setremove,
+.setrow.launcher .setcheck {
+  flex: none;
+}
+
+/* ── Expression syntax help ─────────────────────────────────────────────── */
+.scrim.over {
+  z-index: 16;
+}
+.renamer.syntaxhelp {
+  z-index: 17;
+  width: 720px;
+  height: min(640px, calc(100vh - 80px));
+}
+.syntaxsearch {
+  width: 200px;
+}
+.syntaxbody {
+  overflow-y: auto;
+}
+.syntaxsample {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  color: var(--fg3);
+  font-size: 11px;
+}
+.syntaxlabel {
+  width: 100%;
+  color: var(--fg4);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.syntaxpair code,
+.syntaxexample code,
+.syntaxcode {
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--acc);
+}
+.syntaxsection {
+  padding: 12px 0 4px;
+  border-bottom: 1px solid var(--hair);
+}
+.syntaxsection:last-child {
+  border-bottom: 0;
+}
+.syntaxsection h3 {
+  margin: 0 0 8px;
+  color: var(--fg2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.syntaxintro {
+  margin: 0 0 8px;
+  color: var(--fg3);
+  font-size: 11px;
+}
+.syntaxentry {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 11px;
+}
+.syntaxsig {
+  align-self: start;
+  padding: 2px 6px;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  background: none;
+  color: var(--acc);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.syntaxsig:hover {
+  border-color: var(--acc);
+}
+.syntaxabout {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--fg2);
+}
+.syntaxexample {
+  color: var(--fg3);
+  overflow-wrap: anywhere;
+}
+.syntaxexample b {
+  color: var(--fg);
+  font-weight: 500;
+}
+.syntaxrecipe {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 0;
+  font-size: 11px;
+}
+.syntaxrecipehead {
+  display: flex;
+  justify-content: space-between;
+  color: var(--fg);
+}
+.syntaxcode {
+  overflow-wrap: anywhere;
+}
+.syntaxresult {
+  color: var(--fg3);
 }
