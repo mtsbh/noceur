@@ -211,6 +211,7 @@ pub async fn apply_cleanup(
     state: State<'_, AppState>,
     items: Vec<CleanApply>,
 ) -> Result<WriteReport, String> {
+    crate::undo::seal();
     let db = state.db.clone();
     // Read once per command rather than per file: it cannot change mid-write,
     // and reading it two hundred times would be two hundred file reads to

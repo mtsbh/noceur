@@ -708,8 +708,8 @@ export default function Settings(props: {
 
           <Section tab="actions" title="Search in">
             <p class="sethint">
-              Use <code>{"{artist}"}</code>, <code>{"{title}"}</code>,{" "}
-              <code>{"{album}"}</code> or <code>{"{query}"}</code> in the address.
+              Placeholders: <code>{"{artist}"}</code> <code>{"{title}"}</code>{" "}
+              <code>{"{album}"}</code> <code>{"{query}"}</code>
             </p>
             <LauncherList
               kind="search"
@@ -782,7 +782,7 @@ export default function Settings(props: {
                     setPreserveDates(want).then(setKeepDates).catch(() => {});
                   }}
                 />
-                <span>Preserve file modification time when retagging</span>
+                <span>Preserve modified date when tagging</span>
               </label>
             </div>
             <div class="setrow">
@@ -793,7 +793,7 @@ export default function Settings(props: {
                   checked={props.settings.tracksOnly}
                   onChange={(e) => patch({ tracksOnly: e.currentTarget.checked })}
                 />
-                <span>Hide files that are not audio</span>
+                <span>Hide non-audio files</span>
               </label>
             </div>
           </Section>
@@ -896,8 +896,7 @@ export default function Settings(props: {
                 }
               >
                 <p class="sethint">
-                  Nothing installed under that name — the interface is falling
-                  back to Segoe UI.
+                  Not installed · using Segoe UI
                 </p>
               </Show>
             </Show>
@@ -915,7 +914,7 @@ export default function Settings(props: {
                   checked={props.settings.folderGrid}
                   onChange={(e) => patch({ folderGrid: e.currentTarget.checked })}
                 />
-                <span>Icons for folders with no audio in them</span>
+                <span>Folders as icons</span>
               </label>
             </div>
             <div class="setrow">

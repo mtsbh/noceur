@@ -199,7 +199,7 @@ export default function Renamer(props: {
             <Show when={problems().length > 0}>
               {problems().length} skipped ·{" "}
             </Show>
-            Undo in Explorer with Ctrl+Z.
+            Undo: Ctrl+Z
           </span>
           <button class="btn" onClick={props.onClose}>
             Cancel

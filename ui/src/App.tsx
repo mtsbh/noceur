@@ -28,6 +28,7 @@ import {
   actionWrites,
   openUrl,
   openWith,
+  undoRename,
   folderIconUrl,
   type Action,
   type Transport as TransportState,
@@ -82,6 +83,7 @@ import {
   GlobeIcon,
   ImageIcon,
   NameToTagIcon,
+  MoveIcon,
   NewFolderIcon,
   OpenIcon,
   OpenWithIcon,
@@ -307,6 +309,51 @@ export default function App() {
   /** Re-reads every visible pane. A write can land in a folder either one shows. */
   function refetchAll() {
     for (const handle of Object.values(handles())) handle.refetch();
+  }
+
+  /* ── Copy, cut, paste ──────────────────────────────────────────────────── */
+
+  /** Files waiting to be pasted, and whether pasting moves them. */
+  const [clip, setClip] = createSignal<{ paths: string[]; cut: boolean } | null>(null);
+
+  /** Puts the selection (or `ids`) on the app's clipboard. */
+  async function clipFiles(cut: boolean, ids: number[] = focusHandle()?.selection() ?? []) {
+    if (ids.length === 0) return;
+    const paths = await Promise.all(ids.map((id) => pathOf(id)));
+    setClip({ paths, cut });
+    flash(`${cut ? "Cut" : "Copied"} ${paths.length} ${paths.length === 1 ? "item" : "items"}`);
+  }
+
+  /**
+   * Copies or moves files into a folder, through the shell - so collisions,
+   * progress and Explorer's own Ctrl+Z all behave as they do there.
+   */
+  async function transfer(op: "copy" | "move", paths: string[], into: string) {
+    // Pasting where they already are, or a folder into itself: nothing to do.
+    if (paths.every((p) => norm(parentDir(p)) === norm(into))) return;
+    if (paths.some((p) => within(into, p))) return;
+    try {
+      await fileOpPaths(op, paths, into);
+      refetchAll();
+    } catch {
+      // The shell reports its own failures in its own dialog.
+    }
+  }
+
+  async function paste(into: string = focusPath()) {
+    const c = clip();
+    if (!c) return;
+    await transfer(c.cut ? "move" : "copy", c.paths, into);
+    // A cut is used up by pasting it, as in Explorer; a copy can be pasted again.
+    if (c.cut) setClip(null);
+  }
+
+  /** Copies or moves rows into the other pane's folder. */
+  async function toOtherPane(op: "copy" | "move", ids: number[]) {
+    const into = otherFolder();
+    if (!into || ids.length === 0) return;
+    const paths = await Promise.all(ids.map((id) => pathOf(id)));
+    await transfer(op, paths, into);
   }
 
   /**
@@ -754,6 +801,15 @@ export default function App() {
     runUserAction(action, ids).catch(() => {});
   }
 
+  /** A short note at the bottom of the window, gone after a moment. */
+  const [notice, setNotice] = createSignal("");
+  let noticeTimer: number | undefined;
+  function flash(text: string) {
+    setNotice(text);
+    clearTimeout(noticeTimer);
+    noticeTimer = window.setTimeout(() => setNotice(""), 2500);
+  }
+
   /** Whether the top bar is being arranged. */
   const [barEditing, setBarEditing] = createSignal(false);
   const [barMenu, setBarMenu] = createSignal<{ x: number; y: number } | null>(null);
@@ -813,6 +869,21 @@ export default function App() {
         onToggle: (on) => setInBar("searchIn", site.id, on),
         run: () => searchIn(site),
       })),
+      {
+        id: "newfolder",
+        label: "New folder",
+        icon: NewFolderIcon,
+        auto: false,
+        run: () => setNewFolderIn(focusPath()),
+      },
+      {
+        id: "paste",
+        label: "Paste",
+        icon: ClipboardIcon,
+        auto: false,
+        off: () => !clip(),
+        run: () => void paste(),
+      },
       {
         id: "sizes",
         label: "Cover size",
@@ -1150,6 +1221,48 @@ export default function App() {
       { kind: "separator" },
       {
         kind: "item",
+        label: "Copy",
+        hint: "ctrl+c",
+        icon: CopiesIcon,
+        run: () => void clipFiles(false, ids),
+      },
+      {
+        kind: "item",
+        label: "Cut",
+        hint: "ctrl+x",
+        icon: MoveIcon,
+        run: () => void clipFiles(true, ids),
+      },
+      {
+        kind: "item",
+        // On a folder, into that folder - as Explorer does it.
+        label: row.kind === 0 ? `Paste into ${row.name}` : "Paste",
+        hint: "ctrl+v",
+        icon: ClipboardIcon,
+        disabled: !clip(),
+        run: () => {
+          const here = focusPath();
+          const sep = here.endsWith("\\") || here.endsWith("/") ? "" : "\\";
+          void paste(row.kind === 0 ? `${here}${sep}${row.name}` : here);
+        },
+      },
+      ...(otherFolder()
+        ? ([
+            {
+              kind: "item",
+              label: "Copy to other pane",
+              run: () => void toOtherPane("copy", ids),
+            },
+            {
+              kind: "item",
+              label: "Move to other pane",
+              run: () => void toOtherPane("move", ids),
+            },
+          ] as MenuItem[])
+        : []),
+      { kind: "separator" },
+      {
+        kind: "item",
         label: many ? `Edit metadata of ${ids.length} tracks…` : "Edit metadata…",
         hint: "f2",
         icon: TagIcon,
@@ -1350,6 +1463,32 @@ export default function App() {
         }
         return;
       }
+      // Copy, cut and paste files, as in Explorer. Only outside text boxes,
+      // where these keys belong to the text.
+      if (mod && !e.shiftKey && !isTyping(e) && ["c", "x", "v"].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        const k = e.key.toLowerCase();
+        if (k === "v") void paste();
+        else void clipFiles(k === "x");
+        return;
+      }
+      // Ctrl+Z puts the last rename back — a rename job, a button, a cleanup or
+      // an edit in the list. Text boxes keep their own undo.
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "z" && !isTyping(e)) {
+        e.preventDefault();
+        undoRename()
+          .then((done) => {
+            if (done.restored === 0 && done.failed === 0) return;
+            refetchAll();
+            flash(
+              done.failed > 0
+                ? `Undo: ${done.restored} restored · ${done.failed} failed`
+                : `Undo: ${done.restored} renamed back`,
+            );
+          })
+          .catch(() => {});
+        return;
+      }
       // Ctrl+Shift+N makes a folder where you are, as it does in Explorer.
       if (mod && e.shiftKey && e.key.toLowerCase() === "n" && !isTyping(e)) {
         e.preventDefault();
@@ -1480,6 +1619,12 @@ export default function App() {
           <SettingsIcon />
         </button>
       </div>
+
+      <Show when={notice()}>
+        <div class="notice" role="status">
+          {notice()}
+        </div>
+      </Show>
 
       <Show when={barMenu()}>
         {(m) => (
@@ -1669,6 +1814,14 @@ export default function App() {
                 hint: "ctrl+shift+n",
                 icon: NewFolderIcon,
                 run: () => setNewFolderIn(m().path),
+              },
+              {
+                kind: "item",
+                label: "Paste",
+                hint: "ctrl+v",
+                icon: ClipboardIcon,
+                disabled: !clip(),
+                run: () => void paste(m().path),
               },
             ]}
           />

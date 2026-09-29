@@ -281,20 +281,15 @@ export default function TagEditor(props: {
                       fallback={
                         <Show
                           when={hasArt()}
-                          fallback="This file carries no picture."
+                          fallback="No cover"
                         >
-                          <Show when={props.fileIds.length > 1} fallback="Embedded in the file.">
-                            Embedded in the first of the {props.fileIds.length}{" "}
-                            selected files.
+                          <Show when={props.fileIds.length > 1} fallback="Embedded">
+                            From first of {props.fileIds.length}
                           </Show>
                         </Show>
                       }
                     >
-                      Will be removed from{" "}
-                      {props.fileIds.length > 1
-                        ? `all ${props.fileIds.length} files`
-                        : "the file"}{" "}
-                      on Save.
+                      Removed on Save
                     </Show>
                   </span>
                   <span class="artbtns">

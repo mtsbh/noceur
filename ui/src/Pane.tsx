@@ -958,6 +958,21 @@ export default function Pane(props: {
   const shown = () => props.columns.filter((c) => c.visible);
   const dropKey = () => `pane:${props.tab.id}`;
 
+  /**
+   * A folder row as a drop target of its own: files dropped on it go into it,
+   * not into the folder on screen. Found by the same hit test as the pane,
+   * which takes the innermost `data-drop` under the pointer.
+   */
+  const folderDrop = (row: RowDisplay | undefined) => {
+    if (!row || row.kind !== 0) return {};
+    const here = current();
+    const sep = here.endsWith("\\") || here.endsWith("/") ? "" : "\\";
+    const path = `${here}${sep}${row.name}`;
+    return { "data-drop": `dir:${path}`, "data-path": path };
+  };
+  const dropping = (row: RowDisplay | undefined) =>
+    row?.kind === 0 && props.dropKey === folderDrop(row)["data-drop"] ? " dropping" : "";
+
   return (
     <div
       class={`pane ${props.focused && props.split ? "focused" : ""} ${
@@ -1096,13 +1111,13 @@ export default function Pane(props: {
       >
         <Show
           when={!listing.error}
-          fallback={<div class="empty">Could not read {current()}.</div>}
+          fallback={<div class="empty">Can't open folder</div>}
         >
           <Show
             when={!reading()}
-            fallback={<div class="empty">Reading {current()}…</div>}
+            fallback={<div class="empty">Loading…</div>}
           >
-            <Show when={total() > 0} fallback={<div class="empty">Nothing here.</div>}>
+            <Show when={total() > 0} fallback={<div class="empty">Empty folder</div>}>
               {/* One tall spacer holds the scrollbar honest; only what is in
                   view exists inside it. In the grid the spacer counts rows of
                   tiles, which is what the virtualizer measures there. */}
@@ -1118,12 +1133,13 @@ export default function Pane(props: {
                         const row = () => rowAt(item.index);
                         return (
                           <div
-                            class={itemClass("row", row())}
+                            class={itemClass("row", row()) + dropping(row())}
                             style={{
                               height: `${item.size}px`,
                               transform: `translateY(${item.start}px)`,
                             }}
                             {...itemHandlers(row)}
+                            {...folderDrop(row())}
                           >
                             <Show when={row()} fallback={<span class="ph" />}>
                               {(r) => { return (
@@ -1234,7 +1250,11 @@ export default function Pane(props: {
                             return (
                               <Show when={row()} fallback={<div class="tile pending" />}>
                                 {(r) => (
-                                  <div class={itemClass("tile", r())} {...itemHandlers(row)}>
+                                  <div
+                                    class={itemClass("tile", r()) + dropping(r())}
+                                    {...itemHandlers(row)}
+                                    {...folderDrop(r())}
+                                  >
                                     {/* The shell's own folder icon, which is what
                                         makes a folder that has set a custom one
                                         look like itself. */}

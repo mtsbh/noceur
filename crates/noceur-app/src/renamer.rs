@@ -110,6 +110,8 @@ pub async fn apply_rename(
     state: State<'_, AppState>,
     renames: Vec<(i64, String)>,
 ) -> Result<crate::dto::WriteReport, String> {
+    // Whatever the last job renamed becomes its own undo step; this one starts.
+    crate::undo::seal();
     let db = state.db.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -187,14 +189,17 @@ pub async fn apply_rename(
 /// The same `IFileOperation` the copy, move and delete commands use, for the
 /// same reason: it puts the change on Windows' own undo stack, so a rename that
 /// turns out wrong is Ctrl+Z in Explorer rather than a repair job.
-#[cfg(windows)]
+///
+/// Also noted for the app's own Ctrl+Z — see [`crate::undo`].
 pub(crate) fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
-    crate::fileops::rename(from, to)
-}
-
-#[cfg(not(windows))]
-pub(crate) fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
-    std::fs::rename(from, to).map_err(|e| e.to_string())
+    #[cfg(windows)]
+    let done = crate::fileops::rename(from, to);
+    #[cfg(not(windows))]
+    let done = std::fs::rename(from, to).map_err(|e| e.to_string());
+    if done.is_ok() {
+        crate::undo::record(from.to_path_buf(), to.to_path_buf());
+    }
+    done
 }
 
 fn file_name(path: &Path) -> String {

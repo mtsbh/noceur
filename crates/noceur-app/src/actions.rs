@@ -380,6 +380,7 @@ pub async fn run_action(
         return Err(problem);
     }
     let script = Script::parse(&action.script).map_err(|e| e.to_string())?;
+    crate::undo::seal();
     let db = state.db.clone();
     let keep_dates =
         crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;

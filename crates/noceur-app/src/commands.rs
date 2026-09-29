@@ -745,9 +745,16 @@ pub async fn file_op_paths(
 /// Decides copy-versus-move for a drop, the way Explorer decides it.
 ///
 /// Within a volume a drop moves; across volumes it copies. Anything else would
-/// surprise a user whose hands already know Explorer.
+/// surprise a user whose hands already know Explorer — including its keys:
+/// Ctrl held at the drop copies, Shift moves.
 #[tauri::command]
 pub fn drop_effect(sources: Vec<String>, destination: String) -> String {
+    if key_held(Key::Ctrl) {
+        return "copy".into();
+    }
+    if key_held(Key::Shift) {
+        return "move".into();
+    }
     let dest = PathBuf::from(&destination);
     let same = sources
         .first()
@@ -758,6 +765,29 @@ pub fn drop_effect(sources: Vec<String>, destination: String) -> String {
     } else {
         "copy".into()
     }
+}
+
+enum Key {
+    Ctrl,
+    Shift,
+}
+
+/// Whether a modifier is down right now. Asked of the system rather than the
+/// web view, which sees no keys while the shell runs a drag.
+#[cfg(windows)]
+fn key_held(key: Key) -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL, VK_SHIFT};
+    let vk = match key {
+        Key::Ctrl => VK_CONTROL,
+        Key::Shift => VK_SHIFT,
+    };
+    // SAFETY: a plain query of key state; any virtual-key code is valid.
+    (unsafe { GetAsyncKeyState(i32::from(vk)) } as u16) & 0x8000 != 0
+}
+
+#[cfg(not(windows))]
+fn key_held(_key: Key) -> bool {
+    false
 }
 
 #[cfg(windows)]

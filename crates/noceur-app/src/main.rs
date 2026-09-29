@@ -27,6 +27,7 @@ mod shellmenu;
 mod state;
 mod tagedit;
 mod timestamp;
+mod undo;
 
 use state::AppState;
 
@@ -138,6 +139,7 @@ fn main() {
             commands::shell_menu,
             commands::open_url,
             commands::open_with,
+            undo::undo_rename,
             commands::envelope,
             commands::spectrogram,
             tagedit::read_tags,

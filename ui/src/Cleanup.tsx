@@ -187,7 +187,7 @@ export default function Cleanup(props: {
           <Show
             when={chosen().length > 0}
             fallback={
-              <p class="sethint">Tick a rule to see what it would change.</p>
+              <p class="sethint">Pick a rule to preview</p>
             }
           >
             <Show when={rows()} fallback={<p class="sethint">Reading…</p>}>
@@ -255,8 +255,8 @@ export default function Cleanup(props: {
             <Show when={problems().length > 0}>
               {problems().length} skipped ·{" "}
             </Show>
-            <Show when={wantsName()} fallback="Tag edits cannot be undone.">
-              Undo renames in Explorer with Ctrl+Z.
+            <Show when={wantsName()} fallback="Tag edits cannot be undone">
+              Undo: Ctrl+Z
             </Show>
           </span>
           <button class="btn" onClick={props.onClose}>

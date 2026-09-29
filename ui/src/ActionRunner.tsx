@@ -8,16 +8,6 @@ import {
   type WriteReport,
 } from "./api";
 
-/** What each kind calls the thing it produces, for the preview's heading. */
-const PRODUCES: Record<Action["kind"], string> = {
-  tag: "new value",
-  rename: "new name",
-  open: "arguments",
-  url: "link",
-  copy: "file",
-  move: "file",
-};
-
 /**
  * Running one user-defined action over a selection.
  *
@@ -154,10 +144,7 @@ export default function ActionRunner(props: {
 
         <footer class="tagfoot">
           <span class="sethint credit">
-            <Show when={problems().length > 0}>
-              {problems().length} skipped ·{" "}
-            </Show>
-            {PRODUCES[props.action.kind]} shown for every track.
+            <Show when={problems().length > 0}>{problems().length} skipped</Show>
           </span>
           <button class="btn" onClick={props.onClose}>
             Cancel

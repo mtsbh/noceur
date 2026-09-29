@@ -259,11 +259,12 @@ export default function QuickTag(props: {
       </div>
 
       <span class="quickstate">
-        <Show when={props.fileId > 0} fallback="Play a track to tag it">
+        <Show when={props.fileId > 0} fallback="Play a track">
           <Show when={pending()} fallback="Saved">
-            {/* Said plainly, because a panel that shows edits and reports
-                nothing written invites pressing the keys again. */}
-            Saves when the track changes
+            {/* Said, because a panel that shows edits and reports nothing
+                written invites pressing the keys again. Written when the
+                track changes. */}
+            Unsaved
           </Show>
         </Show>
       </span>
