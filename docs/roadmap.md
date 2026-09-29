@@ -8,11 +8,11 @@ it does.
 
 ## Metadata sources
 
-MusicBrainz, Deezer, iTunes and Discogs are already in `noceur-online`. Every new source plugs into
+MusicBrainz, Deezer, iTunes, Discogs and Beatport are in `noceur-online`. Every new source plugs into
 the same `TrackMatch` / `Candidate` types, so the Find metadata and Find album art dialogs pick it
 up without changes of their own.
 
-- [ ] **2. Beatport.** No API key needed: the search page
+- [x] **2. Beatport.** No API key needed: the search page
       (`beatport.com/search/tracks?q=…`) embeds its results as JSON in `__NEXT_DATA__`. Each
       track carries BPM, key, genre, label, catalogue number, ISRC, mix name, release date and
       1400 px artwork, which covers what a DJ tags. It is not a published API, so the parser is

@@ -200,6 +200,35 @@ fn an_untagged_file_can_be_matched_from_its_name_alone() {
     println!("from name: {} — {}", found[0].artist(), found[0].title);
 }
 
+/// Beatport's page is not a published API, so this is the check that its shape
+/// has not moved under the parser.
+#[test]
+#[ignore = "reaches the network"]
+fn beatport_supplies_bpm_key_and_label() {
+    let found = noceur_online::beatport::search_tracks("Les Points", "Bakteria", 5)
+        .expect("Beatport should answer");
+    assert!(
+        !found.is_empty(),
+        "the page parsed to nothing; has it changed?"
+    );
+
+    for m in &found {
+        println!(
+            "  {:<28} {:<18} {:>4} {:<9} {}",
+            m.title,
+            m.artist(),
+            m.bpm.map(|b| b.to_string()).unwrap_or_default(),
+            m.key.clone().unwrap_or_default(),
+            m.label.clone().unwrap_or_default()
+        );
+    }
+    let best = &found[0];
+    assert!(best.bpm.is_some() && best.key.is_some() && best.label.is_some());
+    assert!(noceur_online::sources::is_allowed(
+        best.art.as_deref().unwrap()
+    ));
+}
+
 /// Discogs needs a token, so this only runs when one is in the environment:
 ///
 /// ```text

@@ -44,6 +44,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "dzcdn.net",
     // Discogs' image CDN.
     "discogs.com",
+    // Beatport's image CDN, `geo-media.beatport.com`.
+    "beatport.com",
 ];
 
 /// Whether an image URL may be fetched.
@@ -135,6 +137,9 @@ mod tests {
             "https://e-cdns-images.dzcdn.net/images/cover/x/500x500.jpg"
         ));
         assert!(is_allowed("https://i.discogs.com/x/rx-600.jpeg"));
+        assert!(is_allowed(
+            "https://geo-media.beatport.com/image_size/1400x1400/x.jpg"
+        ));
     }
 
     #[test]

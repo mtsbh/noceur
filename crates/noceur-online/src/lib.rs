@@ -10,6 +10,7 @@
 //! That is inherent to looking a release up in a database, but it is worth
 //! stating plainly rather than leaving it to be discovered.
 
+pub mod beatport;
 pub mod covers;
 pub mod deezer;
 pub mod discogs;
@@ -198,6 +199,7 @@ pub fn match_track(
     let mut any_source_answered = false;
 
     let mut results = vec![
+        beatport::search_tracks(artist, &clean, MATCH_LIMIT),
         deezer::search_tracks(artist, &clean, MATCH_LIMIT),
         itunes::search_tracks(artist, &clean, MATCH_LIMIT),
         musicbrainz::search_recordings(artist, &clean, MATCH_LIMIT),

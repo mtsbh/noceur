@@ -52,7 +52,7 @@ same track often exists in more than one place.
 - Inline editing in the list: click a selected row's name or tag cell to edit it in place
 - Star ratings (`Alt+0`–`Alt+5`), stored where DJ software reads them
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
-- Metadata and cover art from MusicBrainz, Deezer, iTunes and Discogs, always picked by hand
+- Metadata and cover art from Beatport, MusicBrainz, Deezer, iTunes and Discogs, always picked by hand
 - Tags from file name (`%artist% - %title%` patterns, with preview)
 - Rename from templates, and cleanup rules for common download debris
 - File modification dates are preserved when retagging (configurable)
@@ -167,7 +167,7 @@ crates/
   noceur-tags      tag reading and writing, key normalization, ratings
   noceur-art       cover art extraction, thumbnails, shell icons
   noceur-audio     playback, waveforms, spectrograms, meters, quality analysis, audio identity
-  noceur-online    MusicBrainz, Deezer, iTunes, Discogs, Cover Art Archive clients
+  noceur-online    Beatport, MusicBrainz, Deezer, iTunes, Discogs, Cover Art Archive clients
   noceur-index     SQLite index, scanner, queries, caches
   noceur-app       Tauri application: commands, state, formatting
   noceur-cli       headless debug CLI

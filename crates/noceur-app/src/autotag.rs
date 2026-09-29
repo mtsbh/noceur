@@ -74,10 +74,26 @@ pub async fn match_track(
             }
         }
 
+        for m in &mut matches {
+            m.key = m.key.take().map(|k| camelot(&k));
+        }
+
         Ok(matches)
     })
     .await
     .map_err(|e| format!("match task failed: {e}"))?
+}
+
+/// A source's key in the notation the rest of the app writes.
+///
+/// Beatport says `Gb Major`; the key column, the tag editor and every tag this
+/// app writes say `2B`. Applying a match as-is would leave the file in whatever
+/// notation the source happened to use. Text that is not a key is passed
+/// through, so the user still sees what the source claimed.
+fn camelot(key: &str) -> String {
+    noceur_tags::MusicalKey::parse(key)
+        .map(|k| k.format(noceur_tags::KeyNotation::Camelot))
+        .unwrap_or_else(|| key.to_string())
 }
 
 /// Whether the optional credentials are set, without revealing them.
@@ -110,4 +126,24 @@ pub fn set_discogs_token(token: String) -> Result<Credentials, String> {
     config.discogs_token = token.trim().to_string();
     config.save(&path)?;
     Ok(credentials())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::camelot;
+
+    /// Every spelling Beatport uses, including both enharmonics.
+    #[test]
+    fn source_keys_are_written_as_camelot() {
+        assert_eq!(camelot("E Major"), "12B");
+        assert_eq!(camelot("A Minor"), "8A");
+        assert_eq!(camelot("Gb Major"), "2B");
+        assert_eq!(camelot("F# Minor"), "11A");
+        assert_eq!(camelot("Gb Minor"), "11A");
+        assert_eq!(camelot("A# Minor"), "3A");
+        assert_eq!(camelot("Bb Minor"), "3A");
+        assert_eq!(camelot("D# Major"), "5B");
+        assert_eq!(camelot("8A"), "8A");
+        assert_eq!(camelot("not a key"), "not a key");
+    }
 }
