@@ -47,13 +47,19 @@ pub struct Playback {
 }
 
 enum Cmd {
-    Load { path: PathBuf, play: bool },
+    Load {
+        path: PathBuf,
+        play: bool,
+    },
     Resume,
     Pause,
     Toggle,
     Stop,
     Seek(Duration),
     Volume(f32),
+    /// Answered once every command sent before it has been carried out and
+    /// its effect published; see [`Player::settle`].
+    Sync(Sender<()>),
 }
 
 /// A handle to the audio thread.
@@ -157,6 +163,21 @@ impl Player {
     /// Play if paused, pause if playing — what the space bar does.
     pub fn toggle(&self) -> Result<(), AudioError> {
         self.send(Cmd::Toggle)
+    }
+
+    /// Blocks until the audio thread has caught up with every command sent so
+    /// far, or `timeout` passes.
+    ///
+    /// Commands return as soon as they are queued, so a state read straight
+    /// after one describes the player *before* it. For a resume that was fatal:
+    /// the reply said "paused", the transport stopped polling because nothing
+    /// was playing, and the bar and meters sat frozen over audible music.
+    pub fn settle(&self, timeout: Duration) {
+        let (ack, done) = mpsc::channel();
+        if self.send(Cmd::Sync(ack)).is_ok() {
+            // A dead thread drops the sender, which ends the wait at once.
+            let _ = done.recv_timeout(timeout);
+        }
     }
 
     pub fn stop(&self) -> Result<(), AudioError> {
@@ -290,6 +311,12 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::S
                     if let Some(p) = &player {
                         p.set_volume(v);
                     }
+                }
+                // Everything before it was handled on an earlier pass, and each
+                // pass ends by publishing the state, so the answer is already
+                // true when it is given.
+                Cmd::Sync(ack) => {
+                    let _ = ack.send(());
                 }
             }
         }

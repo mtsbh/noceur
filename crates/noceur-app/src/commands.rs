@@ -496,6 +496,8 @@ pub async fn transport_cmd(
     };
 
     result.map_err(|e| e.to_string())?;
+    // Reply with what the command did, not with the moment before it.
+    state.player.settle(std::time::Duration::from_millis(250));
     Ok(transport(&state))
 }
 
