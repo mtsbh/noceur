@@ -104,6 +104,7 @@ Noceur, on your `PATH`, or set its path in Settings → Files.
 | `Alt+←` / `Alt+→` | Back / forward |
 | `Alt+0`–`5` | Set rating |
 | `T` | Quick tag panel |
+| `F1` or `?` | All shortcuts |
 
 Right-click the toolbar and choose **Customize toolbar** to rearrange it.
 
@@ -177,11 +178,10 @@ docs/              design notes, build notes, troubleshooting
 Only `noceur-app` depends on Tauri; the other crates build and test without a window.
 Design decisions are documented in [`docs/design.md`](docs/design.md).
 
-## Not planned
+## Roadmap
 
-- BPM and key detection (use Mixed In Key or similar; Noceur reads the tags they write)
-- Beatport and Bandcamp metadata (no public API)
-- Acoustic fingerprinting services
+Beatport, Bandcamp and Tidal sources, AcoustID fingerprinting, BPM and key detection, and Mp3tag
+action import are planned. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Troubleshooting
 

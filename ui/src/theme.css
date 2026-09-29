@@ -3818,6 +3818,65 @@ body.resizing-v * {
   color: var(--fg3);
 }
 
+/* ── Keyboard shortcuts ─────────────────────────────────────────────────── */
+.renamer.shortcuts {
+  width: 720px;
+  height: min(600px, calc(100vh - 80px));
+}
+.shortcutbody {
+  overflow-y: auto;
+  columns: 2;
+  column-gap: 28px;
+}
+.shortcutgroup {
+  break-inside: avoid;
+  padding: 10px 0 8px;
+}
+.shortcutgroup h3 {
+  margin: 0 0 6px;
+  color: var(--fg2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.shortcutdoes {
+  color: var(--fg2);
+}
+.shortcutkeys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+.shortcutkeys kbd {
+  min-width: 20px;
+  padding: 1px 6px;
+  border: 1px solid var(--hair2);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: center;
+}
+.shortcutplus {
+  color: var(--fg4);
+  font-size: 10px;
+}
+.shortcutnone {
+  color: var(--fg3);
+  font-size: 12px;
+}
+
 /* A passing note: "Undo: 3 renamed back". */
 .notice {
   position: fixed;

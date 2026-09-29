@@ -498,6 +498,16 @@ export function NameToTagIcon() {
   );
 }
 
+/** A keyboard: the shortcuts overview. */
+export function KeyboardIcon() {
+  return (
+    <Icon>
+      <rect x="1.6" y="4" width="12.8" height="8" rx="1.2" />
+      <path d="M4 6.6h.01M6.4 6.6h.01M8.8 6.6h.01M11.2 6.6h.01M5.2 9.4h5.6" />
+    </Icon>
+  );
+}
+
 /**
  * Every glyph a toolbar button can be given when the bar is customised.
  *
@@ -520,6 +530,7 @@ export const BAR_ICONS: { name: string; label: string; icon: () => JSX.Element }
   { name: "newfolder", label: "New folder", icon: NewFolderIcon },
   { name: "tab", label: "Tab", icon: TabIcon },
   { name: "video", label: "Video", icon: VideoIcon },
+  { name: "keyboard", label: "Keyboard", icon: KeyboardIcon },
 ];
 
 export function barIcon(name?: string) {

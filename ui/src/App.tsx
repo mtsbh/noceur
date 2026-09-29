@@ -58,6 +58,7 @@ import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
 import Converter from "./Converter";
 import NewFolder from "./NewFolder";
+import Shortcuts from "./Shortcuts";
 import FromName from "./FromName";
 import Titlebar from "./Titlebar";
 import Pane, { type PaneHandle } from "./Pane";
@@ -89,6 +90,7 @@ import {
   NameToTagIcon,
   MoveIcon,
   NewFolderIcon,
+  KeyboardIcon,
   OpenIcon,
   OpenWithIcon,
   PigIcon,
@@ -508,6 +510,7 @@ export default function App() {
   const [cleaning, setCleaning] = createSignal<number[] | null>(null);
   /** The folder a new folder is being named in, or null. */
   const [newFolderIn, setNewFolderIn] = createSignal<string | null>(null);
+  const [showKeys, setShowKeys] = createSignal(false);
   /** Tells the tree to re-read a branch something was just made in. */
   const [treeReload, setTreeReload] = createSignal<{ path: string; n: number } | null>(null);
   /** The menu for a folder itself, from the empty space in a listing. */
@@ -901,6 +904,13 @@ export default function App() {
         icon: NewFolderIcon,
         auto: false,
         run: () => setNewFolderIn(focusPath()),
+      },
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        icon: KeyboardIcon,
+        auto: false,
+        run: () => setShowKeys(true),
       },
       {
         id: "paste",
@@ -1443,6 +1453,13 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
 
+      // F1, or ? outside a text box, lists every shortcut.
+      if (e.key === "F1" || (e.key === "?" && !mod && !isTyping(e))) {
+        e.preventDefault();
+        setShowKeys(true);
+        return;
+      }
+
       if (mod && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setFinding(true);
@@ -1661,6 +1678,7 @@ export default function App() {
             items={[
               { kind: "item", label: "Customize toolbar…", run: () => setBarEditing(true) },
               { kind: "item", label: "Reset toolbar", run: () => commitSettings({ ...settings(), bar: null }) },
+              { kind: "item", label: "Keyboard shortcuts", run: () => setShowKeys(true) },
             ]}
           />
         )}
@@ -1852,6 +1870,10 @@ export default function App() {
             ]}
           />
         )}
+      </Show>
+
+      <Show when={showKeys()}>
+        <Shortcuts onClose={() => setShowKeys(false)} />
       </Show>
 
       <Show when={newFolderIn()}>
