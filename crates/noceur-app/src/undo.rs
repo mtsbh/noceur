@@ -32,7 +32,9 @@ pub(crate) fn record(from: PathBuf, to: PathBuf) {
 
 /// Closes the running job into one undo step, if it renamed anything.
 pub(crate) fn seal() {
-    let Ok(mut pending) = PENDING.lock() else { return };
+    let Ok(mut pending) = PENDING.lock() else {
+        return;
+    };
     if pending.is_empty() {
         return;
     }

@@ -328,6 +328,23 @@ export function shellMenu(fileIds: number[]): Promise<void> {
 }
 
 /** Opens a link in the default browser. Only http and https are accepted. */
+/** Files on the Windows clipboard, shared with Explorer. */
+export type Clip = { paths: string[]; cut: boolean };
+
+export function clipboardPut(paths: string[], cut: boolean): Promise<void> {
+  return invoke("clipboard_put", { paths, cut });
+}
+
+/** The files on the clipboard, or null when it holds something else. */
+export function clipboardFiles(): Promise<Clip | null> {
+  return invoke("clipboard_files");
+}
+
+/** Empties the clipboard if it still holds these files - after pasting a cut. */
+export function clipboardRelease(paths: string[]): Promise<void> {
+  return invoke("clipboard_release", { paths });
+}
+
 /** Puts the last rename job back. `restored` is 0 when there was nothing to undo. */
 export function undoRename(): Promise<{ restored: number; failed: number }> {
   return invoke("undo_rename");

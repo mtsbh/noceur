@@ -9,6 +9,7 @@ mod actions;
 mod art;
 mod autotag;
 mod cleanup;
+mod clipboard;
 mod commands;
 mod config;
 mod convert;
@@ -140,6 +141,9 @@ fn main() {
             commands::open_url,
             commands::open_with,
             undo::undo_rename,
+            clipboard::clipboard_put,
+            clipboard::clipboard_files,
+            clipboard::clipboard_release,
             commands::envelope,
             commands::spectrogram,
             tagedit::read_tags,

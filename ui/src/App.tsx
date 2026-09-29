@@ -29,6 +29,10 @@ import {
   openUrl,
   openWith,
   undoRename,
+  clipboardPut,
+  clipboardFiles,
+  clipboardRelease,
+  type Clip,
   folderIconUrl,
   type Action,
   type Transport as TransportState,
@@ -313,13 +317,30 @@ export default function App() {
 
   /* ── Copy, cut, paste ──────────────────────────────────────────────────── */
 
-  /** Files waiting to be pasted, and whether pasting moves them. */
-  const [clip, setClip] = createSignal<{ paths: string[]; cut: boolean } | null>(null);
+  /**
+   * What the Windows clipboard holds, when it is files. The clipboard itself is
+   * the truth - shared with Explorer - and this is re-read whenever the window
+   * comes back into focus or a menu opens, so Paste knows whether it can.
+   */
+  const [clip, setClip] = createSignal<Clip | null>(null);
+  const readClip = () => clipboardFiles().then(setClip).catch(() => setClip(null));
+  readClip();
+  window.addEventListener("focus", readClip);
+  window.addEventListener("contextmenu", readClip, true);
+  onCleanup(() => {
+    window.removeEventListener("focus", readClip);
+    window.removeEventListener("contextmenu", readClip, true);
+  });
 
-  /** Puts the selection (or `ids`) on the app's clipboard. */
+  /** Puts the selection (or `ids`) on the clipboard, for here or Explorer. */
   async function clipFiles(cut: boolean, ids: number[] = focusHandle()?.selection() ?? []) {
     if (ids.length === 0) return;
     const paths = await Promise.all(ids.map((id) => pathOf(id)));
+    try {
+      await clipboardPut(paths, cut);
+    } catch {
+      return;
+    }
     setClip({ paths, cut });
     flash(`${cut ? "Cut" : "Copied"} ${paths.length} ${paths.length === 1 ? "item" : "items"}`);
   }
@@ -341,11 +362,16 @@ export default function App() {
   }
 
   async function paste(into: string = focusPath()) {
-    const c = clip();
+    // Read fresh: something may have been copied in Explorer a moment ago.
+    const c = await clipboardFiles().catch(() => null);
+    setClip(c);
     if (!c) return;
     await transfer(c.cut ? "move" : "copy", c.paths, into);
     // A cut is used up by pasting it, as in Explorer; a copy can be pasted again.
-    if (c.cut) setClip(null);
+    if (c.cut) {
+      await clipboardRelease(c.paths).catch(() => {});
+      setClip(null);
+    }
   }
 
   /** Copies or moves rows into the other pane's folder. */
