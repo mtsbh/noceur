@@ -4,7 +4,7 @@
 - Work goes straight to `master`, which is pushed and matches `origin/master`. No feature
   branches or PRs.
 - Windows-only Tauri 2 app: Rust backend in `crates/`, Solid + Vite frontend in `ui/`.
-- `target/release/noceur-app.exe` is built from `c2eef3b`, with the UI embedded.
+- `target/release/noceur-app.exe` is built from `addde45`, with the UI embedded.
 - Workspace fmt, clippy and tests are clean. `npx tsc` is clean too.
 - `master` is the only branch on GitHub. The stale `claude/kind-lamport-22i4sm` branch was
   deleted.
@@ -12,6 +12,7 @@
 ## Recent commits (newest first)
 | Commit | What |
 |---|---|
+| `addde45` | Roadmap step 4, Tidal (`noceur-online/src/tidal.rs`). User's own client ID + secret in Settings → Metadata sources (`tidalClientId` / `tidalClientSecret` in `noceur-config.json`). Search `/searchResults?filter[query]` then `/tracks?include=albums,artists,genres,albums.coverArt`. Live-tested: album, date, ISRC, 640 px cover. BPM/key/genre are withheld from third-party apps. Live test reads `NOCEUR_TIDAL_ID` / `NOCEUR_TIDAL_SECRET`. |
 | `ca86927` / `c2eef3b` | Roadmap step 5, AcoustID. `noceur-audio::fingerprint` (rusty-chromaprint, first 120 s, ~0.3 s) → `noceur-online::acoustid::lookup`. Find metadata uses it when the file has no artist/title tag, or when its tags find nothing, before the file-name guess. The picker shows "By sound: artist — title". The app's key is in `acoustid.rs`. The live test identifies a real Burial FLAC at 0.90. |
 | `fc03fc1` | MusicBrainz removed from Find metadata. Its recording search is deleted. MusicBrainz still finds Cover Art Archive covers in the cover picker. |
 | `c3c1c2d` | Find metadata: matches without art are dropped, 3 per source (backend keeps 6), rows whose art fails to load are hidden. Deezer and Bandcamp details are fetched in parallel. |
@@ -55,9 +56,11 @@
 
 ## Next steps
 1. Confirm AcoustID in the app. The picker wording "By sound:" is settled.
-2. Roadmap: step 4 Tidal (needs the user's Client ID and secret) or step 6 (file-name
-   fallback, mostly already done in `match_track`), then 7 BPM detection.
-3. Known smaller issues:
+2. Roadmap: step 6 (file-name fallback, mostly already done in `match_track`), then 7 BPM
+   detection. Steps 4 (Tidal) and 5 (AcoustID) are done.
+3. Settings copy for sources is open: current "Discogs and Tidal need your own keys. Each is
+   sent only to its service." (user not yet asked to pick).
+4. Known smaller issues:
    - The converter does not carry ID3 `POPM` ratings.
    - Stars in an unfocused pane do not move focus.
    - Sorting by Rating does not re-sort until the next refetch.
