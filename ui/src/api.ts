@@ -709,6 +709,26 @@ export function analyseQuality(fileIds: number[]): Promise<QualityRow[]> {
   return invoke<QualityRow[]>("analyse_quality", { fileIds });
 }
 
+/** What one file's tempo measured at, next to what it is tagged with. */
+export type TempoRow = {
+  fileId: number;
+  name: string;
+  tagged: number | null;
+  /** Rounded as it would be written: whole, or to one decimal. */
+  detected: number | null;
+  error: string | null;
+};
+
+/**
+ * Estimates the tempo of a batch of files, within `min`..`max` BPM.
+ *
+ * About a second a track, so the caller walks its selection a few at a time.
+ * Writes nothing: writing is `writeTags`, per file, for the ones the user ticks.
+ */
+export function detectTempo(fileIds: number[], min: number, max: number): Promise<TempoRow[]> {
+  return invoke<TempoRow[]>("detect_tempo", { fileIds, min, max });
+}
+
 /** One file in a set of copies. */
 export type DuplicateCopy = {
   fileId: number;

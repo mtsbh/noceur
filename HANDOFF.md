@@ -12,6 +12,8 @@
 ## Recent commits (newest first)
 | Commit | What |
 |---|---|
+| step 7 | BPM detection. `noceur-audio::tempo` (mel spectral flux → autocorrelation → coarse pick with a 125 BPM log-normal prior → 24-beat comb refine; `rounded()` writes whole within 0.1). `noceur-app::tempo::detect_tempo(fileIds, min, max)` measures a batch of 4 in parallel; `ui/src/Tempo.tsx` shows tagged → detected, differing rows ticked, writes via `writeTags` per file. Range preset in `localStorage` `noceur.tempoRange`. Accuracy: `cargo test -p noceur-audio --release --test tempo_real -- --ignored --nocapture` (`NOCEUR_SCAN`, `NOCEUR_LIMIT`). Many library tags are 1 BPM low; a whole-track kick-grid check confirmed the detection every time. `examples/bpm.rs` prints one file's tempo. |
+| `272d846` | Roadmap step 6. `match_track` loops `By::Tags` → `By::Sound` → `By::Name` until one returns matches, skipping empty and repeated queries. `Matched.query` (was `heard`) carries `by` + artist/title when not tags; picker says "From filename:". |
 | `addde45` | Roadmap step 4, Tidal (`noceur-online/src/tidal.rs`). User's own client ID + secret in Settings → Metadata sources (`tidalClientId` / `tidalClientSecret` in `noceur-config.json`). Search `/searchResults?filter[query]` then `/tracks?include=albums,artists,genres,albums.coverArt`. Live-tested: album, date, ISRC, 640 px cover. BPM/key/genre are withheld from third-party apps. Live test reads `NOCEUR_TIDAL_ID` / `NOCEUR_TIDAL_SECRET`. |
 | `ca86927` / `c2eef3b` | Roadmap step 5, AcoustID. `noceur-audio::fingerprint` (rusty-chromaprint, first 120 s, ~0.3 s) → `noceur-online::acoustid::lookup`. Find metadata uses it when the file has no artist/title tag, or when its tags find nothing, before the file-name guess. The picker shows "By sound: artist — title". The app's key is in `acoustid.rs`. The live test identifies a real Burial FLAC at 0.90. |
 | `fc03fc1` | MusicBrainz removed from Find metadata. Its recording search is deleted. MusicBrainz still finds Cover Art Archive covers in the cover picker. |
@@ -57,11 +59,12 @@
 ## Next steps
 1. Confirm AcoustID and the filename fallback in the app. Picker wording is settled:
    "By sound:" and "From filename:".
-2. Roadmap: step 7, BPM detection. Steps 4–6 are done. Step 6: `match_track` loops over
-   `By::Tags` → `By::Sound` → `By::Name` until one returns matches, skipping empty and
-   repeated queries; `Matched.query` (was `heard`) carries `by` + artist/title when not tags.3. Settings copy for sources is open: current "Discogs and Tidal need your own keys. Each is
+2. Try Detect BPM in the app (toolbar metronome, or right-click → Detect BPM…). Not yet
+   seen by the user. Range presets 70–180 / 60–120 / 85–175 / 100–200 are open wording.
+3. Roadmap: step 8, key detection. Steps 4–7 are done.
+4. Settings copy for sources is open: current "Discogs and Tidal need your own keys. Each is
    sent only to its service." (user not yet asked to pick).
-4. Known smaller issues:
+5. Known smaller issues:
    - The converter does not carry ID3 `POPM` ratings.
    - Stars in an unfocused pane do not move focus.
    - Sorting by Rating does not re-sort until the next refetch.

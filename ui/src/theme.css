@@ -3102,6 +3102,47 @@ label.artoffer:hover {
   color: var(--qual-bad);
 }
 
+/* ── Detect BPM ────────────────────────────────────────────────────────────
+   The file's own BPM beside the measured one. Rows that already agree fade,
+   so the ones that would change are what the eye lands on. */
+.renamebody > .setseg + .quallist,
+.renamebody > .setseg + .sethint {
+  margin-top: 10px;
+}
+.temporow {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 52px 14px 52px;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hair);
+  cursor: pointer;
+}
+.temporow input {
+  accent-color: var(--acc);
+  align-self: center;
+  margin: 0;
+}
+.tempotag,
+.tempofound {
+  text-align: right;
+}
+.tempotag {
+  color: var(--fg3);
+}
+.tempofound {
+  color: var(--fg);
+}
+.temporow.same,
+.temporow.none {
+  cursor: default;
+}
+.temporow.same .qualname,
+.temporow.same .tempofound,
+.temporow.none .tempofound {
+  color: var(--fg4);
+}
+
 /* ── Duplicates ────────────────────────────────────────────────────────────
    Grouped rather than listed: the useful unit is the recording, and which of
    its copies to keep is a comparison between them. */

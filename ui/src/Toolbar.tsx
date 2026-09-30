@@ -10,6 +10,7 @@ export type ActionId =
   | "rename"
   | "clean"
   | "quality"
+  | "bpm"
   | "copies"
   | "quick"
   | "convert"

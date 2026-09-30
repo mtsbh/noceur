@@ -178,6 +178,16 @@ export function BroomIcon() {
 }
 
 /** Bars falling away to the right: a spectrum that stops. */
+/** Detect BPM: a metronome, its arm off to one side. */
+export function TempoIcon() {
+  return (
+    <Icon>
+      <path d="M6.2 2.2h3.6l2.8 11.4H3.4z" />
+      <path d="M8 10.6l3.4-6.2M4.3 10.6h7.4" />
+    </Icon>
+  );
+}
+
 export function SpectrumIcon() {
   return (
     <Icon>

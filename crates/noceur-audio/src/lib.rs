@@ -13,6 +13,7 @@ pub mod quality;
 pub mod scope;
 pub mod source;
 pub mod spectrogram;
+pub mod tempo;
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};

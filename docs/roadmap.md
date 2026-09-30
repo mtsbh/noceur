@@ -39,12 +39,19 @@ up without changes of their own.
 
 ## Analysis
 
-- [ ] **7. BPM detection.** librosa is Python and would mean shipping an interpreter, so its
-      method is ported to Rust in `noceur-audio` instead: onset-strength envelope (spectral
-      flux on a mel spectrogram) → autocorrelation tempogram weighted by a tempo prior → pick
-      the peak, with a configurable BPM range (e.g. 70–180) to settle half/double-time.
-      Results are offered, not written: the user confirms before `TBPM` changes. Accuracy is
-      measured against existing Mixed In Key tags on a real library before it ships.
+- [x] **7. BPM detection.** librosa's method ported to Rust (`noceur-audio::tempo`):
+      onset-strength envelope (spectral flux on a mel spectrogram) → autocorrelation, scored
+      on the first four beats across the range and weighted by a log-normal prior centred on
+      125 BPM → then refined by lining up 24 beats, which gives the decimal librosa's
+      one-frame resolution cannot. The range (70–180 by default, three other presets in the
+      dialog) settles half/double time. Written whole when within 0.1 of a whole BPM,
+      otherwise to one decimal. Detect BPM (toolbar and right-click) lists tagged → detected
+      per track; the ones that differ start ticked, and only ticked ones are written.
+      Measured on 200 tracks sampled across the library (`tests/tempo_real.rs`): 40% match
+      the tag; of the rest, every one of ~30 checked against an independent whole-track
+      kick-grid fit agreed with the detection, not the tag — a third of the library's BPM
+      tags are exactly 1 BPM low. About 1.2 s for a 6½-minute WAV, nearly
+      all of it decoding.
 - [ ] **8. Key detection.** Chroma features against key profiles (Krumhansl/Temperley), or
       libKeyFinder (GPL-3, compatible with this project's licence). Written in the same
       notation as the existing key column (Camelot / Open Key / standard).

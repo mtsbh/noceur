@@ -53,6 +53,7 @@ import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
 import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
 import Quality from "./Quality";
+import Tempo from "./Tempo";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
@@ -99,6 +100,7 @@ import {
   SearchIcon,
   SettingsIcon,
   SpectrumIcon,
+  TempoIcon,
   SplitColsIcon,
   SplitRowsIcon,
   StarIcon,
@@ -530,6 +532,8 @@ export default function App() {
   const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
   const [checking, setChecking] = createSignal<number[] | null>(null);
+  /** Files BPM detection is open on, or null when it is closed. */
+  const [timing, setTiming] = createSignal<number[] | null>(null);
   /** Files the duplicate finder is measuring, or null when it is closed. */
   const [comparing, setComparing] = createSignal<number[] | null>(null);
   /** File ids the tag editor is open on, or null when it is closed. */
@@ -610,6 +614,9 @@ export default function App() {
         break;
       case "quality":
         setChecking(ids);
+        break;
+      case "bpm":
+        setTiming(ids);
         break;
       case "copies":
         setComparing(ids);
@@ -876,6 +883,7 @@ export default function App() {
       tool("rename", "Rename", RenameIcon),
       tool("clean", "Clean up", BroomIcon),
       tool("quality", "Check quality", SpectrumIcon),
+      tool("bpm", "Detect BPM", TempoIcon),
       tool("copies", "Find duplicates", CopiesIcon),
       tool("convert", "Convert", ConvertIcon),
       // Your own buttons. Ones with an icon arrive in the bar by themselves;
@@ -1025,7 +1033,7 @@ export default function App() {
       "flex:start",
       "tags", "match", "fromname", "art", "quick",
       "sep:a",
-      "rename", "clean", "quality", "copies", "convert",
+      "rename", "clean", "quality", "bpm", "copies", "convert",
       ...(mine.length ? ["sep:b", ...mine] : []),
       "sep:c",
       "sizes",
@@ -1368,6 +1376,13 @@ export default function App() {
         icon: SpectrumIcon,
         disabled: audio,
         run: () => setChecking(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Detect BPM of ${ids.length} tracks…` : "Detect BPM…",
+        icon: TempoIcon,
+        disabled: audio,
+        run: () => setTiming(ids),
       },
       {
         kind: "item",
@@ -1915,6 +1930,12 @@ export default function App() {
 
       <Show when={checking()}>
         {(ids) => <Quality fileIds={ids()} onClose={() => setChecking(null)} />}
+      </Show>
+
+      <Show when={timing()}>
+        {(ids) => (
+          <Tempo fileIds={ids()} onClose={() => setTiming(null)} onDone={refetchAll} />
+        )}
       </Show>
 
       <Show when={comparing()}>

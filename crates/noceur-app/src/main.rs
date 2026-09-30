@@ -27,6 +27,7 @@ mod renamer;
 mod shellmenu;
 mod state;
 mod tagedit;
+mod tempo;
 mod timestamp;
 mod undo;
 
@@ -161,6 +162,7 @@ fn main() {
             config::preserve_dates,
             config::set_preserve_dates,
             quality::analyse_quality,
+            tempo::detect_tempo,
             identity::identify,
             identity::duplicates,
             actions::actions,
