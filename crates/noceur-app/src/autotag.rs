@@ -63,18 +63,22 @@ pub async fn match_track(
         let token =
             crate::config::Config::load(&crate::config::Config::default_path()).discogs_token;
 
-        let mut matches = noceur_online::match_track(&artist, &title, meta.duration_ms, &token)
+        let matches = noceur_online::match_track(&artist, &title, meta.duration_ms, &token)
             .map_err(|e| e.to_string())?;
+        let mut matches = trim(matches, PER_SOURCE);
 
-        // The fields the search endpoint leaves out are the ones worth having,
-        // and only for results the user might actually take.
-        for m in matches.iter_mut().take(4) {
-            if m.source == noceur_online::deezer::NAME {
-                let _ = noceur_online::deezer::enrich(m);
-            } else if m.source == noceur_online::bandcamp::NAME {
-                let _ = noceur_online::bandcamp::enrich(m);
+        // The fields the search endpoint leaves out are the ones worth having.
+        // Fetched side by side: each is a page load, and one after another they
+        // would hold the picker open for seconds.
+        std::thread::scope(|s| {
+            for m in matches.iter_mut() {
+                if m.source == noceur_online::deezer::NAME {
+                    s.spawn(|| noceur_online::deezer::enrich(m));
+                } else if m.source == noceur_online::bandcamp::NAME {
+                    s.spawn(|| noceur_online::bandcamp::enrich(m));
+                }
             }
-        }
+        });
 
         for m in &mut matches {
             m.key = m.key.take().map(|k| camelot(&k));
@@ -84,6 +88,31 @@ pub async fn match_track(
     })
     .await
     .map_err(|e| format!("match task failed: {e}"))?
+}
+
+/// Candidates kept per source.
+///
+/// More than the picker shows: MusicBrainz is handed a cover address for every
+/// release whether the archive has one or not, and the picker drops the ones
+/// that fail to load before showing its first three.
+const PER_SOURCE: usize = 6;
+
+/// Drops matches with no cover and keeps the best few of each source.
+///
+/// A release without a sleeve is hard to tell apart from its neighbours, and a
+/// dozen near-identical rows from one source bury the others. Order is kept, so
+/// the best of every source still comes first.
+fn trim(matches: Vec<TrackMatch>, per_source: usize) -> Vec<TrackMatch> {
+    let mut seen: std::collections::HashMap<&'static str, usize> = Default::default();
+    matches
+        .into_iter()
+        .filter(|m| m.art.as_deref().is_some_and(|a| !a.is_empty()))
+        .filter(|m| {
+            let n = seen.entry(m.source).or_default();
+            *n += 1;
+            *n <= per_source
+        })
+        .collect()
 }
 
 /// A source's key in the notation the rest of the app writes.
@@ -132,7 +161,30 @@ pub fn set_discogs_token(token: String) -> Result<Credentials, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::camelot;
+    use super::{camelot, trim, TrackMatch};
+
+    fn found(source: &'static str, title: &str, art: bool) -> TrackMatch {
+        TrackMatch {
+            source,
+            title: title.into(),
+            art: art.then(|| format!("https://example.com/{title}.jpg")),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn matches_without_a_cover_are_dropped_and_each_source_is_capped() {
+        let all = vec![
+            found("Deezer", "d1", true),
+            found("Deezer", "d2", false),
+            found("Beatport", "b1", true),
+            found("Deezer", "d3", true),
+            found("Deezer", "d4", true),
+            found("Beatport", "b2", true),
+        ];
+        let kept: Vec<String> = trim(all, 2).into_iter().map(|m| m.title).collect();
+        assert_eq!(kept, ["d1", "b1", "d3", "b2"]);
+    }
 
     /// Every spelling Beatport uses, including both enharmonics.
     #[test]

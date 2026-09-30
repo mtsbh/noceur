@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
 import { matchTrack, type TagField, type TrackMatch } from "./api";
 
@@ -17,6 +17,9 @@ import { matchTrack, type TagField, type TrackMatch } from "./api";
  * of them are shown rather than merged, because which one is right for a
  * particular file is a judgement its owner makes.
  */
+/** Rows shown per source. */
+const PER_SOURCE = 3;
+
 export default function MatchPicker(props: {
   fileId: number;
   onClose: () => void;
@@ -37,10 +40,24 @@ export default function MatchPicker(props: {
   const [error, setError] = createSignal("");
   /**
    * Art that failed to load. MusicBrainz is given a Cover Art Archive address
-   * for every release, and plenty of releases have nothing there; those are
-   * shown blank and not handed to the editor as the release's cover.
+   * for every release, and plenty of releases have nothing there.
    */
   const [missing, setMissing] = createSignal<Set<string>>(new Set());
+
+  /**
+   * What is listed: only releases with a sleeve, and the best few of each
+   * source. A row whose art fails drops out and the next one from the same
+   * source takes its place.
+   */
+  const shown = createMemo(() => {
+    const per = new Map<string, number>();
+    return (matches() ?? []).filter((m) => {
+      if (!m.art || missing().has(m.art)) return false;
+      const n = (per.get(m.source) ?? 0) + 1;
+      per.set(m.source, n);
+      return n <= PER_SOURCE;
+    });
+  });
 
   createEffect(() => {
     const id = props.fileId;
@@ -127,7 +144,7 @@ export default function MatchPicker(props: {
         <div class="matchbody">
           <Show when={matches()} fallback={<p class="sethint">Searching…</p>}>
             <Show
-              when={matches()!.length > 0}
+              when={shown().length > 0}
               fallback={
                 <p class="sethint">
                   <span data-tip="Try adding artist and title" data-tip-at="start">
@@ -136,16 +153,14 @@ export default function MatchPicker(props: {
                 </p>
               }
             >
-              <For each={matches()}>
+              <For each={shown()}>
                 {(m) => (
                   <button
                     class="matchrow"
-                    onClick={() =>
-                      props.onChoose(fieldsOf(m), m.art && !missing().has(m.art) ? m.art : undefined)
-                    }
+                    onClick={() => props.onChoose(fieldsOf(m), m.art ?? undefined)}
                   >
                     <span class="matchart">
-                      <Show when={m.art && !missing().has(m.art)}>
+                      <Show when={m.art}>
                         <img
                           src={m.art!}
                           alt=""
