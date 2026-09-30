@@ -8,7 +8,7 @@ it does.
 
 ## Metadata sources
 
-MusicBrainz, Deezer, iTunes, Discogs, Beatport and Bandcamp are in `noceur-online`. Every new source plugs into
+Deezer, iTunes, Discogs, Beatport and Bandcamp are in `noceur-online` (MusicBrainz is used only for Cover Art Archive covers). Every new source plugs into
 the same `TrackMatch` / `Candidate` types, so the Find metadata and Find album art dialogs pick it
 up without changes of their own.
 
