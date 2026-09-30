@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
-import { matchTrack, type Heard, type TagField, type TrackMatch } from "./api";
+import { matchTrack, type Query, type TagField, type TrackMatch } from "./api";
 
 /**
  * Shows what the sources think a track is, and hands the chosen one to the
@@ -38,8 +38,8 @@ export default function MatchPicker(props: {
 }) {
   const [matches, setMatches] = createSignal<TrackMatch[] | null>(null);
   const [error, setError] = createSignal("");
-  /** What the fingerprint said the track is, when the search used that. */
-  const [heard, setHeard] = createSignal<Heard | null>(null);
+  /** What the search used, when it was the sound or the file name. */
+  const [query, setQuery] = createSignal<Query | null>(null);
   /**
    * Art that failed to load. A source's cover link can point at nothing, and a
    * row with a broken sleeve is worse than no row.
@@ -65,7 +65,7 @@ export default function MatchPicker(props: {
     const id = props.fileId;
     matchTrack(id)
       .then((r) => {
-        setHeard(r.heard);
+        setQuery(r.query);
         setMatches(r.matches);
       })
       .catch((e) => {
@@ -148,10 +148,11 @@ export default function MatchPicker(props: {
 
         <div class="matchbody">
           <Show when={matches()} fallback={<p class="sethint">Searching…</p>}>
-            <Show when={heard()}>
-              {(h) => (
+            <Show when={query()}>
+              {(q) => (
                 <p class="sethint">
-                  By sound: {h().artist} — {h().title}
+                  {q().by === "sound" ? "By sound" : "By file name"}:{" "}
+                  {[q().artist, q().title].filter((s) => s.trim()).join(" — ")}
                 </p>
               )}
             </Show>

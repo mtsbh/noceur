@@ -55,42 +55,52 @@ pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Mat
                 .map(|m| trim(m, PER_SOURCE))
         };
 
-        // Tags first. Without them, the sound: a fingerprint names the recording
-        // outright, where a file name is only a guess. The name is the last
-        // resort, and is only consulted for what the tags do not already say, so
-        // a file with a good title and no artist still gets both.
-        let mut heard = None;
-        let (artist, title) = if tagged {
-            (tagged_artist, tagged_title)
-        } else if let Some(h) = identify(&found.path, meta.duration_ms) {
-            let query = (h.artist(), h.title.clone());
-            heard = Some(h);
-            query
+        // The name is only consulted for what the tags do not already say, so a
+        // file with a good title and no artist still gets both. When the tags
+        // say everything and found nothing, the name is taken whole instead.
+        let guess = noceur_online::matching::from_file_name(&name);
+        let named = if tagged {
+            (guess.artist, guess.title)
         } else {
-            let guess = noceur_online::matching::from_file_name(&name);
-            let pick = |tag: String, guess: String| {
+            let pick = |tag: &str, guess: String| {
                 if tag.trim().is_empty() {
                     guess
                 } else {
-                    tag
+                    tag.to_string()
                 }
             };
             (
-                pick(tagged_artist, guess.artist),
-                pick(tagged_title, guess.title),
+                pick(&tagged_artist, guess.artist),
+                pick(&tagged_title, guess.title),
             )
         };
 
-        let mut result = search(&artist, &title);
-
-        // Tags that find nothing may be wrong, or say only "Track 01". The
-        // fingerprint gets one try at a better query.
-        if heard.is_none() && result.as_ref().map_or(true, Vec::is_empty) {
-            if let Some(h) = identify(&found.path, meta.duration_ms) {
-                if h.artist() != artist || h.title != title {
-                    result = search(&h.artist(), &h.title);
-                    heard = Some(h);
-                }
+        // Tags first, then the sound, then the name, until one finds something.
+        // A fingerprint names the recording outright, where a file name is only
+        // a guess; tags that find nothing may be wrong, or say only "Track 01".
+        // A query already tried is not sent again.
+        let mut result = Ok(Vec::new());
+        let mut query = None;
+        let mut tried: Vec<(String, String)> = Vec::new();
+        for by in [By::Tags, By::Sound, By::Name] {
+            let next = match by {
+                By::Tags => tagged.then(|| (tagged_artist.clone(), tagged_title.clone())),
+                By::Sound => identify(&found.path, meta.duration_ms).map(|h| (h.artist(), h.title)),
+                By::Name => Some(named.clone()),
+            };
+            let Some((artist, title)) = next else {
+                continue;
+            };
+            if (artist.trim().is_empty() && title.trim().is_empty())
+                || tried.iter().any(|(a, t)| *a == artist && *t == title)
+            {
+                continue;
+            }
+            result = search(&artist, &title);
+            tried.push((artist.clone(), title.clone()));
+            query = Some(Query { by, artist, title });
+            if result.as_ref().is_ok_and(|m| !m.is_empty()) {
+                break;
             }
         }
 
@@ -115,29 +125,40 @@ pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Mat
 
         Ok(Matched {
             matches,
-            heard: heard.map(|h| Heard {
-                artist: h.artist(),
-                title: h.title,
-            }),
+            // The tags are what the user expects to be searched with; only the
+            // other two are worth saying.
+            query: query.filter(|q| q.by != By::Tags),
         })
     })
     .await
     .map_err(|e| format!("match task failed: {e}"))?
 }
 
-/// What the sources found, and what the fingerprint said the track is when
-/// the search was made with that instead of the tags.
+/// What the sources found, and what they were searched with when that was not
+/// the file's own tags.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Matched {
     pub matches: Vec<TrackMatch>,
-    pub heard: Option<Heard>,
+    pub query: Option<Query>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct Heard {
+pub struct Query {
+    pub by: By,
     pub artist: String,
     pub title: String,
+}
+
+/// Where a search query came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum By {
+    Tags,
+    /// The AcoustID fingerprint.
+    Sound,
+    /// A guess from the file name.
+    Name,
 }
 
 /// The recording a file's audio belongs to, by fingerprint.

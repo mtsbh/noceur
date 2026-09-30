@@ -566,16 +566,19 @@ export type TrackMatch = {
   score: number;
 };
 
-/** What the matches were searched with, when the fingerprint chose it. */
-export type Heard = { artist: string; title: string };
+/**
+ * What the matches were searched with, when it was not the file's tags: the
+ * fingerprint ("sound") or a guess from the file name ("name").
+ */
+export type Query = { by: "sound" | "name"; artist: string; title: string };
 
-export type Matched = { matches: TrackMatch[]; heard: Heard | null };
+export type Matched = { matches: TrackMatch[]; query: Query | null };
 
 /**
  * Searches every source for what this file might be.
  *
- * Uses the file's tags; without them, its fingerprint, then its name — the
- * files that most need this are the ones with no tags to search by.
+ * Tries the file's tags, then its fingerprint, then its name, until one finds
+ * something — the files that most need this are the ones with no tags.
  */
 export function matchTrack(fileId: number): Promise<Matched> {
   return invoke<Matched>("match_track", { fileId });

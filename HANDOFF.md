@@ -56,8 +56,10 @@
 
 ## Next steps
 1. Confirm AcoustID in the app. The picker wording "By sound:" is settled.
-2. Roadmap: step 6 (file-name fallback, mostly already done in `match_track`), then 7 BPM
-   detection. Steps 4 (Tidal) and 5 (AcoustID) are done.
+2. Roadmap: step 7, BPM detection. Steps 4–6 are done. Step 6: `match_track` loops over
+   `By::Tags` → `By::Sound` → `By::Name` until one returns matches, skipping empty and
+   repeated queries; `Matched.query` (was `heard`) carries `by` + artist/title when not tags.
+   Picker wording "By file name:" not yet confirmed by the user.
 3. Settings copy for sources is open: current "Discogs and Tidal need your own keys. Each is
    sent only to its service." (user not yet asked to pick).
 4. Known smaller issues:

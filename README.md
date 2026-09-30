@@ -53,7 +53,7 @@ same track often exists in more than one place.
 - Star ratings (`Alt+0`–`Alt+5`), stored where DJ software reads them
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
 - Metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive, always picked by hand
-- Untagged files identified by sound (AcoustID fingerprint), then searched by what they turn out to be
+- Untagged files identified by sound (AcoustID fingerprint), then searched by what they turn out to be; the file name is the last resort
 - Tags from file name (`%artist% - %title%` patterns, with preview)
 - Rename from templates, and cleanup rules for common download debris
 - File modification dates are preserved when retagging (configurable)
