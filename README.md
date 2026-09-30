@@ -52,7 +52,7 @@ same track often exists in more than one place.
 - Inline editing in the list: click a selected row's name or tag cell to edit it in place
 - Star ratings (`Alt+0`–`Alt+5`), stored where DJ software reads them
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
-- Metadata and cover art from Beatport, Bandcamp, MusicBrainz, Deezer, iTunes and Discogs, always picked by hand
+- Metadata from Beatport, Bandcamp, Deezer, iTunes and Discogs, and cover art from those plus the Cover Art Archive, always picked by hand
 - Tags from file name (`%artist% - %title%` patterns, with preview)
 - Rename from templates, and cleanup rules for common download debris
 - File modification dates are preserved when retagging (configurable)

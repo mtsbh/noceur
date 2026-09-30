@@ -204,7 +204,6 @@ pub fn match_track(
         bandcamp::search_tracks(artist, &clean, MATCH_LIMIT),
         deezer::search_tracks(artist, &clean, MATCH_LIMIT),
         itunes::search_tracks(artist, &clean, MATCH_LIMIT),
-        musicbrainz::search_recordings(artist, &clean, MATCH_LIMIT),
     ];
     // Only asked when there is a token to ask with. Without one it would fail
     // every time and its error would masquerade as the last word on the search.

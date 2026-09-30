@@ -92,9 +92,8 @@ pub async fn match_track(
 
 /// Candidates kept per source.
 ///
-/// More than the picker shows: MusicBrainz is handed a cover address for every
-/// release whether the archive has one or not, and the picker drops the ones
-/// that fail to load before showing its first three.
+/// More than the picker shows: a cover link can still fail to load, and the
+/// picker drops those before showing its first three.
 const PER_SOURCE: usize = 6;
 
 /// Drops matches with no cover and keeps the best few of each source.

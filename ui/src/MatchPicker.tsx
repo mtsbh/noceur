@@ -39,8 +39,8 @@ export default function MatchPicker(props: {
   const [matches, setMatches] = createSignal<TrackMatch[] | null>(null);
   const [error, setError] = createSignal("");
   /**
-   * Art that failed to load. MusicBrainz is given a Cover Art Archive address
-   * for every release, and plenty of releases have nothing there.
+   * Art that failed to load. A source's cover link can point at nothing, and a
+   * row with a broken sleeve is worse than no row.
    */
   const [missing, setMissing] = createSignal<Set<string>>(new Set());
 

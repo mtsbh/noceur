@@ -3,8 +3,8 @@
 /// A candidate match for a track, from any source.
 ///
 /// Every field is optional because no two services carry the same ones. Deezer
-/// has BPM and a release date but no label; MusicBrainz has labels and catalogue
-/// numbers but almost never a BPM; iTunes has genre and a date but neither.
+/// has BPM and a release date but no label; Discogs has labels and catalogue
+/// numbers but never a BPM; iTunes has genre and a date but neither.
 /// Presenting them side by side and letting the user take fields from whichever
 /// one has them is the point — which is why nothing here is flattened into a
 /// single "best" answer.
