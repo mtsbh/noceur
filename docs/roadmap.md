@@ -128,4 +128,20 @@ downloads rather than CD rips.
       without notice and rate-limits by IP, so it is off until enabled in Settings → Metadata
       sources, runs one file at a time, and comes after the tags and AcoustID in Find metadata.
 
+## Background analysis
+
+- [ ] **18. BPM and key without asking.** The playing track, and the tracks of each folder that is
+      opened, are analysed in the background (one or two at a time, below the UI's priority), with
+      the result kept in the index under the file's audio identity so nothing is analysed twice.
+      Settings → Analysis offers three behaviours:
+      - **Fill empty fields** (default): BPM and key are written only where the file has none.
+        Where the file's tag differs from the detection, the list marks the cell and one click
+        accepts it; an existing tag is never overwritten on its own.
+      - **Show only**: detections appear dimmed in the BPM and Key columns; nothing is written
+        until accepted.
+      - **Overwrite**: the file always gets the detection.
+
+      Off until switched on. Modification dates are preserved as in any retag, a file that is
+      playing is written after playback moves on, and a small indicator shows the queue.
+
 When a step changes what the app can do, the README's feature list is updated with it.
