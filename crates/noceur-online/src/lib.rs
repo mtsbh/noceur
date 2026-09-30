@@ -8,8 +8,11 @@
 //!
 //! What leaves the machine is an artist and a title, typed as a search query.
 //! That is inherent to looking a release up in a database, but it is worth
-//! stating plainly rather than leaving it to be discovered.
+//! stating plainly rather than leaving it to be discovered. The one exception is
+//! identifying a track by sound (`acoustid`), which sends a fingerprint of the
+//! audio and its length instead.
 
+pub mod acoustid;
 pub mod bandcamp;
 pub mod beatport;
 pub mod covers;

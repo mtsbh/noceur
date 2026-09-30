@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
-import { matchTrack, type TagField, type TrackMatch } from "./api";
+import { matchTrack, type Heard, type TagField, type TrackMatch } from "./api";
 
 /**
  * Shows what the sources think a track is, and hands the chosen one to the
@@ -38,6 +38,8 @@ export default function MatchPicker(props: {
 }) {
   const [matches, setMatches] = createSignal<TrackMatch[] | null>(null);
   const [error, setError] = createSignal("");
+  /** What the fingerprint said the track is, when the search used that. */
+  const [heard, setHeard] = createSignal<Heard | null>(null);
   /**
    * Art that failed to load. A source's cover link can point at nothing, and a
    * row with a broken sleeve is worse than no row.
@@ -62,7 +64,10 @@ export default function MatchPicker(props: {
   createEffect(() => {
     const id = props.fileId;
     matchTrack(id)
-      .then(setMatches)
+      .then((r) => {
+        setHeard(r.heard);
+        setMatches(r.matches);
+      })
       .catch((e) => {
         setMatches([]);
         setError(String(e));
@@ -143,6 +148,13 @@ export default function MatchPicker(props: {
 
         <div class="matchbody">
           <Show when={matches()} fallback={<p class="sethint">Searching…</p>}>
+            <Show when={heard()}>
+              {(h) => (
+                <p class="sethint">
+                  By sound: {h().artist} — {h().title}
+                </p>
+              )}
+            </Show>
             <Show
               when={shown().length > 0}
               fallback={

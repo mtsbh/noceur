@@ -33,3 +33,6 @@ rodio = { version = "0.22", default-features = false, features = [
   "symphonia-alac",
   "symphonia-adpcm",
 ] }
+# Chromaprint fingerprints for AcoustID lookups. Pure Rust, and its output
+# matches `fpcalc`, so there is no C library or bundled executable to ship.
+rusty-chromaprint = "0.3"

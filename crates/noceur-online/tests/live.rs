@@ -306,3 +306,23 @@ fn a_rejected_token_is_reported_as_a_token_problem() {
         "got {err:?}"
     );
 }
+
+/// A fingerprint made by `noceur_audio::fingerprint` from a real FLAC. If
+/// AcoustID names the track, the fingerprint is one it can read — which is the
+/// check that the in-process port really matches `fpcalc`.
+#[test]
+#[ignore = "reaches the network"]
+fn a_real_fingerprint_is_identified() {
+    use noceur_online::acoustid;
+    assert!(acoustid::available(), "no AcoustID key is built in");
+
+    let fp = include_str!("fixtures/burial_south_london_boroughs.fp").trim();
+    let found = acoustid::lookup(fp, 308).expect("AcoustID should answer");
+    for h in found.iter().take(5) {
+        println!("  {:.2}  {} — {}", h.score, h.artist(), h.title);
+    }
+    let best = found.first().expect("a released track should be known");
+    assert!(best.score >= acoustid::MIN_SCORE);
+    assert!(best.artist().contains("Burial"), "{best:?}");
+    assert!(best.title.contains("South London Boroughs"), "{best:?}");
+}

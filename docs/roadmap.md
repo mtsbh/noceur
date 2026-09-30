@@ -23,10 +23,12 @@ up without changes of their own.
 - [ ] **4. Tidal.** Official catalogue API (`openapi.tidal.com`, client-credentials flow). Needs
       a free developer app: the Client ID and secret go in Settings → Sources, and the source
       stays hidden until they are set.
-- [ ] **5. Acoustic fingerprints (AcoustID).** Identify files whose tags and names say nothing.
-      Fingerprint in-process with `rusty-chromaprint` (pure Rust, output matches `fpcalc`), look
-      the fingerprint up on AcoustID, and fetch the matching MusicBrainz recording. AcoustID
-      needs an application key; like Picard and beets, the app ships its own.
+- [x] **5. Acoustic fingerprints (AcoustID).** Identify files whose tags and names say nothing.
+      Fingerprinted in-process with `rusty-chromaprint` (pure Rust, output matches `fpcalc`):
+      the first two minutes, ~0.3 s a file. Find metadata uses it when a file has no artist or
+      title tag, or when its tags find nothing; the recording AcoustID names becomes the search
+      query, and the picker says so ("By sound: …"). No MusicBrainz rows are shown. The app
+      ships its own AcoustID application key, like Picard and beets.
 - [ ] **6. File-name guess as a fallback.** The parser exists (`matching::from_file_name`,
       used by Tags from file name). Use it automatically as the search query when a file has
       no artist/title tags.

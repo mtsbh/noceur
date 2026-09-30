@@ -566,14 +566,19 @@ export type TrackMatch = {
   score: number;
 };
 
+/** What the matches were searched with, when the fingerprint chose it. */
+export type Heard = { artist: string; title: string };
+
+export type Matched = { matches: TrackMatch[]; heard: Heard | null };
+
 /**
  * Searches every source for what this file might be.
  *
- * Uses the file's tags, falling back to its name — the files that most need
- * this are the ones with no tags to search by.
+ * Uses the file's tags; without them, its fingerprint, then its name — the
+ * files that most need this are the ones with no tags to search by.
  */
-export function matchTrack(fileId: number): Promise<TrackMatch[]> {
-  return invoke<TrackMatch[]>("match_track", { fileId });
+export function matchTrack(fileId: number): Promise<Matched> {
+  return invoke<Matched>("match_track", { fileId });
 }
 
 /** Which optional credentials are set. Never carries the values themselves. */

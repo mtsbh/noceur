@@ -11,18 +11,14 @@ use tauri::State;
 
 /// Searches every source for what this file might be.
 ///
-/// Reads the file rather than the index, like the tag editor does. Falls back to
-/// the file name when the tags have nothing to search with, because the files
-/// that most need this are exactly the ones with no tags — promos, rips, things
-/// pulled off a stick — and `Artist - Title.wav` is what a DJ library calls
-/// them.
+/// Reads the file rather than the index, like the tag editor does. When the
+/// tags have nothing to search with, it identifies the audio by fingerprint and
+/// then falls back to the file name, because the files that most need this are
+/// exactly the ones with no tags — promos, rips, things pulled off a stick.
 ///
 /// The duration comes from the file's own header and is used only as a tiebreak.
 #[tauri::command]
-pub async fn match_track(
-    state: State<'_, AppState>,
-    file_id: i64,
-) -> Result<Vec<TrackMatch>, String> {
+pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Matched, String> {
     let db = state.db.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -43,29 +39,57 @@ pub async fn match_track(
 
         let tagged_artist = meta.artist.clone().unwrap_or_default();
         let tagged_title = meta.title.clone().unwrap_or_default();
-
-        // The name is only consulted for what the tags do not already say, so a
-        // file with a good title and no artist still gets both.
-        let guess = noceur_online::matching::from_file_name(&name);
-        let artist = if tagged_artist.trim().is_empty() {
-            guess.artist
-        } else {
-            tagged_artist
-        };
-        let title = if tagged_title.trim().is_empty() {
-            guess.title
-        } else {
-            tagged_title
-        };
+        let tagged = !tagged_artist.trim().is_empty() && !tagged_title.trim().is_empty();
 
         // Discogs is only asked when the user has given it a token. Its label
         // and catalogue number are the fields nothing else here reliably has.
         let token =
             crate::config::Config::load(&crate::config::Config::default_path()).discogs_token;
+        let search = |artist: &str, title: &str| {
+            noceur_online::match_track(artist, title, meta.duration_ms, &token)
+                .map(|m| trim(m, PER_SOURCE))
+        };
 
-        let matches = noceur_online::match_track(&artist, &title, meta.duration_ms, &token)
-            .map_err(|e| e.to_string())?;
-        let mut matches = trim(matches, PER_SOURCE);
+        // Tags first. Without them, the sound: a fingerprint names the recording
+        // outright, where a file name is only a guess. The name is the last
+        // resort, and is only consulted for what the tags do not already say, so
+        // a file with a good title and no artist still gets both.
+        let mut heard = None;
+        let (artist, title) = if tagged {
+            (tagged_artist, tagged_title)
+        } else if let Some(h) = identify(&found.path, meta.duration_ms) {
+            let query = (h.artist(), h.title.clone());
+            heard = Some(h);
+            query
+        } else {
+            let guess = noceur_online::matching::from_file_name(&name);
+            let pick = |tag: String, guess: String| {
+                if tag.trim().is_empty() {
+                    guess
+                } else {
+                    tag
+                }
+            };
+            (
+                pick(tagged_artist, guess.artist),
+                pick(tagged_title, guess.title),
+            )
+        };
+
+        let mut result = search(&artist, &title);
+
+        // Tags that find nothing may be wrong, or say only "Track 01". The
+        // fingerprint gets one try at a better query.
+        if heard.is_none() && result.as_ref().map_or(true, Vec::is_empty) {
+            if let Some(h) = identify(&found.path, meta.duration_ms) {
+                if h.artist() != artist || h.title != title {
+                    result = search(&h.artist(), &h.title);
+                    heard = Some(h);
+                }
+            }
+        }
+
+        let mut matches = result.map_err(|e| e.to_string())?;
 
         // The fields the search endpoint leaves out are the ones worth having.
         // Fetched side by side: each is a page load, and one after another they
@@ -84,10 +108,58 @@ pub async fn match_track(
             m.key = m.key.take().map(|k| camelot(&k));
         }
 
-        Ok(matches)
+        Ok(Matched {
+            matches,
+            heard: heard.map(|h| Heard {
+                artist: h.artist(),
+                title: h.title,
+            }),
+        })
     })
     .await
     .map_err(|e| format!("match task failed: {e}"))?
+}
+
+/// What the sources found, and what the fingerprint said the track is when
+/// the search was made with that instead of the tags.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Matched {
+    pub matches: Vec<TrackMatch>,
+    pub heard: Option<Heard>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Heard {
+    pub artist: String,
+    pub title: String,
+}
+
+/// The recording a file's audio belongs to, by fingerprint.
+///
+/// `None` for anything short of a confident answer: no key built in, a file
+/// that will not decode, AcoustID unreachable or never having heard it. Each of
+/// those leaves the search where it would have been without this, so none is
+/// worth failing the search over.
+fn identify(
+    path: &std::path::Path,
+    duration_ms: Option<u64>,
+) -> Option<noceur_online::acoustid::Identified> {
+    use noceur_online::acoustid;
+    if !acoustid::available() {
+        return None;
+    }
+    let print = noceur_audio::fingerprint::fingerprint(path)
+        .inspect_err(|e| eprintln!("fingerprint {}: {e}", path.display()))
+        .ok()?;
+    let secs = duration_ms
+        .map(|ms| (ms / 1000) as u32)
+        .or(print.duration_secs)?;
+    acoustid::lookup(&print.encoded, secs)
+        .inspect_err(|e| eprintln!("AcoustID: {e}"))
+        .ok()?
+        .into_iter()
+        .find(|h| h.score >= acoustid::MIN_SCORE)
 }
 
 /// Candidates kept per source.

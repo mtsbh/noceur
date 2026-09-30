@@ -6,6 +6,7 @@
 
 pub mod biquad;
 pub mod fft;
+pub mod fingerprint;
 pub mod identity;
 pub mod prefetch;
 pub mod quality;
