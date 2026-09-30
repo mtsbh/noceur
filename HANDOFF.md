@@ -4,7 +4,7 @@
 - Work goes straight to `master`, which is pushed and matches `origin/master`. No feature
   branches or PRs.
 - Windows-only Tauri 2 app: Rust backend in `crates/`, Solid + Vite frontend in `ui/`.
-- `target/release/noceur-app.exe` is built from `272d846`, with the UI embedded.
+- `target/release/noceur-app.exe` is built from `f86d55b`, with the UI embedded.
 - Workspace fmt, clippy and tests are clean. `npx tsc` is clean too.
 - `master` is the only branch on GitHub. The stale `claude/kind-lamport-22i4sm` branch was
   deleted.
@@ -12,7 +12,7 @@
 ## Recent commits (newest first)
 | Commit | What |
 |---|---|
-| step 7 | BPM detection. `noceur-audio::tempo` (mel spectral flux → autocorrelation → coarse pick with a 125 BPM log-normal prior → 24-beat comb refine; `rounded()` writes whole within 0.1). `noceur-app::tempo::detect_tempo(fileIds, min, max)` measures a batch of 4 in parallel; `ui/src/Tempo.tsx` shows tagged → detected, differing rows ticked, writes via `writeTags` per file. Range preset in `localStorage` `noceur.tempoRange`. Accuracy: `cargo test -p noceur-audio --release --test tempo_real -- --ignored --nocapture` (`NOCEUR_SCAN`, `NOCEUR_LIMIT`). Many library tags are 1 BPM low; a whole-track kick-grid check confirmed the detection every time. `examples/bpm.rs` prints one file's tempo. |
+| `f86d55b` | BPM detection. `noceur-audio::tempo` (mel spectral flux → autocorrelation → coarse pick with a 125 BPM log-normal prior → 24-beat comb refine; `rounded()` writes whole within 0.1). `noceur-app::tempo::detect_tempo(fileIds, min, max)` measures a batch of 4 in parallel; `ui/src/Tempo.tsx` shows tagged → detected, differing rows ticked, writes via `writeTags` per file. Range preset in `localStorage` `noceur.tempoRange`. Accuracy: `cargo test -p noceur-audio --release --test tempo_real -- --ignored --nocapture` (`NOCEUR_SCAN`, `NOCEUR_LIMIT`). Many library tags are 1 BPM low; a whole-track kick-grid check confirmed the detection every time. `examples/bpm.rs` prints one file's tempo. |
 | `272d846` | Roadmap step 6. `match_track` loops `By::Tags` → `By::Sound` → `By::Name` until one returns matches, skipping empty and repeated queries. `Matched.query` (was `heard`) carries `by` + artist/title when not tags; picker says "From filename:". |
 | `addde45` | Roadmap step 4, Tidal (`noceur-online/src/tidal.rs`). User's own client ID + secret in Settings → Metadata sources (`tidalClientId` / `tidalClientSecret` in `noceur-config.json`). Search `/searchResults?filter[query]` then `/tracks?include=albums,artists,genres,albums.coverArt`. Live-tested: album, date, ISRC, 640 px cover. BPM/key/genre are withheld from third-party apps. Live test reads `NOCEUR_TIDAL_ID` / `NOCEUR_TIDAL_SECRET`. |
 | `ca86927` / `c2eef3b` | Roadmap step 5, AcoustID. `noceur-audio::fingerprint` (rusty-chromaprint, first 120 s, ~0.3 s) → `noceur-online::acoustid::lookup`. Find metadata uses it when the file has no artist/title tag, or when its tags find nothing, before the file-name guess. The picker shows "By sound: artist — title". The app's key is in `acoustid.rs`. The live test identifies a real Burial FLAC at 0.90. |
