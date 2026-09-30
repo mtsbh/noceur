@@ -8,6 +8,7 @@ pub mod biquad;
 pub mod fft;
 pub mod fingerprint;
 pub mod identity;
+pub mod key;
 pub mod prefetch;
 pub mod quality;
 pub mod scope;
@@ -383,6 +384,47 @@ fn open(
 /// Long-path form, so a deeply nested library still opens.
 fn noceur_extended(path: &Path) -> PathBuf {
     noceur_fsmodel::path::extended(path)
+}
+
+/// The longest stretch tempo and key are measured over. A club track is six
+/// to eight minutes; past ten there is nothing more to learn, only more to
+/// decode.
+pub const ANALYSIS_SECS: usize = 600;
+
+/// Decoded audio for analysis: interleaved samples, rate and channel count.
+pub struct Decoded {
+    pub samples: Vec<f32>,
+    pub rate: u32,
+    pub channels: usize,
+}
+
+/// Decodes up to `max_secs` of a file, for the analyses that need the samples
+/// in memory (tempo, key).
+pub fn decode(path: &Path, max_secs: usize) -> Result<Decoded, AudioError> {
+    let full = noceur_extended(path);
+    let opened = source::open(&full).map_err(|source| AudioError::Open {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let mut builder = rodio::Decoder::builder().with_data(opened.reader);
+    if let Some(len) = opened.byte_len {
+        builder = builder.with_byte_len(len);
+    }
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        builder = builder.with_hint(ext);
+    }
+    let decoder = builder.build().map_err(|e| AudioError::Decode {
+        path: path.display().to_string(),
+        reason: e.to_string(),
+    })?;
+    let channels = rodio::Source::channels(&decoder).get() as usize;
+    let rate = rodio::Source::sample_rate(&decoder).get();
+    let samples = decoder.take(rate as usize * channels * max_secs).collect();
+    Ok(Decoded {
+        samples,
+        rate,
+        channels,
+    })
 }
 
 fn set(state: &Arc<Mutex<Playback>>, f: impl FnOnce(&mut Playback)) {

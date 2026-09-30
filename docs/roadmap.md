@@ -52,15 +52,16 @@ up without changes of their own.
       kick-grid fit agreed with the detection, not the tag — a third of the library's BPM
       tags are exactly 1 BPM low. About 1.2 s for a 6½-minute WAV, nearly
       all of it decoding.
-- [x] **8. Key detection.** KeyNet (Korzeniowski & Widmer 2018), the convolutional network
-      MusicalKeyCNN trained on GiantSteps-MTG, run in Rust (`noceur-audio::key`) with its weights
-      embedded (`models/keynet.bin`, MIT, 1.8 MB). Input is librosa's constant-Q spectrogram (105
-      bins, 24 per octave from 65 Hz, 0.2 s frames), reproduced in Rust to within 0.2–0.4% at a
-      quarter of the sample rate; the network is nine convolutions written out as im2col matrix
-      products. Same answer as PyTorch on all 604 GiantSteps test tracks: 73.8 MIREX weighted,
-      67.2% exactly right, against Mixed In Key 10.3's 75.7 / 69.4 and rekordbox 7.12's
-      65.5 / 56.8 on the same tracks (`tests/key_giantsteps.rs`). Written in Camelot. The dialog
-      became Detect BPM & key: one decode per file, both fields tag → detected with a box each.
+- [x] **8. Key detection.** KeyNet (Korzeniowski & Widmer 2018), a convolutional network,
+      with OpenKeyScan's retrained MusicalKeyCNN weights, run in Rust (`noceur-audio::key`) with
+      the weights embedded (`models/openkeyscan2.bin`, MIT, 1.8 MB). Input is librosa's constant-Q
+      spectrogram (105 bins, 24 per octave from 65 Hz, 0.2 s frames), reproduced in Rust to within
+      0.2–0.4% at a quarter of the sample rate; the network is nine convolutions written out as
+      im2col matrix products. On the 604 GiantSteps test tracks: 76.5 MIREX weighted, 71.5%
+      exactly right, against Mixed In Key 10.3's 75.7 / 69.4 and rekordbox 7.12's 65.5 / 56.8
+      (`tests/key_giantsteps.rs`). On 300 tracks of a library tagged by Mixed In Key it agrees
+      with MIK on 65% (MusicalKeyCNN's own weights: 61%). Written in Camelot. The dialog became
+      Detect BPM & key: one decode per file, both fields tag → detected with a box each.
 
 ## Mp3tag compatibility
 

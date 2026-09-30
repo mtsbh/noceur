@@ -24,9 +24,6 @@ const MEL_MAX_HZ: f32 = 11_000.0;
 /// Quieter than this below the loudest bin is treated as silence, as librosa's
 /// `top_db` does, so the noise floor does not produce onsets of its own.
 const TOP_DB: f32 = 80.0;
-/// The longest stretch analysed. A club track is six to eight minutes; past
-/// ten there is nothing more to learn about its tempo, only more to decode.
-const MAX_SECS: usize = 600;
 /// Beats lined up by the fine search.
 const FINE_BEATS: usize = 24;
 /// Where the tempo prior is centred. librosa uses 120; 125 is the middle of a
@@ -67,29 +64,8 @@ pub struct Estimate {
 
 /// Estimates a file's tempo.
 pub fn detect(path: &Path, range: Range) -> Result<Option<Estimate>, crate::AudioError> {
-    let full = crate::noceur_extended(path);
-    let opened = crate::source::open(&full).map_err(|source| crate::AudioError::Open {
-        path: path.display().to_string(),
-        source,
-    })?;
-
-    let mut builder = rodio::Decoder::builder().with_data(opened.reader);
-    if let Some(len) = opened.byte_len {
-        builder = builder.with_byte_len(len);
-    }
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        builder = builder.with_hint(ext);
-    }
-    let decoder = builder.build().map_err(|e| crate::AudioError::Decode {
-        path: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
-
-    let channels = rodio::Source::channels(&decoder).get() as usize;
-    let rate = rodio::Source::sample_rate(&decoder).get();
-    let wanted = rate as usize * channels * MAX_SECS;
-    let samples: Vec<f32> = decoder.take(wanted).collect();
-    Ok(estimate(&samples, rate, channels, range))
+    let d = crate::decode(path, crate::ANALYSIS_SECS)?;
+    Ok(estimate(&d.samples, d.rate, d.channels, range))
 }
 
 /// Estimates the tempo of interleaved samples. `None` when there is too little

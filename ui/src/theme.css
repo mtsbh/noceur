@@ -3102,26 +3102,44 @@ label.artoffer:hover {
   color: var(--qual-bad);
 }
 
-/* ── Detect BPM ────────────────────────────────────────────────────────────
-   The file's own BPM beside the measured one. Rows that already agree fade,
-   so the ones that would change are what the eye lands on. */
+/* ── Detect BPM & key ──────────────────────────────────────────────────────
+   Each field is the file's own value, what was measured, and a box to write
+   it. Fields that already agree fade, so the ones that would change are what
+   the eye lands on. */
 .renamebody > .setseg + .quallist,
 .renamebody > .setseg + .sethint {
   margin-top: 10px;
 }
 .temporow {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 52px 14px 52px;
-  gap: 8px;
+  grid-template-columns:
+    minmax(0, 1fr)
+    48px 14px 48px 16px
+    48px 14px 48px 16px;
+  column-gap: 8px;
   align-items: baseline;
   padding: 4px 0;
   border-bottom: 1px solid var(--hair);
-  cursor: pointer;
+}
+.temporow.head {
+  color: var(--fg3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.temporow.head .tempofield {
+  grid-column: span 4;
+  text-align: center;
 }
 .temporow input {
   accent-color: var(--acc);
   align-self: center;
   margin: 0;
+  cursor: pointer;
+}
+.temporow input:disabled {
+  cursor: default;
+  opacity: 0.35;
 }
 .tempotag,
 .tempofound {
@@ -3133,13 +3151,8 @@ label.artoffer:hover {
 .tempofound {
   color: var(--fg);
 }
-.temporow.same,
-.temporow.none {
-  cursor: default;
-}
-.temporow.same .qualname,
-.temporow.same .tempofound,
-.temporow.none .tempofound {
+.tempofound.same,
+.tempofound.none {
   color: var(--fg4);
 }
 

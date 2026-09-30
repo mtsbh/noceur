@@ -709,24 +709,29 @@ export function analyseQuality(fileIds: number[]): Promise<QualityRow[]> {
   return invoke<QualityRow[]>("analyse_quality", { fileIds });
 }
 
-/** What one file's tempo measured at, next to what it is tagged with. */
-export type TempoRow = {
+/** What one file measured at, beside what it is tagged with. Keys are Camelot. */
+export type AnalysisRow = {
   fileId: number;
   name: string;
-  tagged: number | null;
+  taggedBpm: number | null;
   /** Rounded as it would be written: whole, or to one decimal. */
-  detected: number | null;
+  bpm: number | null;
+  taggedKey: string | null;
+  key: string | null;
+  /** The model's probability for `key`, 0..1. */
+  keyConfidence: number | null;
   error: string | null;
 };
 
 /**
- * Estimates the tempo of a batch of files, within `min`..`max` BPM.
+ * Measures tempo (within `min`..`max` BPM) and key for a batch of files, one
+ * decode each.
  *
  * About a second a track, so the caller walks its selection a few at a time.
  * Writes nothing: writing is `writeTags`, per file, for the ones the user ticks.
  */
-export function detectTempo(fileIds: number[], min: number, max: number): Promise<TempoRow[]> {
-  return invoke<TempoRow[]>("detect_tempo", { fileIds, min, max });
+export function analyseTracks(fileIds: number[], min: number, max: number): Promise<AnalysisRow[]> {
+  return invoke<AnalysisRow[]>("analyse_tracks", { fileIds, min, max });
 }
 
 /** One file in a set of copies. */

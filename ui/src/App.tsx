@@ -53,7 +53,7 @@ import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
 import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
 import Quality from "./Quality";
-import Tempo from "./Tempo";
+import Analysis from "./Analysis";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Duplicates from "./Duplicates";
@@ -532,7 +532,7 @@ export default function App() {
   const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
   const [checking, setChecking] = createSignal<number[] | null>(null);
-  /** Files BPM detection is open on, or null when it is closed. */
+  /** Files BPM and key detection is open on, or null when it is closed. */
   const [timing, setTiming] = createSignal<number[] | null>(null);
   /** Files the duplicate finder is measuring, or null when it is closed. */
   const [comparing, setComparing] = createSignal<number[] | null>(null);
@@ -883,7 +883,7 @@ export default function App() {
       tool("rename", "Rename", RenameIcon),
       tool("clean", "Clean up", BroomIcon),
       tool("quality", "Check quality", SpectrumIcon),
-      tool("bpm", "Detect BPM", TempoIcon),
+      tool("bpm", "Detect BPM & key", TempoIcon),
       tool("copies", "Find duplicates", CopiesIcon),
       tool("convert", "Convert", ConvertIcon),
       // Your own buttons. Ones with an icon arrive in the bar by themselves;
@@ -1379,7 +1379,7 @@ export default function App() {
       },
       {
         kind: "item",
-        label: many ? `Detect BPM of ${ids.length} tracks…` : "Detect BPM…",
+        label: many ? `Detect BPM & key of ${ids.length} tracks…` : "Detect BPM & key…",
         icon: TempoIcon,
         disabled: audio,
         run: () => setTiming(ids),
@@ -1934,7 +1934,7 @@ export default function App() {
 
       <Show when={timing()}>
         {(ids) => (
-          <Tempo fileIds={ids()} onClose={() => setTiming(null)} onDone={refetchAll} />
+          <Analysis fileIds={ids()} onClose={() => setTiming(null)} onDone={refetchAll} />
         )}
       </Show>
 

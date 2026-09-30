@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
-import { detectTempo, writeTags, type TempoRow, type WriteFailure } from "./api";
+import { analyseTracks, writeTags, type AnalysisRow, type WriteFailure } from "./api";
 
 /** Files measured per round trip; measured side by side on the other end. */
 const BATCH = 4;
@@ -29,33 +29,39 @@ function storedRange(): [number, number] {
   return RANGES[0];
 }
 
-/** A tag's BPM as it reads, without the float noise an `f32` brings along. */
-const show = (bpm: number | null) => (bpm === null ? "—" : String(Number(bpm.toFixed(2))));
+type Field = "bpm" | "key";
 
-/** The estimate agrees with the tag closely enough that writing it changes nothing. */
-const same = (r: TempoRow) =>
-  r.detected !== null && r.tagged !== null && Math.abs(r.detected - r.tagged) < 0.05;
+/** A tag's BPM as it reads, without the float noise an `f32` brings along. */
+const showBpm = (bpm: number | null) => (bpm === null ? "—" : String(Number(bpm.toFixed(2))));
+
+/** Whether writing this field would change the file. */
+function differs(r: AnalysisRow, field: Field): boolean {
+  if (field === "bpm") {
+    return r.bpm !== null && (r.taggedBpm === null || Math.abs(r.bpm - r.taggedBpm) >= 0.05);
+  }
+  return r.key !== null && r.key !== r.taggedKey;
+}
 
 /**
- * Tempo for a selection, measured from the audio.
+ * Tempo and key for a selection, measured from the audio.
  *
  * Offered, never written by itself: every estimate sits next to what the file
  * already says, and only the ticked ones are written. The ones that differ
  * start ticked, because that is what was asked for; untick any you trust
  * more than the measurement.
  */
-export default function Tempo(props: {
+export default function Analysis(props: {
   fileIds: number[];
   onClose: () => void;
   onDone: () => void;
 }) {
   const [range, setRange] = createSignal<[number, number]>(storedRange());
-  const [rows, setRows] = createSignal<TempoRow[]>([]);
+  const [rows, setRows] = createSignal<AnalysisRow[]>([]);
   const [done, setDone] = createSignal(0);
   const [running, setRunning] = createSignal(true);
   const [error, setError] = createSignal("");
-  /** Files the user has unticked. Everything that differs is ticked otherwise. */
-  const [skipped, setSkipped] = createSignal<Set<number>>(new Set());
+  /** `id:field` pairs the user has unticked. Everything that differs is ticked otherwise. */
+  const [skipped, setSkipped] = createSignal<Set<string>>(new Set());
   const [busy, setBusy] = createSignal(false);
   const [failures, setFailures] = createSignal<WriteFailure[]>([]);
 
@@ -78,7 +84,7 @@ export default function Tempo(props: {
       for (let at = 0; at < ids.length; at += BATCH) {
         if (mine !== run) return;
         try {
-          const batch = await detectTempo(ids.slice(at, at + BATCH), min, max);
+          const batch = await analyseTracks(ids.slice(at, at + BATCH), min, max);
           if (mine !== run) return;
           setRows((current) => [...current, ...batch]);
           setDone(Math.min(at + BATCH, ids.length));
@@ -112,11 +118,10 @@ export default function Tempo(props: {
     setRange(r);
   }
 
-  /** Rows that would change the file if written. */
-  const differing = createMemo(() => rows().filter((r) => r.detected !== null && !same(r)));
-  const chosen = createMemo(() => differing().filter((r) => !skipped().has(r.fileId)));
+  const ticked = (r: AnalysisRow, f: Field) => differs(r, f) && !skipped().has(`${r.fileId}:${f}`);
 
-  function toggle(id: number) {
+  function toggle(r: AnalysisRow, f: Field) {
+    const id = `${r.fileId}:${f}`;
     setSkipped((s) => {
       const next = new Set(s);
       if (next.has(id)) next.delete(id);
@@ -125,14 +130,23 @@ export default function Tempo(props: {
     });
   }
 
+  const count = (f: Field) => rows().filter((r) => differs(r, f)).length;
+  const chosen = createMemo(() =>
+    rows().reduce((n, r) => n + Number(ticked(r, "bpm")) + Number(ticked(r, "key")), 0),
+  );
+
   async function write() {
     setBusy(true);
     const failed: WriteFailure[] = [];
-    // One write per file: each has its own value, and the editor's command
+    // One write per file: each has its own values, and the editor's command
     // sets one value across a selection.
-    for (const r of chosen()) {
+    for (const r of rows()) {
+      const edit: { bpm?: string; key?: string } = {};
+      if (ticked(r, "bpm")) edit.bpm = String(r.bpm);
+      if (ticked(r, "key")) edit.key = r.key!;
+      if (!edit.bpm && !edit.key) continue;
       try {
-        const report = await writeTags([r.fileId], { bpm: String(r.detected) });
+        const report = await writeTags([r.fileId], edit);
         failed.push(...report.failures);
       } catch (e) {
         failed.push({ name: r.name, reason: String(e) });
@@ -144,12 +158,41 @@ export default function Tempo(props: {
     else setFailures(failed);
   }
 
+  /** One field of a row: the tag, what was measured, and whether to write it. */
+  const cell = (r: AnalysisRow, f: Field) => {
+    const tagged = f === "bpm" ? showBpm(r.taggedBpm) : (r.taggedKey ?? "—");
+    const found = f === "bpm" ? r.bpm : r.key;
+    const same = found !== null && !differs(r, f);
+    const hint =
+      f === "key" && r.keyConfidence !== null
+        ? `${Math.round(r.keyConfidence * 100)}% sure`
+        : (r.error ?? undefined);
+    return (
+      <>
+        <span class="tempotag mono">{tagged}</span>
+        <span class="renamearrow">→</span>
+        <span class={`tempofound mono ${same ? "same" : ""} ${found === null ? "none" : ""}`} title={hint}>
+          <Show when={found !== null} fallback={r.error ? "error" : "—"}>
+            {same ? "same" : f === "bpm" ? showBpm(r.bpm) : r.key}
+          </Show>
+        </span>
+        <input
+          type="checkbox"
+          disabled={!differs(r, f)}
+          checked={ticked(r, f)}
+          onChange={() => toggle(r, f)}
+          aria-label={`Write ${f === "bpm" ? "BPM" : "key"} for ${r.name}`}
+        />
+      </>
+    );
+  };
+
   return (
     <>
       <div class="scrim" onPointerDown={props.onClose} />
-      <div class="renamer" role="dialog" aria-label="Detect BPM">
+      <div class="renamer wide" role="dialog" aria-label="Detect BPM and key">
         <header class="sethead">
-          <span class="settitle">Detect BPM</span>
+          <span class="settitle">Detect BPM &amp; key</span>
           <span class="tagsubject">
             <Show
               when={running()}
@@ -170,7 +213,7 @@ export default function Tempo(props: {
         </header>
 
         <div class="renamebody">
-          <div class="setseg" role="group" aria-label="Range">
+          <div class="setseg" role="group" aria-label="BPM range">
             <For each={RANGES}>
               {(r) => (
                 <button
@@ -185,28 +228,20 @@ export default function Tempo(props: {
 
           <Show when={rows().length > 0} fallback={<p class="sethint">Listening…</p>}>
             <div class="quallist">
+              <div class="temporow head">
+                <span />
+                <span class="tempofield">BPM</span>
+                <span class="tempofield">Key</span>
+              </div>
               <For each={rows()}>
                 {(r) => (
-                  <label
-                    class={`temporow ${same(r) ? "same" : ""} ${r.detected === null ? "none" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      disabled={r.detected === null || same(r)}
-                      checked={r.detected !== null && !same(r) && !skipped().has(r.fileId)}
-                      onChange={() => toggle(r.fileId)}
-                    />
+                  <div class="temporow">
                     <span class="qualname" title={r.name}>
                       {r.name}
                     </span>
-                    <span class="tempotag mono">{show(r.tagged)}</span>
-                    <span class="renamearrow">→</span>
-                    <span class="tempofound mono" title={r.error ?? undefined}>
-                      <Show when={r.detected !== null} fallback={r.error ? "error" : "no beat"}>
-                        {same(r) ? "same" : show(r.detected)}
-                      </Show>
-                    </span>
-                  </label>
+                    {cell(r, "bpm")}
+                    {cell(r, "key")}
+                  </div>
                 )}
               </For>
             </div>
@@ -233,20 +268,16 @@ export default function Tempo(props: {
         <footer class="tagfoot">
           <span class="sethint credit">
             <Show when={!running()} fallback="Analyzing…">
-              <Show when={differing().length > 0} fallback="All match">
-                {differing().length} differ
+              <Show when={count("bpm") + count("key") > 0} fallback="All match">
+                {count("bpm")} BPM · {count("key")} keys differ
               </Show>
             </Show>
           </span>
           <button class="btn" onClick={props.onClose}>
             Cancel
           </button>
-          <button
-            class="btn primary"
-            disabled={chosen().length === 0 || busy()}
-            onClick={write}
-          >
-            {busy() ? "Writing…" : `Write ${chosen().length}`}
+          <button class="btn primary" disabled={chosen() === 0 || busy()} onClick={write}>
+            {busy() ? "Writing…" : `Write ${chosen()}`}
           </button>
         </footer>
       </div>

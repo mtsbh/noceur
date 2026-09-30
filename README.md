@@ -61,7 +61,7 @@ same track often exists in more than one place.
 **Analysis**
 - Quality check: detects lossy sources in lossless containers, upscaled MP3s, upsampled files and clipping, with an estimate of the original bitrate
 - Duplicate finder based on decoded audio, independent of tags and file names
-- BPM detection, shown next to the tagged BPM and written only for the tracks you tick; half/double time settled by a range
+- BPM and key detection, shown next to the tagged values and written only for the ones you tick; half/double time settled by a range, keys by a neural network (KeyNet) that agrees with Mixed In Key on about two tracks in three
 
 **Conversion**
 - Lossless conversion between WAV, AIFF, FLAC and ALAC via ffmpeg
@@ -182,7 +182,7 @@ Design decisions are documented in [`docs/design.md`](docs/design.md).
 
 ## Roadmap
 
-Key detection and Mp3tag action import are planned. See [`docs/roadmap.md`](docs/roadmap.md).
+Mp3tag action import is planned. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Troubleshooting
 

@@ -65,6 +65,72 @@ pub fn fft(re: &mut [f32], im: &mut [f32]) {
     }
 }
 
+/// A transform of one fixed size, with its twiddle factors worked out once.
+///
+/// [`fft`] advances its twiddles by repeated multiplication, which is fine at a
+/// few thousand points. At tens of thousands the rounding adds up to something
+/// a spectrum that is compared against a trained model can see, so large
+/// transforms that run many times take theirs from a table computed in `f64`.
+pub struct Plan {
+    n: usize,
+    /// `cos` and `sin` of `-2πk/n` for `k` in `0..n/2`.
+    twiddles: Vec<(f32, f32)>,
+}
+
+impl Plan {
+    /// A plan for transforms of length `n`, which must be a power of two.
+    pub fn new(n: usize) -> Self {
+        debug_assert!(n.is_power_of_two(), "the transform length must be 2^k");
+        let twiddles = (0..n / 2)
+            .map(|k| {
+                let angle = -2.0 * std::f64::consts::PI * k as f64 / n as f64;
+                (angle.cos() as f32, angle.sin() as f32)
+            })
+            .collect();
+        Plan { n, twiddles }
+    }
+
+    /// In place, same conventions as [`fft`].
+    pub fn run(&self, re: &mut [f32], im: &mut [f32]) {
+        let n = self.n;
+        debug_assert_eq!(re.len(), n);
+        debug_assert_eq!(im.len(), n);
+        if n < 2 {
+            return;
+        }
+        let mut j = 0usize;
+        for i in 1..n {
+            let mut bit = n >> 1;
+            while j & bit != 0 {
+                j ^= bit;
+                bit >>= 1;
+            }
+            j |= bit;
+            if i < j {
+                re.swap(i, j);
+                im.swap(i, j);
+            }
+        }
+        let mut len = 2;
+        while len <= n {
+            let stride = n / len;
+            for start in (0..n).step_by(len) {
+                for k in 0..len / 2 {
+                    let (wr, wi) = self.twiddles[k * stride];
+                    let (a, b) = (start + k, start + k + len / 2);
+                    let tr = re[b] * wr - im[b] * wi;
+                    let ti = re[b] * wi + im[b] * wr;
+                    re[b] = re[a] - tr;
+                    im[b] = im[a] - ti;
+                    re[a] += tr;
+                    im[a] += ti;
+                }
+            }
+            len <<= 1;
+        }
+    }
+}
+
 /// A Hann window of `n` points.
 ///
 /// Any window would do for finding where a spectrum stops; Hann is chosen for
@@ -151,6 +217,32 @@ mod tests {
         assert!(w[0].abs() < 1e-6);
         assert!((w[32] - 1.0).abs() < 1e-6);
         assert_eq!(w.len(), 64);
+    }
+
+    /// The planned transform gives what the unplanned one does.
+    #[test]
+    fn a_plan_matches_the_plain_transform() {
+        let signal: Vec<f32> = (0..1024)
+            .map(|i| ((i * 7919) % 101) as f32 / 50.0 - 1.0)
+            .collect();
+        let (mut re1, mut im1) = (signal.clone(), vec![0.0; 1024]);
+        fft(&mut re1, &mut im1);
+        let (mut re2, mut im2) = (signal, vec![0.0; 1024]);
+        Plan::new(1024).run(&mut re2, &mut im2);
+        for i in 0..1024 {
+            assert!(
+                (re1[i] - re2[i]).abs() < 1e-2,
+                "re {i}: {} vs {}",
+                re1[i],
+                re2[i]
+            );
+            assert!(
+                (im1[i] - im2[i]).abs() < 1e-2,
+                "im {i}: {} vs {}",
+                im1[i],
+                im2[i]
+            );
+        }
     }
 
     /// Parseval, near enough: the energy is the same on both sides.
