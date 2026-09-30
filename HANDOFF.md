@@ -6,8 +6,8 @@
 - Windows-only Tauri 2 app: Rust backend in `crates/`, Solid + Vite frontend in `ui/`.
 - `target/release/noceur-app.exe` is built from `fc03fc1`, with the UI embedded.
 - Workspace fmt, clippy and tests are clean. `npx tsc` is clean too.
-- `origin/claude/kind-lamport-22i4sm` is one commit ahead of `master`. That commit is an old
-  `HANDOFF.md` that this file replaces, so it can be deleted.
+- `master` is the only branch on GitHub. The stale `claude/kind-lamport-22i4sm` branch was
+  deleted.
 
 ## Recent commits (newest first)
 | Commit | What |
