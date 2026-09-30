@@ -19,7 +19,7 @@ const ENDPOINT: &str = "https://api.acoustid.org/v2/lookup";
 ///
 /// Shipped in the app, as Picard and beets ship theirs: it identifies the
 /// application, not the user, and the user never has to sign up for anything.
-const KEY: &str = "";
+const KEY: &str = "gR4GiJuT5A";
 
 /// Their published limit is three requests a second.
 static RATE: RateLimit = RateLimit::new(340);
