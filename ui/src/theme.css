@@ -1018,6 +1018,33 @@ body.resizing * {
   color: var(--acc);
 }
 
+/* A BPM or key measured from the audio and not in the file: shown in place of
+   the dash, dimmed, until it is written. */
+.measured {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+/* Where the measurement and the tag disagree, or the tag is missing: a dot that
+   writes the measured value when clicked. */
+.measuredmark {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--acc);
+  opacity: 0.7;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.measuredmark:hover {
+  opacity: 1;
+  transform: scale(1.4);
+}
+
 /* Transport. Full width at the bottom of the window rather than inside a pane,
    because it survives split mode: one player, however many panes. */
 .transport {
@@ -1556,6 +1583,10 @@ body.resizing * {
 .segbtn:hover {
   background: var(--raise);
   color: var(--fg);
+}
+.segbtn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .segbtn.on {
   background: var(--acc-fill);

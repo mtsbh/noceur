@@ -134,18 +134,21 @@ downloads rather than CD rips.
 
 ## Background analysis
 
-- [ ] **18. BPM and key without asking.** The playing track, and the tracks of each folder that is
-      opened, are analysed in the background (one or two at a time, below the UI's priority), with
-      the result kept in the index under the file's audio identity so nothing is analysed twice.
-      Settings → Analysis offers three behaviours:
-      - **Fill empty fields** (default): BPM and key are written only where the file has none.
-        Where the file's tag differs from the detection, the list marks the cell and one click
-        accepts it; an existing tag is never overwritten on its own.
-      - **Show only**: detections appear dimmed in the BPM and Key columns; nothing is written
-        until accepted.
-      - **Overwrite**: the file always gets the detection.
+- [x] **18. BPM and key without asking.** Each track the player loads is measured by one
+      low-priority thread while it plays; only what is played, never the rest of its folder.
+      The result is kept in the index (`analysis` table, carried across tag writes like the
+      waveform), and Detect BPM & key stores what it measures there too. Settings → Files →
+      BPM & key: "Add BPM & key automatically to tracks I play" (off by default), then:
+      - **Empty fields** (default): BPM and key are written only where the file has none,
+        checked against the file itself just before writing. An existing tag is never replaced.
+      - **Show only**: nothing is written.
+      - **Overwrite**: the file gets what was measured.
 
-      Off until switched on. Modification dates are preserved as in any retag, a file that is
-      playing is written after playback moves on, and a small indicator shows the queue.
+      In the list, a measured value stands in, dimmed, where the file has none, and a dot marks
+      a cell whose tag differs from the measurement; clicking the dot writes it. The playing
+      track is written a second or two after it starts: into a copy that then replaces the
+      file, so the player, still reading the original through its open handle, is not
+      disturbed, and the transport shows the new BPM and key at once. Dates are preserved as in
+      any retag, creation date included.
 
 When a step changes what the app can do, the README's feature list is updated with it.

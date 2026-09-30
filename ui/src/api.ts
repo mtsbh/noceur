@@ -32,6 +32,15 @@ export type RowDisplay = {
   state: string;
   /** True only for audio files the last probe found a picture in. */
   hasArt: boolean;
+  /** Tempo measured from the audio, as it would be written; empty when not measured. */
+  detectedBpm: string;
+  /** Key measured from the audio; empty when not measured. */
+  detectedKey: string;
+  detectedKeyNorm: number | null;
+  /** The file has a BPM tag and it is not the one measured. */
+  bpmDiffers: boolean;
+  /** The file has a key tag and it is not the one measured. */
+  keyDiffers: boolean;
 };
 
 /** The cover-art sizes the backend will render. */
@@ -732,6 +741,30 @@ export type AnalysisRow = {
  */
 export function analyseTracks(fileIds: number[], min: number, max: number): Promise<AnalysisRow[]> {
   return invoke<AnalysisRow[]>("analyse_tracks", { fileIds, min, max });
+}
+
+/** What background analysis does with a measurement. */
+export type AnalysisMode = "fill" | "show" | "overwrite";
+
+export type AnalysisSettings = {
+  enabled: boolean;
+  mode: AnalysisMode;
+  /** The tempo range that settles half and double time. */
+  min: number;
+  max: number;
+};
+
+export function analysisSettings(): Promise<AnalysisSettings> {
+  return invoke<AnalysisSettings>("analysis_settings");
+}
+
+export function setAnalysisSettings(settings: AnalysisSettings): Promise<AnalysisSettings> {
+  return invoke<AnalysisSettings>("set_analysis_settings", { settings });
+}
+
+/** Files waiting for background analysis, including the ones being measured. */
+export function analysisStatus(): Promise<{ pending: number }> {
+  return invoke<{ pending: number }>("analysis_status");
 }
 
 /** One file in a set of copies. */

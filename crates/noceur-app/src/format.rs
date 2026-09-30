@@ -61,6 +61,16 @@ pub struct RowDisplay {
     pub rating: u8,
     /// Empty when the file is fine; otherwise the reason it is not.
     pub state: String,
+    /// Tempo measured from the audio, as it would be written; empty when it has
+    /// not been measured.
+    pub detected_bpm: String,
+    /// Key measured from the audio, in the row's notation; empty when not measured.
+    pub detected_key: String,
+    pub detected_key_norm: Option<i64>,
+    /// The file is tagged with a BPM and it is not the one measured.
+    pub bpm_differs: bool,
+    /// The file is tagged with a key and it is not the one measured.
+    pub key_differs: bool,
     /// Whether this row has an image worth requesting — embedded cover art for
     /// audio, the shell's own icon for a directory. Files with neither are left
     /// alone, so a folder of untagged tracks issues no requests at all.
@@ -400,8 +410,39 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         } else {
             row.state.clone()
         },
+        detected_bpm: match row.detected_bpm {
+            Some(v) if is_audio => bpm(Some(v), BpmSource::Tag),
+            _ => String::new(),
+        },
+        detected_key: match row.detected_key {
+            Some(k) if is_audio => key(Some(k), None, notation),
+            _ => String::new(),
+        },
+        detected_key_norm: row.detected_key.filter(|_| is_audio),
+        bpm_differs: is_audio && bpm_differs(row.bpm, row.detected_bpm),
+        key_differs: is_audio
+            && key_differs(row.key_norm, row.key_tag.as_deref(), row.detected_key),
         // A directory always has one: the shell will give us its icon.
         has_art: row.kind == 0 || (is_audio && row.has_artwork),
+    }
+}
+
+/// Whether a tagged BPM disagrees with a measured one. Closer than 0.05 is the
+/// same number written with different precision.
+pub fn bpm_differs(tagged: Option<f64>, detected: Option<f64>) -> bool {
+    match (tagged.filter(|v| *v > 0.0), detected) {
+        (Some(t), Some(d)) => (t - d).abs() >= 0.05,
+        _ => false,
+    }
+}
+
+/// Whether a tagged key disagrees with a measured one. A tag that does not
+/// parse as a key disagrees with any measurement.
+pub fn key_differs(norm: Option<i64>, tag: Option<&str>, detected: Option<i64>) -> bool {
+    let Some(d) = detected else { return false };
+    match norm {
+        Some(n) => n != d,
+        None => tag.is_some_and(|t| !t.trim().is_empty()),
     }
 }
 
@@ -436,6 +477,8 @@ mod tests {
             codec: Some("pcm_s16le".into()),
             has_artwork: true,
             rating: Some(4),
+            detected_bpm: None,
+            detected_key: None,
         }
     }
 
@@ -617,6 +660,58 @@ mod tests {
     #[test]
     fn absent_key_is_an_em_dash() {
         assert_eq!(key(None, None, KeyNotation::Camelot), "—");
+    }
+
+    /// The same tempo written with more or fewer decimals is not a disagreement.
+    #[test]
+    fn a_bpm_differs_only_by_more_than_rounding() {
+        assert!(!bpm_differs(Some(124.0), Some(124.0)));
+        assert!(!bpm_differs(Some(124.02), Some(124.0)));
+        assert!(bpm_differs(Some(123.0), Some(124.0)));
+        assert!(
+            !bpm_differs(None, Some(124.0)),
+            "no tag is missing, not different"
+        );
+        assert!(!bpm_differs(Some(124.0), None));
+    }
+
+    #[test]
+    fn a_key_differs_when_the_wheel_position_does() {
+        assert!(!key_differs(Some(14), Some("8A"), Some(14)));
+        assert!(key_differs(Some(14), Some("8A"), Some(15)));
+        assert!(
+            !key_differs(None, None, Some(14)),
+            "no tag is missing, not different"
+        );
+        assert!(key_differs(None, Some("banana"), Some(14)));
+        assert!(!key_differs(Some(14), Some("8A"), None));
+    }
+
+    #[test]
+    fn a_measurement_is_shown_beside_the_tag() {
+        let d = display(
+            &ListRow {
+                detected_bpm: Some(124.5),
+                detected_key: Some(15),
+                ..row()
+            },
+            KeyNotation::Camelot,
+        );
+        assert_eq!(d.detected_bpm, "124.5");
+        assert_eq!(d.detected_key, "8B");
+        assert!(d.bpm_differs, "tagged 123");
+        assert!(d.key_differs, "tagged 8A");
+
+        let dir = display(
+            &ListRow {
+                kind: 0,
+                detected_bpm: Some(124.5),
+                ..row()
+            },
+            KeyNotation::Camelot,
+        );
+        assert_eq!(dir.detected_bpm, "", "a folder has no tempo");
+        assert!(!dir.bpm_differs);
     }
 
     #[test]

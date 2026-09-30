@@ -434,6 +434,8 @@ pub async fn play(state: State<'_, AppState>, file_id: i64) -> Result<Transport,
         np.key_norm = tags.key_norm;
         np.sample_rate = tags.sample_rate.unwrap_or(0).max(0) as u32;
     }
+    // What is being listened to is measured first.
+    state.background.prioritise(file_id);
 
     // Waited for, because `load` only hands the path to the audio thread. Until
     // that thread has opened the file, the player still describes whatever was

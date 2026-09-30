@@ -20,6 +20,8 @@ pub struct AppState {
     /// BPM, the key and the cover. Those come from the index at the moment a
     /// track is loaded and would otherwise be re-queried on every poll.
     pub now_playing: Arc<Mutex<NowPlaying>>,
+    /// Tempo and key measured in the background; see `background.rs`.
+    pub background: Arc<crate::background::Background>,
 }
 
 /// Tags of the loaded track, read once when it is loaded.
@@ -51,6 +53,9 @@ impl AppState {
                 volume: 100,
                 ..Default::default()
             })),
+            background: Arc::new(crate::background::Background::new(
+                crate::config::Config::load(&crate::config::Config::default_path()).analysis,
+            )),
         })
     }
 

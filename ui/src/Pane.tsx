@@ -11,6 +11,7 @@ import {
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createVirtualizer } from "@tanstack/solid-virtual";
+import { listen } from "@tauri-apps/api/event";
 import {
   openDir,
   listRows,
@@ -78,6 +79,8 @@ export type PaneHandle = {
   path: () => string;
   /** Re-reads the listing. Rows are replaced in place rather than cleared. */
   refetch: () => void;
+  /** Re-reads only the rows on screen: cheaper than `refetch`, no rescan. */
+  refreshRows: () => void;
   /** Every selected file id. */
   selection: () => number[];
   /** The selected ids that are audio files — what the dialogs act on. */
@@ -396,6 +399,22 @@ export default function Pane(props: {
     ),
   );
 
+  /** Tracks background analysis has waiting, including the one being measured. */
+  const [analysing, setAnalysing] = createSignal(0);
+
+  // The player's track is measured in the background; when it lands, the rows
+  // on screen pick it up. Only the rows, not the folder: nothing was rescanned.
+  createEffect(() => {
+    const pending = [
+      listen<{ pending: number }>("analysis-status", (e) => setAnalysing(e.payload.pending)),
+      listen("analysis-changed", () => {
+        const l = listing();
+        if (l) refreshVisible(l.dirId);
+      }),
+    ];
+    onCleanup(() => pending.forEach((p) => p.then((stop) => stop()).catch(() => {})));
+  });
+
   // Scroll is written on the way out rather than on every scroll event, which
   // fires a hundred times a drag and would put a store write behind each one.
   onCleanup(() => {
@@ -408,6 +427,10 @@ export default function Pane(props: {
       tabId: props.tab.id,
       path: current,
       refetch: () => refetchListing(),
+      refreshRows: () => {
+        const l = listing();
+        if (l) refreshVisible(l.dirId);
+      },
       rowOf: (fileId) => {
         for (const rows of Object.values(pages)) {
           const hit = rows.find((r) => r.fileId === fileId);
@@ -830,6 +853,17 @@ export default function Pane(props: {
       .catch(() => put(before));
   }
 
+  /** Writes a measured BPM or key into the file, from the marker in its cell. */
+  function acceptMeasured(row: RowDisplay, col: "bpm" | "key", value: string) {
+    writeTags([row.fileId], { [col]: value })
+      .then((report) => {
+        if (report.failures.length > 0) throw new Error(report.failures[0].reason);
+        const l = listing();
+        if (l) refreshVisible(l.dirId);
+      })
+      .catch(() => {});
+  }
+
   /** The box a cell turns into while it is being edited. */
   function CellEditor(p: { row: RowDisplay; col: SortColumn }) {
     const start = String(p.row[p.col as keyof RowDisplay] ?? "");
@@ -1231,7 +1265,30 @@ export default function Pane(props: {
                                   ? now.position
                                   : undefined;
                               }
+                              /**
+                               * What the audio measured, when the list has
+                               * something to say about it: the file has no
+                               * value, or has a different one.
+                               */
+                              function measured(col: Column): string {
+                                const row = r();
+                                if (col.key === "bpm") {
+                                  return row.detectedBpm && (row.bpmDiffers || row.bpm === "—")
+                                    ? row.detectedBpm
+                                    : "";
+                                }
+                                if (col.key === "key") {
+                                  return row.detectedKey && (row.keyDiffers || row.key === "—")
+                                    ? row.detectedKey
+                                    : "";
+                                }
+                                return "";
+                              }
                               function cell(col: Column) {
+                                const found = measured(col);
+                                // No value in the file: the measurement stands
+                                // in for it, dimmed, until it is written.
+                                const standIn = found !== "" && cellText(r(), col.key) === "—";
                                 return col.key === "name" ? (
                                         <span class="name" title={r().name} data-edit="name">
                                           {r().name}
@@ -1249,14 +1306,38 @@ export default function Pane(props: {
                                           }`}
                                           style={
                                             col.key === "key"
-                                              ? { color: keyColour(r().keyNorm) }
+                                              ? {
+                                                  color: keyColour(
+                                                    standIn ? r().detectedKeyNorm : r().keyNorm,
+                                                  ),
+                                                }
                                               : undefined
                                           }
-                                          title={cellText(r(), col.key)}
+                                          title={
+                                            found
+                                              ? standIn
+                                                ? `Measured ${found}, not in the file yet`
+                                                : `Tag ${cellText(r(), col.key)} · measured ${found}`
+                                              : cellText(r(), col.key)
+                                          }
                                         >
                                           {elapsed(col)
                                             ? `${elapsed(col)} / ${cellText(r(), col.key)}`
-                                            : cellText(r(), col.key)}
+                                            : standIn
+                                              ? <span class="measured">{found}</span>
+                                              : cellText(r(), col.key)}
+                                          <Show when={found}>
+                                            <button
+                                              class="measuredmark"
+                                              data-tip={`Write ${found}`}
+                                              aria-label={`Write measured ${col.label} ${found}`}
+                                              onPointerDown={(e) => e.stopPropagation()}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                acceptMeasured(r(), col.key as "bpm" | "key", found);
+                                              }}
+                                            />
+                                          </Show>
                                         </span>
                                       );
                               }
@@ -1338,6 +1419,9 @@ export default function Pane(props: {
             opens with everything filled in and says nothing here. */}
         <Show when={probed() > 0}>
           <span class="working">reading tags… {probed()}</span>
+        </Show>
+        <Show when={analysing() > 0}>
+          <span class="working">measuring BPM &amp; key…</span>
         </Show>
         <Show when={windowError()}>
           <span class="slow">{windowError()}</span>

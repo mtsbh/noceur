@@ -1,9 +1,10 @@
 //! Measuring tempo and key.
 //!
-//! Only measures; nothing here writes. The front end shows each estimate next
-//! to the file's own tag and writes the ones the user ticks, through the tag
-//! editor's own command, so a detected value reaches a file exactly the way a
-//! typed one does.
+//! Writes nothing to the files. The front end shows each estimate next to the
+//! file's own tag and writes the ones the user ticks, through the tag editor's
+//! own command, so a detected value reaches a file exactly the way a typed one
+//! does. The estimates are kept in the index, where the list and the
+//! background analysis (`background.rs`) find them.
 //!
 //! Each file is decoded once for both. About a second a track all told, most
 //! of it decoding, so this takes a batch like the quality check does and the
@@ -11,7 +12,8 @@
 
 use crate::state::AppState;
 use noceur_audio::tempo::{self, Range};
-use noceur_tags::KeyNotation;
+use noceur_index::analysis::Detected;
+use noceur_tags::{KeyNotation, MusicalKey};
 use tauri::State;
 
 /// What one file measured at, beside what it is tagged with.
@@ -59,28 +61,72 @@ pub async fn analyse_tracks(
                         .ok()
                         .flatten()
                         .filter(|f| f.kind == 1)
-                        .map(|f| (*id, f.path))
+                        .map(|f| (*id, f.content_id, f.path))
                 })
                 .collect::<Vec<_>>()
         };
 
-        let rows = std::thread::scope(|s| {
+        let measured = std::thread::scope(|s| {
             let handles: Vec<_> = targets
                 .iter()
-                .map(|(file_id, path)| s.spawn(move || analyse(*file_id, path, range)))
+                .map(|(file_id, content_id, path)| {
+                    s.spawn(move || (*content_id, analyse(*file_id, path, range)))
+                })
                 .collect();
             handles
                 .into_iter()
                 .filter_map(|h| h.join().ok())
                 .collect::<Vec<_>>()
         });
-        Ok(rows)
+
+        // Kept, so the list can show them and the background need not measure
+        // these files again.
+        let method = noceur_index::analysis::Method {
+            version: crate::background::VERSION,
+            range_min: min,
+            range_max: max,
+        };
+        if let Ok(db) = db.lock() {
+            for (content_id, (_, detected)) in &measured {
+                if let Some(c) = content_id {
+                    let _ = noceur_index::analysis::set(&db, *c, &method, detected.as_ref());
+                }
+            }
+        }
+        Ok(measured.into_iter().map(|(_, (row, _))| row).collect())
     })
     .await
     .map_err(|e| format!("analysis task failed: {e}"))?
 }
 
-fn analyse(file_id: i64, path: &std::path::Path, range: Range) -> AnalysisRow {
+/// Measures one file for the index: `None` when it would not decode.
+pub fn measure_file(
+    path: &std::path::Path,
+    method: &noceur_index::analysis::Method,
+) -> Option<Detected> {
+    let d = noceur_audio::decode(path, noceur_audio::ANALYSIS_SECS).ok()?;
+    let range = Range {
+        min: method.range_min,
+        max: method.range_max,
+    };
+    Some(measure(&d, range))
+}
+
+/// Tempo and key of decoded audio, as the index keeps them.
+fn measure(d: &noceur_audio::Decoded, range: Range) -> Detected {
+    let bpm = tempo::estimate(&d.samples, d.rate, d.channels, range).map(|e| tempo::rounded(e.bpm));
+    let key = noceur_audio::key::estimate(&d.samples, d.rate, d.channels);
+    Detected {
+        bpm,
+        key_norm: key
+            .as_ref()
+            .and_then(|k| MusicalKey::parse(&k.camelot))
+            .map(|k| i64::from(k.canonical())),
+        key_confidence: key.map(|k| f64::from(k.confidence)),
+    }
+}
+
+fn analyse(file_id: i64, path: &std::path::Path, range: Range) -> (AnalysisRow, Option<Detected>) {
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -101,14 +147,18 @@ fn analyse(file_id: i64, path: &std::path::Path, range: Range) -> AnalysisRow {
     };
     match noceur_audio::decode(path, noceur_audio::ANALYSIS_SECS) {
         Ok(d) => {
-            row.bpm = tempo::estimate(&d.samples, d.rate, d.channels, range)
-                .map(|e| tempo::rounded(e.bpm));
-            if let Some(k) = noceur_audio::key::estimate(&d.samples, d.rate, d.channels) {
-                row.key = Some(k.camelot);
-                row.key_confidence = Some(k.confidence);
-            }
+            let detected = measure(&d, range);
+            row.bpm = detected.bpm;
+            row.key = detected
+                .key_norm
+                .and_then(|k| MusicalKey::from_canonical(k as i32))
+                .map(|k| k.format(KeyNotation::Camelot));
+            row.key_confidence = detected.key_confidence.map(|c| c as f32);
+            (row, Some(detected))
         }
-        Err(e) => row.error = Some(e.to_string()),
+        Err(e) => {
+            row.error = Some(e.to_string());
+            (row, None)
+        }
     }
-    row
 }

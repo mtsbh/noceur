@@ -12,6 +12,10 @@ import {
   setPreserveDates,
   ffmpegInfo,
   setFfmpegPath,
+  analysisSettings,
+  setAnalysisSettings,
+  type AnalysisMode,
+  type AnalysisSettings,
   type FfmpegInfo,
   type Action,
   type ActionKind,
@@ -89,6 +93,21 @@ const POPOVER = 150;
  * meant to support. It is all still here; it is just folded away until asked
  * for, which is the difference between a reference and a wall.
  */
+/** What background analysis may do to a file, as the setting offers it. */
+const ANALYSIS_MODES: [AnalysisMode, string][] = [
+  ["fill", "Empty fields"],
+  ["show", "Show only"],
+  ["overwrite", "Overwrite"],
+];
+
+/** The tempo ranges the Detect dialog offers too. */
+const TEMPO_RANGES: [number, number][] = [
+  [70, 180],
+  [60, 120],
+  [85, 175],
+  [100, 200],
+];
+
 function Section(props: {
   title: string;
   tab: SettingsTab;
@@ -306,6 +325,18 @@ export default function Settings(props: {
   createEffect(() => {
     preserveDates().then(setKeepDates).catch(() => {});
   });
+
+  const [analysis, setAnalysis] = createSignal<AnalysisSettings | null>(null);
+  createEffect(() => {
+    analysisSettings().then(setAnalysis).catch(() => {});
+  });
+  function patchAnalysis(change: Partial<AnalysisSettings>) {
+    const now = analysis();
+    if (!now) return;
+    const want = { ...now, ...change };
+    setAnalysis(want);
+    setAnalysisSettings(want).then(setAnalysis).catch(() => setAnalysis(now));
+  }
 
   const [ffmpeg, setFfmpeg] = createSignal<FfmpegInfo | null>(null);
   createEffect(() => {
@@ -854,6 +885,68 @@ export default function Settings(props: {
                 <span>Hide non-audio files</span>
               </label>
             </div>
+          </Section>
+
+          <Section
+            tab="files"
+            title="BPM & key"
+            info={
+              <p>
+                Measures each track you play, a second or two after it starts, and nothing
+                else. The list shows what was measured beside the tag; click the dot in a
+                cell to write it.
+              </p>
+            }
+          >
+            <Show when={analysis()}>
+              {(a) => (
+                <>
+                  <div class="setrow">
+                    <span class="setlabel">Auto</span>
+                    <label class="setcheck">
+                      <input
+                        type="checkbox"
+                        checked={a().enabled}
+                        onChange={(e) => patchAnalysis({ enabled: e.currentTarget.checked })}
+                      />
+                      <span>Add BPM &amp; key automatically to tracks I play</span>
+                    </label>
+                  </div>
+                  <div class="setrow">
+                    <span class="setlabel">Write</span>
+                    <div class="setseg" role="group" aria-label="What to write">
+                      <For each={ANALYSIS_MODES}>
+                        {([mode, label]) => (
+                          <button
+                            class={`segbtn ${a().mode === mode ? "on" : ""}`}
+                            disabled={!a().enabled}
+                            onClick={() => patchAnalysis({ mode })}
+                          >
+                            {label}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                  <div class="setrow">
+                    <span class="setlabel">Range</span>
+                    <div class="setseg" role="group" aria-label="BPM range">
+                      <For each={TEMPO_RANGES}>
+                        {([min, max]) => (
+                          <button
+                            class={`segbtn ${a().min === min && a().max === max ? "on" : ""}`}
+                            disabled={!a().enabled}
+                            onClick={() => patchAnalysis({ min, max })}
+                          >
+                            {min}–{max}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </>
+              )}
+            </Show>
           </Section>
 
           <Section

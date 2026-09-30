@@ -308,8 +308,9 @@ fn mark_state(db: &Db, file_id: i64, state: &str) -> Result<(), IndexError> {
 /// Writing tags also changes the file's *identity*. `quick_key` is size plus a
 /// hash of the head and tail, so a retagged file hashes differently and lands on
 /// a new `content` row — losing the caches the old one had accumulated. The
-/// waveform is carried across, because tag edits do not touch a single sample of
-/// audio and re-deriving it costs a full decode of the track. The thumbnail is
+/// waveform and the measured tempo and key are carried across, because tag
+/// edits do not touch a single sample of audio and re-deriving either costs a
+/// full decode of the track. The thumbnail is
 /// deliberately not carried: artwork lives in the tags, so it is exactly the
 /// thing an edit might have changed.
 pub fn reprobe(db: &Db, file_id: i64) -> Result<(), IndexError> {
@@ -356,6 +357,7 @@ pub fn reprobe(db: &Db, file_id: i64) -> Result<(), IndexError> {
     if let (Some(from), Some(to)) = (previous, current) {
         if from != to {
             carry_envelope(db, from, to)?;
+            crate::analysis::carry(db, from, to)?;
         }
     }
     Ok(())

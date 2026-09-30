@@ -52,6 +52,9 @@ pub struct Config {
     /// Empty to look beside Noceur and then on `PATH`.
     #[serde(default)]
     pub ffmpeg_path: String,
+    /// Measuring BPM and key in the background, and what to do with the result.
+    #[serde(default)]
+    pub analysis: crate::background::Settings,
 }
 
 fn yes() -> bool {
@@ -68,6 +71,7 @@ impl Default for Config {
             window: None,
             actions: Vec::new(),
             ffmpeg_path: String::new(),
+            analysis: Default::default(),
         }
     }
 }

@@ -1,5 +1,6 @@
 //! The Noceur index: what we remember about the filesystem.
 
+pub mod analysis;
 pub mod db;
 pub mod envelope;
 pub mod identity;

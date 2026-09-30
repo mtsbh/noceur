@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 9;
+pub const SCHEMA_VERSION: i32 = 10;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -226,4 +226,28 @@ WHERE content_id IN (SELECT id FROM content WHERE codec IS NULL);
 const V9: &str = r#"
 ALTER TABLE content_tag ADD COLUMN rating INTEGER;
 UPDATE content_tag SET read_at = 0;
+"#;
+
+/// Detected tempo and key.
+///
+/// Keyed by content like the other caches, and carried across a tag write the
+/// way the waveform is, since writing a tag changes the bytes but not a sample
+/// of the audio. What was measured stays beside what the file says, so the list
+/// can show where the two disagree without measuring again.
+///
+/// `version` and the tempo range are part of the answer: a row measured by an
+/// older model, or with half/double time settled by another range, is stale and
+/// measured again rather than shown. `miss` records a file the decoder would
+/// not read, so it is not retried on every visit.
+const V10: &str = r#"
+CREATE TABLE analysis (
+    content_id     INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    version        INTEGER NOT NULL,
+    range_min      REAL    NOT NULL,
+    range_max      REAL    NOT NULL,
+    bpm            REAL,
+    key_norm       INTEGER,
+    key_confidence REAL,
+    miss           INTEGER NOT NULL DEFAULT 0
+);
 "#;

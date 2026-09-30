@@ -9,6 +9,7 @@ mod actions;
 mod analysis;
 mod art;
 mod autotag;
+mod background;
 mod cleanup;
 mod clipboard;
 mod commands;
@@ -89,6 +90,8 @@ fn main() {
             if let Some(view) = app.get_webview_window("main") {
                 placement::restore(&view.as_ref().window());
             }
+            let state = app.state::<AppState>().inner().clone();
+            background::start(app.handle().clone(), state);
             Ok(())
         })
         // Saved on the way out rather than on every drag: a window being moved
@@ -163,6 +166,9 @@ fn main() {
             config::set_preserve_dates,
             quality::analyse_quality,
             analysis::analyse_tracks,
+            background::analysis_settings,
+            background::set_analysis_settings,
+            background::analysis_status,
             identity::identify,
             identity::duplicates,
             actions::actions,
