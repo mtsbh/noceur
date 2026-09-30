@@ -4,7 +4,7 @@
 - Work goes straight to `master`, which is pushed and matches `origin/master`. No feature
   branches or PRs.
 - Windows-only Tauri 2 app: Rust backend in `crates/`, Solid + Vite frontend in `ui/`.
-- `target/release/noceur-app.exe` is built from `addde45`, with the UI embedded.
+- `target/release/noceur-app.exe` is built from `272d846`, with the UI embedded.
 - Workspace fmt, clippy and tests are clean. `npx tsc` is clean too.
 - `master` is the only branch on GitHub. The stale `claude/kind-lamport-22i4sm` branch was
   deleted.
