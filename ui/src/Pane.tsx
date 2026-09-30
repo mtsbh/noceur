@@ -20,6 +20,8 @@ import {
   startDrag,
   writeTags,
   applyRename,
+  announceRating,
+  onRating,
   type TagField,
   type ArtSize,
   type Order,
@@ -310,18 +312,11 @@ export default function Pane(props: {
     if (ids.length === 0) return;
     const next = stars === row.rating ? 0 : stars;
 
-    const before = new Map<number, number>();
-    for (const [page, rows] of Object.entries(pages)) {
-      rows.forEach((r, i) => {
-        if (ids.includes(r.fileId)) {
-          before.set(r.fileId, r.rating);
-          setPages(Number(page), i, "rating", next);
-        }
-      });
-    }
+    const before = showRating(ids, next);
     writeTags(ids, {}, {}, String(next))
       .then((report) => {
         if (report.failures.length > 0) throw new Error(report.failures[0].reason);
+        announceRating({ ids, stars: next, from: "list" });
       })
       .catch(() => {
         for (const [page, rows] of Object.entries(pages)) {
@@ -332,6 +327,28 @@ export default function Pane(props: {
         }
       });
   }
+
+  /** Lights the stars of loaded rows; returns what they showed before. */
+  function showRating(ids: number[], stars: number): Map<number, number> {
+    const before = new Map<number, number>();
+    for (const [page, rows] of Object.entries(pages)) {
+      rows.forEach((r, i) => {
+        if (ids.includes(r.fileId)) {
+          before.set(r.fileId, r.rating);
+          setPages(Number(page), i, "rating", stars);
+        }
+      });
+    }
+    return before;
+  }
+
+  // Stars set in the quick-tag panel are written when the track changes, but
+  // shown here straight away, so the list never disagrees with the panel.
+  onCleanup(
+    onRating((r) => {
+      if (r.from === "quick") showRating(r.ids, r.stars);
+    }),
+  );
 
   /** Position of a row in the listing, or -1 if its window is not loaded. */
   function indexOf(fileId: number): number {

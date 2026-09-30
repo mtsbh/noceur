@@ -32,6 +32,7 @@ pub struct TrackMeta {
     pub track_no: Option<u32>,
     pub comment: Option<String>,
     pub isrc: Option<String>,
+    pub label: Option<String>,
     /// BPM as written in the tag.
     pub bpm: Option<f32>,
     /// Key exactly as written in the tag.
@@ -134,6 +135,7 @@ pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag) {
     meta.comment = tag.comment().map(|s| s.to_string());
     meta.album_artist = tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string());
     meta.isrc = tag.get_string(&ItemKey::Isrc).map(|s| s.to_string());
+    meta.label = tag.get_string(&ItemKey::Label).map(|s| s.to_string());
     meta.has_artwork = tag.picture_count() > 0;
 
     // ID3v2 (MP3, WAV, AIFF) and the MP4 `tmpo` atom store BPM under

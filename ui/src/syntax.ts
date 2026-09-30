@@ -77,6 +77,7 @@ export const SYNTAX: HelpSection[] = [
       { code: "%key%", about: "Musical key, as tagged." },
       { code: "%comment%", about: "Comment." },
       { code: "%isrc%", about: "ISRC code." },
+      { code: "%label%", about: "Record label. %publisher% works too." },
       { code: "%filename%", about: "File name without extension." },
       { code: "%filename_ext%", about: "File name with extension." },
       { code: "%ext%", about: "Extension, without the dot." },

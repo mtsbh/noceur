@@ -7,6 +7,7 @@
 pub mod biquad;
 pub mod fft;
 pub mod identity;
+pub mod prefetch;
 pub mod quality;
 pub mod scope;
 pub mod source;
@@ -369,7 +370,10 @@ fn open(
 
     let player = rodio::Player::connect_new(mixer);
     player.set_volume(volume);
-    player.append(scope::Tap::new(decoder, Arc::clone(scope)));
+    // Decoded on its own thread, never inside the device callback; see
+    // `prefetch` for the noise that caused on lossless files.
+    let decoded = prefetch::Prefetch::new(decoder);
+    player.append(scope::Tap::new(decoded, Arc::clone(scope)));
 
     Ok((player, duration))
 }

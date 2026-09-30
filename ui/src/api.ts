@@ -416,6 +416,7 @@ export type TagForm = {
   genre: string | null;
   comment: string | null;
   isrc: string | null;
+  label: string | null;
   year: string | null;
   trackNo: string | null;
   bpm: string | null;
@@ -429,6 +430,7 @@ export const TAG_FIELDS = [
   ["album", "Album"],
   ["albumArtist", "Album artist"],
   ["genre", "Genre"],
+  ["label", "Label"],
   ["year", "Year"],
   ["trackNo", "Track"],
   ["bpm", "BPM"],
@@ -478,6 +480,29 @@ export function writeTags(
  * `RATING_FIELD` on the other side.
  */
 export const RATING_FIELD = "noceur:rating";
+
+/**
+ * A rating changed somewhere, so every place showing it can agree.
+ *
+ * The list and the quick-tag panel both show and set stars on the same track.
+ * Each kept its own copy, so the panel went on holding the rating it read when
+ * the track started - and wrote it back over a star cleared in the list the
+ * moment the track changed.
+ */
+export type Rated = { ids: number[]; stars: number; from: "list" | "quick" };
+
+const RATED_EVENT = "noceur:rated";
+
+export function announceRating(rated: Rated) {
+  window.dispatchEvent(new CustomEvent<Rated>(RATED_EVENT, { detail: rated }));
+}
+
+/** Listens for [`announceRating`]; returns the function that stops listening. */
+export function onRating(handler: (rated: Rated) => void): () => void {
+  const listener = (e: Event) => handler((e as CustomEvent<Rated>).detail);
+  window.addEventListener(RATED_EVENT, listener);
+  return () => window.removeEventListener(RATED_EVENT, listener);
+}
 
 /** One sleeve a source found. */
 export type CoverCandidate = {

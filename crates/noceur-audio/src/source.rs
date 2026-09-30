@@ -71,7 +71,9 @@ pub fn open(path: &Path) -> io::Result<Opened> {
     file.seek(SeekFrom::Start(skip))?;
 
     Ok(Opened {
-        reader: Skipping::new(io::BufReader::new(file), skip),
+        // Large reads: a 96kHz 24-bit file is half a megabyte a second, and the
+        // default 8KB buffer turns that into sixty system calls.
+        reader: Skipping::new(io::BufReader::with_capacity(256 * 1024, file), skip),
         byte_len: total.map(|len| len.saturating_sub(skip)),
     })
 }

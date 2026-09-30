@@ -88,6 +88,8 @@ pub struct Edit {
     pub genre: Change,
     pub comment: Change,
     pub isrc: Change,
+    /// The record label: `TPUB` in ID3, `LABEL` in Vorbis comments.
+    pub label: Change,
     /// Four digits. Written as the tag's year field.
     pub year: Change,
     pub track_no: Change,
@@ -303,6 +305,7 @@ pub fn apply(
     );
     item(tag, &edit.album_artist, ItemKey::AlbumArtist);
     item(tag, &edit.isrc, ItemKey::Isrc);
+    item(tag, &edit.label, ItemKey::Label);
     item(tag, &edit.key, ItemKey::InitialKey);
 
     match year {
@@ -908,6 +911,26 @@ mod tests {
                 Some("4"),
                 "{kind:?} lost its custom field"
             );
+        }
+    }
+
+    /// The label goes where DJ software looks for it — `TPUB` in ID3, `LABEL`
+    /// in Vorbis comments — and is read back as the label, not as a comment.
+    #[test]
+    fn the_label_round_trips_in_every_tag_system() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments, TagType::Mp4Ilst] {
+            let mut t = Tag::new(kind);
+            round_trip(
+                &mut t,
+                &Edit {
+                    label: Change::Set("Orac Records".into()),
+                    ..Default::default()
+                },
+            );
+            let mut meta = crate::TrackMeta::default();
+            crate::meta::apply_tag(&mut meta, &t);
+            assert_eq!(meta.label.as_deref(), Some("Orac Records"), "{kind:?}");
+            assert_eq!(meta.comment, None, "{kind:?} put the label in the comment");
         }
     }
 

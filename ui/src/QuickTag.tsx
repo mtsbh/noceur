@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import { RATING_FIELD, quickFields, writeTags } from "./api";
+import { RATING_FIELD, announceRating, onRating, quickFields, writeTags } from "./api";
 import { QUICK_KEYS, valueColour, type QuickGroup } from "./settings";
 
 /**
@@ -41,6 +41,14 @@ export default function QuickTag(props: {
   let timer: number | undefined;
   /** The file the pending edits belong to, so a track change flushes to it. */
   let owner = 0;
+  /**
+   * Fields changed here since the last write, by name.
+   *
+   * Only these are written. Writing everything the panel had read put back
+   * whatever the file held when the track started - a rating cleared from the
+   * list in the meantime came back the moment the track changed.
+   */
+  let touched = new Set<string>();
 
   const names = () => props.groups.map((g) => g.field).filter(Boolean);
 
@@ -57,8 +65,21 @@ export default function QuickTag(props: {
     if (props.fileId <= 0) return;
     const next = stars() === value ? 0 : value;
     setCurrent({ ...current(), [RATING_FIELD]: String(next) });
+    touched.add(RATING_FIELD);
+    // The list shows it now; the file gets it when the track changes.
+    announceRating({ ids: [props.fileId], stars: next, from: "quick" });
     schedule();
   }
+
+  // Stars set from the list on the playing track are already written; show
+  // them, and drop any rating pending here so it is not written over them.
+  onCleanup(
+    onRating((r) => {
+      if (r.from === "quick" || !r.ids.includes(props.fileId)) return;
+      setCurrent({ ...current(), [RATING_FIELD]: String(r.stars) });
+      touched.delete(RATING_FIELD);
+    }),
+  );
 
   // Re-read whenever the playing track changes. Any edits still pending belong
   // to the track that is leaving and are written to it first, not to the one
@@ -74,6 +95,7 @@ export default function QuickTag(props: {
 
     flush();
     owner = id;
+    touched = new Set();
     setCurrent({});
     if (id > 0) {
       quickFields(id, names())
@@ -116,6 +138,7 @@ export default function QuickTag(props: {
       next = on ? [] : [value];
     }
     setCurrent({ ...current(), [g.field]: next.join(", ") });
+    touched.add(g.field);
     schedule();
   }
 
@@ -148,10 +171,13 @@ export default function QuickTag(props: {
 
     const custom: Record<string, string> = {};
     for (const g of props.groups) {
-      if (g.field) custom[g.field] = current()[g.field] ?? "";
+      if (g.field && touched.has(g.field)) custom[g.field] = current()[g.field] ?? "";
     }
-    const rating = props.rating ? (current()[RATING_FIELD] ?? "0") : undefined;
+    const rating =
+      props.rating && touched.has(RATING_FIELD) ? (current()[RATING_FIELD] ?? "0") : undefined;
+    touched = new Set();
     setPending(false);
+    if (Object.keys(custom).length === 0 && rating === undefined) return;
 
     writeTags([owner], {}, custom, rating)
       .then(() => props.onWritten())

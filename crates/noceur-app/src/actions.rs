@@ -129,6 +129,8 @@ pub fn fields_of<'a>(meta: &noceur_tags::TrackMeta, path: &Path) -> Fields<'a> {
     f.insert("genre", text(&meta.genre));
     f.insert("comment", text(&meta.comment));
     f.insert("isrc", text(&meta.isrc));
+    f.insert("label", text(&meta.label));
+    f.insert("publisher", text(&meta.label));
     // The index keeps a year rather than a full date, so `%date%` and `%year%`
     // are the same thing here. `$left(%date%,4)` still gives the right answer,
     // which is the expression anyone writes against it.
@@ -516,6 +518,7 @@ fn set_field(edit: &mut noceur_tags::Edit, field: &str, value: &str) {
         "genre" => edit.genre = change,
         "comment" => edit.comment = change,
         "isrc" => edit.isrc = change,
+        "label" | "publisher" => edit.label = change,
         "date" | "year" => edit.year = change,
         "track" | "tracknumber" => edit.track_no = change,
         "bpm" => edit.bpm = change,

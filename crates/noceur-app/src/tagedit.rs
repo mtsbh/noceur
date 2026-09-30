@@ -92,6 +92,7 @@ pub async fn write_tags(
             genre: noceur_tags::Change::from_input(edit.genre),
             comment: noceur_tags::Change::from_input(edit.comment),
             isrc: noceur_tags::Change::from_input(edit.isrc),
+            label: noceur_tags::Change::from_input(edit.label),
             year: noceur_tags::Change::from_input(edit.year),
             track_no: noceur_tags::Change::from_input(edit.track_no),
             bpm: noceur_tags::Change::from_input(edit.bpm),
@@ -197,6 +198,7 @@ struct Merge {
     genre: Field,
     comment: Field,
     isrc: Field,
+    label: Field,
     year: Field,
     track_no: Field,
     bpm: Field,
@@ -213,6 +215,7 @@ impl Merge {
         self.genre.add(text(&meta.genre));
         self.comment.add(text(&meta.comment));
         self.isrc.add(text(&meta.isrc));
+        self.label.add(text(&meta.label));
         self.year
             .add(meta.year.map(|v| v.to_string()).unwrap_or_default());
         self.track_no
@@ -235,6 +238,7 @@ impl Merge {
             genre: self.genre.value(),
             comment: self.comment.value(),
             isrc: self.isrc.value(),
+            label: self.label.value(),
             year: self.year.value(),
             track_no: self.track_no.value(),
             bpm: self.bpm.value(),

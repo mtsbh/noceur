@@ -35,6 +35,12 @@ export default function MatchPicker(props: {
 }) {
   const [matches, setMatches] = createSignal<TrackMatch[] | null>(null);
   const [error, setError] = createSignal("");
+  /**
+   * Art that failed to load. MusicBrainz is given a Cover Art Archive address
+   * for every release, and plenty of releases have nothing there; those are
+   * shown blank and not handed to the editor as the release's cover.
+   */
+  const [missing, setMissing] = createSignal<Set<string>>(new Set());
 
   createEffect(() => {
     const id = props.fileId;
@@ -71,7 +77,7 @@ export default function MatchPicker(props: {
     if (m.artists.length) out.artist = m.artists.join(", ");
     if (m.album) out.album = m.album;
     if (m.albumArtist) out.albumArtist = m.albumArtist;
-    if (m.label) out.comment = m.label;
+    if (m.label) out.label = m.label;
     if (m.genres.length) out.genre = m.genres.join(", ");
     // A release date is a full ISO date in most sources; the tag holds a year.
     if (m.releaseDate) out.year = m.releaseDate.slice(0, 4);
@@ -87,7 +93,6 @@ export default function MatchPicker(props: {
     const has: string[] = [];
     if (m.album) has.push("album");
     if (m.label) has.push("label");
-    if (m.catalogNumber) has.push("cat#");
     if (m.releaseDate) has.push("year");
     if (m.genres.length) has.push("genre");
     if (m.bpm) has.push("BPM");
@@ -135,11 +140,19 @@ export default function MatchPicker(props: {
                 {(m) => (
                   <button
                     class="matchrow"
-                    onClick={() => props.onChoose(fieldsOf(m), m.art ?? undefined)}
+                    onClick={() =>
+                      props.onChoose(fieldsOf(m), m.art && !missing().has(m.art) ? m.art : undefined)
+                    }
                   >
                     <span class="matchart">
-                      <Show when={m.art}>
-                        <img src={m.art!} alt="" loading="lazy" draggable={false} />
+                      <Show when={m.art && !missing().has(m.art)}>
+                        <img
+                          src={m.art!}
+                          alt=""
+                          loading="lazy"
+                          draggable={false}
+                          onError={() => setMissing(new Set([...missing(), m.art!]))}
+                        />
                       </Show>
                     </span>
                     <span class="matchmain">
