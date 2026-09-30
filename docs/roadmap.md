@@ -34,7 +34,7 @@ up without changes of their own.
 - [x] **6. File-name guess as a fallback.** Find metadata tries the tags, then the
       fingerprint, then `matching::from_file_name`, moving on whenever one finds nothing and
       never sending the same query twice. The name fills only what the tags lack; when the tags
-      are complete but found nothing, it is used whole. The picker says "By file name: …" when
+      are complete but found nothing, it is used whole. The picker says "From filename: …" when
       the name was the query.
 
 ## Analysis

@@ -151,7 +151,7 @@ export default function MatchPicker(props: {
             <Show when={query()}>
               {(q) => (
                 <p class="sethint">
-                  {q().by === "sound" ? "By sound" : "By file name"}:{" "}
+                  {q().by === "sound" ? "By sound" : "From filename"}:{" "}
                   {[q().artist, q().title].filter((s) => s.trim()).join(" — ")}
                 </p>
               )}
