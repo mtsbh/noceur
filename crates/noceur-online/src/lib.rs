@@ -22,6 +22,7 @@ pub mod itunes;
 pub mod matching;
 pub mod musicbrainz;
 pub mod sources;
+pub mod tidal;
 pub mod tracks;
 
 pub use covers::{fetch_front, CoverSize};
@@ -181,6 +182,21 @@ pub const MATCH_LIMIT: usize = 8;
 /// nobody reads to the bottom of.
 pub const MIN_SCORE: f32 = 0.45;
 
+/// The user's own credentials for the sources that need them. Empty strings
+/// for the ones they have not set, which leaves those sources out.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Accounts<'a> {
+    pub discogs_token: &'a str,
+    pub tidal_id: &'a str,
+    pub tidal_secret: &'a str,
+}
+
+impl Accounts<'_> {
+    pub fn has_tidal(&self) -> bool {
+        !self.tidal_id.trim().is_empty() && !self.tidal_secret.trim().is_empty()
+    }
+}
+
 /// Searches every source for a track and ranks what comes back.
 ///
 /// Ranked, not chosen. The sources disagree constantly — a different release
@@ -195,7 +211,7 @@ pub fn match_track(
     artist: &str,
     title: &str,
     duration_ms: Option<u64>,
-    discogs_token: &str,
+    accounts: &Accounts,
 ) -> Result<Vec<tracks::TrackMatch>, OnlineError> {
     let clean = matching::clean_title(title);
     let mut found = Vec::new();
@@ -210,12 +226,21 @@ pub fn match_track(
     ];
     // Only asked when there is a token to ask with. Without one it would fail
     // every time and its error would masquerade as the last word on the search.
-    if !discogs_token.trim().is_empty() {
+    if !accounts.discogs_token.trim().is_empty() {
         results.push(discogs::search_tracks(
             artist,
             &clean,
             MATCH_LIMIT,
-            discogs_token,
+            accounts.discogs_token,
+        ));
+    }
+    if accounts.has_tidal() {
+        results.push(tidal::search_tracks(
+            artist,
+            &clean,
+            MATCH_LIMIT,
+            accounts.tidal_id,
+            accounts.tidal_secret,
         ));
     }
 

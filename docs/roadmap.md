@@ -8,7 +8,7 @@ it does.
 
 ## Metadata sources
 
-Deezer, iTunes, Discogs, Beatport and Bandcamp are in `noceur-online` (MusicBrainz is used only for Cover Art Archive covers). Every new source plugs into
+Deezer, iTunes, Discogs, Beatport, Bandcamp and Tidal are in `noceur-online` (MusicBrainz is used only for Cover Art Archive covers). Every new source plugs into
 the same `TrackMatch` / `Candidate` types, so the Find metadata and Find album art dialogs pick it
 up without changes of their own.
 
@@ -20,9 +20,11 @@ up without changes of their own.
 - [x] **3. Bandcamp.** No API key needed: search through the site's own autocomplete endpoint
       (`bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic`), then read the track or
       album page's JSON-LD for title, artists, label, release date, track number and artwork.
-- [ ] **4. Tidal.** Official catalogue API (`openapi.tidal.com`, client-credentials flow). Needs
-      a free developer app: the Client ID and secret go in Settings → Sources, and the source
-      stays hidden until they are set.
+- [x] **4. Tidal.** Official catalogue API (`openapi.tidal.com/v2`, client-credentials flow).
+      The user's own developer app: Client ID and secret go in Settings → Metadata sources, and
+      the source is skipped until both are set. Search is `/searchResults?filter[query]=…`, then
+      `/tracks?include=albums,artists,genres,albums.coverArt`. Third-party apps get album,
+      release date, ISRC, length and a 640 px sleeve; BPM, key and genre are withheld.
 - [x] **5. Acoustic fingerprints (AcoustID).** Identify files whose tags and names say nothing.
       Fingerprinted in-process with `rusty-chromaprint` (pure Rust, output matches `fpcalc`):
       the first two minutes, ~0.3 s a file. Find metadata uses it when a file has no artist or

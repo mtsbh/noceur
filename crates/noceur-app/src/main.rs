@@ -155,6 +155,7 @@ fn main() {
             autotag::match_track,
             autotag::credentials,
             autotag::set_discogs_token,
+            autotag::set_tidal,
             renamer::preview_rename,
             renamer::apply_rename,
             config::preserve_dates,

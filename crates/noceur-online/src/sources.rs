@@ -48,6 +48,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "beatport.com",
     // Bandcamp's image CDN, `f4.bcbits.com`.
     "bcbits.com",
+    // Tidal's image CDN, `resources.tidal.com`.
+    "tidal.com",
 ];
 
 /// Whether an image URL may be fetched.
@@ -143,6 +145,9 @@ mod tests {
             "https://geo-media.beatport.com/image_size/1400x1400/x.jpg"
         ));
         assert!(is_allowed("https://f4.bcbits.com/img/a4230057167_10.jpg"));
+        assert!(is_allowed(
+            "https://resources.tidal.com/images/a/b/c/640x640.jpg"
+        ));
     }
 
     #[test]

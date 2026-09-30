@@ -41,12 +41,17 @@ pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Mat
         let tagged_title = meta.title.clone().unwrap_or_default();
         let tagged = !tagged_artist.trim().is_empty() && !tagged_title.trim().is_empty();
 
-        // Discogs is only asked when the user has given it a token. Its label
-        // and catalogue number are the fields nothing else here reliably has.
-        let token =
-            crate::config::Config::load(&crate::config::Config::default_path()).discogs_token;
+        // Discogs and Tidal are only asked when the user has given them
+        // credentials. Discogs has the label and catalogue number; Tidal, the
+        // ISRC and release date from the distributors themselves.
+        let config = crate::config::Config::load(&crate::config::Config::default_path());
+        let accounts = noceur_online::Accounts {
+            discogs_token: &config.discogs_token,
+            tidal_id: &config.tidal_client_id,
+            tidal_secret: &config.tidal_client_secret,
+        };
         let search = |artist: &str, title: &str| {
-            noceur_online::match_track(artist, title, meta.duration_ms, &token)
+            noceur_online::match_track(artist, title, meta.duration_ms, &accounts)
                 .map(|m| trim(m, PER_SOURCE))
         };
 
@@ -207,6 +212,8 @@ pub fn credentials() -> Credentials {
     let config = crate::config::Config::load(&crate::config::Config::default_path());
     Credentials {
         discogs: !config.discogs_token.trim().is_empty(),
+        tidal: !config.tidal_client_id.trim().is_empty()
+            && !config.tidal_client_secret.trim().is_empty(),
     }
 }
 
@@ -215,6 +222,8 @@ pub fn credentials() -> Credentials {
 pub struct Credentials {
     /// True when a Discogs token is stored.
     pub discogs: bool,
+    /// True when both halves of the Tidal credentials are stored.
+    pub tidal: bool,
 }
 
 /// Stores or clears the Discogs token.
@@ -226,6 +235,17 @@ pub fn set_discogs_token(token: String) -> Result<Credentials, String> {
     let path = crate::config::Config::default_path();
     let mut config = crate::config::Config::load(&path);
     config.discogs_token = token.trim().to_string();
+    config.save(&path)?;
+    Ok(credentials())
+}
+
+/// Stores or clears the Tidal app credentials. Both empty clears them.
+#[tauri::command]
+pub fn set_tidal(client_id: String, secret: String) -> Result<Credentials, String> {
+    let path = crate::config::Config::default_path();
+    let mut config = crate::config::Config::load(&path);
+    config.tidal_client_id = client_id.trim().to_string();
+    config.tidal_client_secret = secret.trim().to_string();
     config.save(&path)?;
     Ok(credentials())
 }
@@ -269,6 +289,10 @@ mod tests {
         assert_eq!(camelot("Bb Minor"), "3A");
         assert_eq!(camelot("D# Major"), "5B");
         assert_eq!(camelot("8A"), "8A");
+        // Tidal's spellings, after `tidal::key`.
+        assert_eq!(camelot("C# Major"), "3B");
+        assert_eq!(camelot("Eb Minor"), "2A");
+        assert_eq!(camelot("Ab Major"), "4B");
         assert_eq!(camelot("not a key"), "not a key");
     }
 }

@@ -131,8 +131,13 @@ fn a_candidate_from_any_source_downloads_as_an_image() {
 #[test]
 #[ignore = "reaches the network"]
 fn matching_a_real_track_ranks_the_right_answer_first() {
-    let found = noceur_online::match_track("Skee Mask", "Rev8617", Some(6 * 60 * 1000), "")
-        .expect("some source should answer");
+    let found = noceur_online::match_track(
+        "Skee Mask",
+        "Rev8617",
+        Some(6 * 60 * 1000),
+        &Default::default(),
+    )
+    .expect("some source should answer");
     assert!(!found.is_empty(), "a released record should be matched");
 
     for m in found.iter().take(8) {
@@ -163,7 +168,8 @@ fn matching_a_real_track_ranks_the_right_answer_first() {
 fn between_them_the_sources_supply_the_fields_a_dj_library_lacks() {
     // A record that is definitely in every catalogue. An obscure promo would be
     // testing the databases' coverage rather than this code.
-    let mut found = noceur_online::match_track("Skee Mask", "Rev8617", None, "").unwrap();
+    let mut found =
+        noceur_online::match_track("Skee Mask", "Rev8617", None, &Default::default()).unwrap();
     assert!(!found.is_empty());
 
     for m in found.iter_mut().take(4) {
@@ -195,7 +201,8 @@ fn an_untagged_file_can_be_matched_from_its_name_alone() {
     let guess = noceur_online::matching::from_file_name("01 - Skee Mask - Rev8617.flac");
     assert_eq!(guess.artist, "Skee Mask");
 
-    let found = noceur_online::match_track(&guess.artist, &guess.title, None, "").unwrap();
+    let found =
+        noceur_online::match_track(&guess.artist, &guess.title, None, &Default::default()).unwrap();
     assert!(!found.is_empty(), "a name alone should be enough to match");
     println!("from name: {} — {}", found[0].artist(), found[0].title);
 }
@@ -325,4 +332,37 @@ fn a_real_fingerprint_is_identified() {
     assert!(best.score >= acoustid::MIN_SCORE);
     assert!(best.artist().contains("Burial"), "{best:?}");
     assert!(best.title.contains("South London Boroughs"), "{best:?}");
+}
+
+/// Needs the user's own Tidal app, from the environment:
+/// `NOCEUR_TIDAL_ID` and `NOCEUR_TIDAL_SECRET`.
+#[test]
+#[ignore = "reaches the network"]
+fn tidal_finds_a_track_with_bpm_key_and_cover() {
+    let id = std::env::var("NOCEUR_TIDAL_ID").expect("NOCEUR_TIDAL_ID");
+    let secret = std::env::var("NOCEUR_TIDAL_SECRET").expect("NOCEUR_TIDAL_SECRET");
+    let mut found = Vec::new();
+    for (artist, title) in [("Skee Mask", "Rev8617"), ("Fred again..", "Delilah")] {
+        found.extend(
+            noceur_online::tidal::search_tracks(artist, title, 3, &id, &secret)
+                .expect("Tidal should answer"),
+        );
+    }
+    for m in &found {
+        println!(
+            "  {} — {} | {:?} | {:?} bpm {:?} key {:?} | {:?}",
+            m.artist(),
+            m.title,
+            m.album,
+            m.release_date,
+            m.bpm,
+            m.key,
+            m.art
+        );
+    }
+    assert!(!found.is_empty(), "a released track should be found");
+    assert!(
+        found.iter().any(|m| m.art.is_some()),
+        "covers come with albums"
+    );
 }

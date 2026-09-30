@@ -582,7 +582,7 @@ export function matchTrack(fileId: number): Promise<Matched> {
 }
 
 /** Which optional credentials are set. Never carries the values themselves. */
-export type Credentials = { discogs: boolean };
+export type Credentials = { discogs: boolean; tidal: boolean };
 
 export function credentials(): Promise<Credentials> {
   return invoke<Credentials>("credentials");
@@ -596,6 +596,11 @@ export function credentials(): Promise<Credentials> {
  */
 export function setDiscogsToken(token: string): Promise<Credentials> {
   return invoke<Credentials>("set_discogs_token", { token });
+}
+
+/** Stores the Tidal app's client ID and secret. Both empty clears them. */
+export function setTidal(clientId: string, secret: string): Promise<Credentials> {
+  return invoke<Credentials>("set_tidal", { clientId, secret });
 }
 
 /** Reads the quick-tag fields currently set on one track. */

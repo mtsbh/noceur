@@ -8,6 +8,7 @@ import {
   preserveDates,
   setActions,
   setDiscogsToken,
+  setTidal,
   setPreserveDates,
   ffmpegInfo,
   setFfmpegPath,
@@ -314,10 +315,16 @@ export default function Settings(props: {
   const [token, setToken] = createSignal("");
   const [hasDiscogs, setHasDiscogs] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
+  const [tidalId, setTidalId] = createSignal("");
+  const [tidalSecret, setTidalSecret] = createSignal("");
+  const [hasTidal, setHasTidal] = createSignal(false);
 
   createEffect(() => {
     credentials()
-      .then((c) => setHasDiscogs(c.discogs))
+      .then((c) => {
+        setHasDiscogs(c.discogs);
+        setHasTidal(c.tidal);
+      })
       .catch(() => {});
   });
 
@@ -721,7 +728,7 @@ export default function Settings(props: {
           <Section
             tab="sources"
             title="Metadata sources"
-            info={<p>Only Discogs needs a token. It's sent only to Discogs.</p>}
+            info={<p>Discogs and Tidal need your own keys. Each is sent only to its service.</p>}
           >
             <div class="setrow">
               <span class="setlabel">Discogs</span>
@@ -762,6 +769,57 @@ export default function Settings(props: {
                 }}
               >
                 Generate one on Discogs
+              </a>
+            </p>
+            <div class="setrow">
+              <span class="setlabel">Tidal ID</span>
+              <input
+                type="text"
+                placeholder={hasTidal() ? "— saved —" : "client ID"}
+                value={tidalId()}
+                spellcheck={false}
+                onInput={(e) => setTidalId(e.currentTarget.value)}
+              />
+            </div>
+            <div class="setrow">
+              <span class="setlabel">Tidal secret</span>
+              <input
+                type="password"
+                placeholder={hasTidal() ? "— saved —" : "client secret"}
+                value={tidalSecret()}
+                spellcheck={false}
+                onInput={(e) => setTidalSecret(e.currentTarget.value)}
+              />
+              <button
+                class="btn"
+                // Both halves or neither: one alone cannot sign in.
+                disabled={
+                  saving() || (!tidalId().trim() !== !tidalSecret().trim())
+                }
+                onClick={() => {
+                  setSaving(true);
+                  setTidal(tidalId(), tidalSecret())
+                    .then((c) => {
+                      setHasTidal(c.tidal);
+                      setTidalId("");
+                      setTidalSecret("");
+                      setSaving(false);
+                    })
+                    .catch(() => setSaving(false));
+                }}
+              >
+                {tidalId().trim() || !hasTidal() ? "Save" : "Clear"}
+              </button>
+            </div>
+            <p class="sethint">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openUrl("https://developer.tidal.com/dashboard").catch(() => {});
+                }}
+              >
+                Create an app on Tidal
               </a>
             </p>
           </Section>

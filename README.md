@@ -52,7 +52,7 @@ same track often exists in more than one place.
 - Inline editing in the list: click a selected row's name or tag cell to edit it in place
 - Star ratings (`Alt+0`–`Alt+5`), stored where DJ software reads them
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
-- Metadata from Beatport, Bandcamp, Deezer, iTunes and Discogs, and cover art from those plus the Cover Art Archive, always picked by hand
+- Metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive, always picked by hand
 - Untagged files identified by sound (AcoustID fingerprint), then searched by what they turn out to be
 - Tags from file name (`%artist% - %title%` patterns, with preview)
 - Rename from templates, and cleanup rules for common download debris
@@ -168,7 +168,7 @@ crates/
   noceur-tags      tag reading and writing, key normalization, ratings
   noceur-art       cover art extraction, thumbnails, shell icons
   noceur-audio     playback, waveforms, spectrograms, meters, quality analysis, audio identity
-  noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Cover Art Archive, AcoustID clients
+  noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Tidal, Cover Art Archive, AcoustID clients
   noceur-index     SQLite index, scanner, queries, caches
   noceur-app       Tauri application: commands, state, formatting
   noceur-cli       headless debug CLI
@@ -181,7 +181,7 @@ Design decisions are documented in [`docs/design.md`](docs/design.md).
 
 ## Roadmap
 
-A Tidal source, BPM and key detection, and Mp3tag action import are planned. See [`docs/roadmap.md`](docs/roadmap.md).
+BPM and key detection and Mp3tag action import are planned. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Troubleshooting
 
