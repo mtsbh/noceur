@@ -63,27 +63,31 @@ up without changes of their own.
       with MIK on 65% (MusicalKeyCNN's own weights: 61%). Written in Camelot. The dialog became
       Detect BPM & key: one decode per file, both fields tag → detected with a box each.
 
-## Mp3tag compatibility
+## Tag tools
 
-- [ ] **9. Multi-step actions and the missing functions.** An action becomes a list of steps,
-      each with a target (one field, all tag fields, file name, folder). Adds `$regexp` with
-      look-around and `\U` / `\L` / `\E` case changes in the replacement (`fancy-regex`),
-      `$num(x,n)`, `$cutLeft`, `$cutRight`, `$mid`, `$eql`, `$trim(x,c)`, `%_counter%` and
-      `%_filename%`.
-- [ ] **10. Import Mp3tag actions (`.mta`).** Settings → Actions → Import picks a folder or
-      files and reports what imported and what could not. The types in use map as:
+What Mp3tag actions are used for, built in, so nobody has to write
+`$if($eql($regexp(…` to get it. No `.mta` import: each tool is a button with a
+preview and, at most, a number or a template picked from a list. The custom
+actions stay for anyone who wants title formatting.
 
-      | `T=` | Mp3tag action | Noceur step |
-      | --- | --- | --- |
-      | 1 | Case conversion | case step |
-      | 2 | Replace | replace step |
-      | 4 | Replace with regular expression | regex step |
-      | 5 | Format value | format step (field, file name or folder) |
-      | 7 | Guess values | tags-from-name step |
-      | 10 | Remove fields except | remove-fields step |
-
-      These six cover all 66 actions in the current Mp3tag setup. The remaining Mp3tag action
-      types (export, playlists, cover import/export, split field, …) are skipped with a note.
+- [ ] **9. One-click tag tools.** Each previews old → new and writes only what changes:
+      - **Clean file name**: leaves `Artist - Title.ext`. Drops track numbers at either end,
+        stray dashes, underscores, doubled spaces and download symbols.
+      - **Album artist from artist**: fills an empty album artist with the artist.
+      - **Artist into title** / **Artist out of title**: `Artist - Title` in the title field,
+        or split back out of it.
+      - **Remove "(Original Mix)"**: from title and album.
+      - **Remove brackets at the end**: a trailing `(…)` or `[…]` off the title.
+      - **Year only**: `2016-03-04` becomes `2016`.
+      - **Trim the file name**: the first or last N characters.
+      - **Move into folders**: a root and a pattern such as `%artist% - %album% [%year%]`,
+        picked from presets or typed, with the moves previewed.
+- [ ] **10. Converters on shortcuts, as in Mp3tag.** `Shift+1`–`Shift+5` (ignored while typing
+      in a field; `Alt` stays free for AutoHotkey and ratings): Tag → File name (the rename
+      dialog), File name → Tag (tags from name), File name → File name (clean file name),
+      Text file → Tag (paste a tracklist, one line per selected file) and Tag → Tag (fill one
+      field from others, e.g. title from `%artist% - %title%`). Each opens on the last
+      pattern used, so a folder is two keys and Enter.
 
 ## Browsing
 

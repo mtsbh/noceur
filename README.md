@@ -182,7 +182,7 @@ Design decisions are documented in [`docs/design.md`](docs/design.md).
 
 ## Roadmap
 
-Mp3tag action import is planned. See [`docs/roadmap.md`](docs/roadmap.md).
+Background BPM & key, one-click tag tools and Mp3tag-style converter shortcuts are planned. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Troubleshooting
 
