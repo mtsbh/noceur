@@ -117,4 +117,15 @@ downloads rather than CD rips.
       markers (tags, C2PA manifests), which only finds tracks that declare themselves; no audio is
       uploaded anywhere.
 
+## Identification
+
+- [ ] **17. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
+      electronic music. The fingerprint is ported from SongRec (`marin-m/SongRec`, GPL-3.0,
+      pure Rust: a peak-picked spectrogram of about 12 seconds, encoded as Shazam's signature),
+      sent through `noceur-online`'s own HTTP client rather than SongRec's libsoup. The result
+      carries title, artists, label, release, ISRC and artwork, and goes into the same picker as
+      the other sources. It is Shazam's private app API, not a published one: it can change
+      without notice and rate-limits by IP, so it is off until enabled in Settings → Metadata
+      sources, runs one file at a time, and comes after the tags and AcoustID in Find metadata.
+
 When a step changes what the app can do, the README's feature list is updated with it.
