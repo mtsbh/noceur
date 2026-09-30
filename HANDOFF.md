@@ -4,7 +4,7 @@
 - Work goes straight to `master`, which is pushed and matches `origin/master`. No feature
   branches or PRs.
 - Windows-only Tauri 2 app: Rust backend in `crates/`, Solid + Vite frontend in `ui/`.
-- `target/release/noceur-app.exe` is built from `fc03fc1`, with the UI embedded.
+- `target/release/noceur-app.exe` is built from `c2eef3b`, with the UI embedded.
 - Workspace fmt, clippy and tests are clean. `npx tsc` is clean too.
 - `master` is the only branch on GitHub. The stale `claude/kind-lamport-22i4sm` branch was
   deleted.
@@ -12,6 +12,7 @@
 ## Recent commits (newest first)
 | Commit | What |
 |---|---|
+| `ca86927` / `c2eef3b` | Roadmap step 5, AcoustID. `noceur-audio::fingerprint` (rusty-chromaprint, first 120 s, ~0.3 s) → `noceur-online::acoustid::lookup`. Find metadata uses it when the file has no artist/title tag, or when its tags find nothing, before the file-name guess. The picker shows "By sound: artist — title". The app's key is in `acoustid.rs`. The live test identifies a real Burial FLAC at 0.90. |
 | `fc03fc1` | MusicBrainz removed from Find metadata. Its recording search is deleted. MusicBrainz still finds Cover Art Archive covers in the cover picker. |
 | `c3c1c2d` | Find metadata: matches without art are dropped, 3 per source (backend keeps 6), rows whose art fails to load are hidden. Deezer and Bandcamp details are fetched in parallel. |
 | `88ae63f` | Audio decoded off the device callback. Ratings stay in sync between the list and Quick Tag. Label is its own tag field. |
@@ -45,18 +46,18 @@
   `MatchPicker` hides any whose image fails and shows `PER_SOURCE = 3`.
 
 ## Not yet confirmed in the real app
-- The noise fix (see above).
-- Quick Tag and list ratings staying in sync across track changes.
-- Label round trip from Discogs or Beatport through the editor to the file.
-- Files tagged earlier still have the Discogs label in Comment. The user fixes these by hand.
+- Confirmed by the user on 2026-09-30: the lossless noise is gone, ratings stay cleared,
+  and the cover filter works.
+- Label round trip from Discogs or Beatport: not confirmed yet.
+- AcoustID in the app: try Find metadata on a file with no tags.
+- The credits text in Comment on some slsk files ("Written By – …") came with the downloads.
+  Noceur never wrote it. Matches have no comment field.
 
 ## Next steps
-1. Ask the user to confirm the four fixes above.
-2. Roadmap (`docs/roadmap.md`), in order. Step 4 was waiting on the user's choice:
-   - **Step 4, Tidal:** needs a developer Client ID and secret in Settings → Sources. It can be
-     built now and switched on later.
-   - **Step 5, AcoustID fingerprints:** would use MusicBrainz recordings again, only for lookup
-     by fingerprint, not in Find metadata.
+1. Ask about the Label round trip and the AcoustID picker line wording (options: "By sound:",
+   "Heard as", "Identified:", "Fingerprint:").
+2. Roadmap: step 4 Tidal (needs the user's Client ID and secret) or step 6 (file-name
+   fallback, mostly already done in `match_track`), then 7 BPM detection.
 3. Known smaller issues:
    - The converter does not carry ID3 `POPM` ratings.
    - Stars in an unfocused pane do not move focus.
