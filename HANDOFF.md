@@ -48,14 +48,13 @@
 ## Not yet confirmed in the real app
 - Confirmed by the user on 2026-09-30: the lossless noise is gone, ratings stay cleared,
   and the cover filter works.
-- Label round trip from Discogs or Beatport: not confirmed yet.
+- Label round trip from Discogs or Beatport: confirmed working.
 - AcoustID in the app: try Find metadata on a file with no tags.
 - The credits text in Comment on some slsk files ("Written By – …") came with the downloads.
   Noceur never wrote it. Matches have no comment field.
 
 ## Next steps
-1. Ask about the Label round trip and the AcoustID picker line wording (options: "By sound:",
-   "Heard as", "Identified:", "Fingerprint:").
+1. Confirm AcoustID in the app. The picker wording "By sound:" is settled.
 2. Roadmap: step 4 Tidal (needs the user's Client ID and secret) or step 6 (file-name
    fallback, mostly already done in `match_track`), then 7 BPM detection.
 3. Known smaller issues:
