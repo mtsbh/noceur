@@ -104,7 +104,7 @@ pub fn duration(ms: Option<i64>) -> String {
     }
 }
 
-/// Analysed BPM at one decimal; tag BPM as stored with a trailing marker.
+/// Analysed BPM at one decimal; tag BPM as stored.
 pub fn bpm(value: Option<f64>, source: BpmSource) -> String {
     let Some(v) = value.filter(|v| v.is_finite() && *v > 0.0) else {
         return ABSENT.to_string();
@@ -113,12 +113,11 @@ pub fn bpm(value: Option<f64>, source: BpmSource) -> String {
         BpmSource::Analysed => format!("{v:.1}"),
         BpmSource::Tag => {
             // Keep the tag's own precision: 123 stays 123, 124.5 stays 124.5.
-            let text = if (v.fract()).abs() < f64::EPSILON {
+            if (v.fract()).abs() < f64::EPSILON {
                 format!("{}", v as i64)
             } else {
                 format!("{v}")
-            };
-            format!("{text}·")
+            }
         }
     }
 }
@@ -587,10 +586,9 @@ mod tests {
     }
 
     #[test]
-    fn bpm_from_tags_is_marked_with_a_trailing_dot() {
-        // Milestone 1 has no analysis, so every BPM is tag-derived.
-        assert_eq!(bpm(Some(123.0), BpmSource::Tag), "123·");
-        assert_eq!(bpm(Some(124.5), BpmSource::Tag), "124.5·");
+    fn bpm_from_tags_keeps_its_own_precision() {
+        assert_eq!(bpm(Some(123.0), BpmSource::Tag), "123");
+        assert_eq!(bpm(Some(124.5), BpmSource::Tag), "124.5");
     }
 
     #[test]
@@ -647,7 +645,7 @@ mod tests {
     fn audio_rows_show_every_column() {
         let d = display(&row(), KeyNotation::Camelot);
         assert_eq!(d.name, "track.wav");
-        assert_eq!(d.bpm, "123·");
+        assert_eq!(d.bpm, "123");
         assert_eq!(d.key, "8A");
         assert_eq!(d.duration, "11:11");
         assert_eq!(d.artist, "G76");
