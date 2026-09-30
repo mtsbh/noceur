@@ -32,7 +32,8 @@ export const DEFAULT_COLUMNS: Column[] = [
   { key: "name", label: "Name", width: 420, visible: true },
   { key: "bpm", label: "BPM", width: 62, num: true, visible: true },
   { key: "key", label: "Key", width: 52, visible: true },
-  { key: "duration", label: "Time", width: 62, num: true, visible: true },
+  // Wide enough for the playing row's "1:43 / 5:50".
+  { key: "duration", label: "Time", width: 96, num: true, visible: true },
   { key: "artist", label: "Artist", width: 180, dim: true, visible: true },
   { key: "title", label: "Title", width: 180, dim: true, visible: false },
   { key: "album", label: "Album", width: 180, dim: true, visible: false },
@@ -51,6 +52,12 @@ export const DEFAULT_COLUMNS: Column[] = [
 ];
 
 const KEY = "noceur.columns";
+/**
+ * Set once a saved layout's Time column has been widened to the new default.
+ * Layouts saved before the playing row showed elapsed time had it at 62 px,
+ * too narrow for "1:43 / 5:50"; after the one widening, the user's width wins.
+ */
+const TIME_WIDENED = "noceur.columns.timeWidened";
 
 /**
  * Reads the saved layout, reconciled against the columns this build knows.
@@ -87,6 +94,20 @@ export function loadColumns(): Column[] {
 
   for (const base of DEFAULT_COLUMNS) {
     if (!out.some((c) => c.key === base.key)) out.push({ ...base });
+  }
+
+  try {
+    if (saved.length > 0 && !localStorage.getItem(TIME_WIDENED)) {
+      const time = out.find((c) => c.key === "duration");
+      const wide = known.get("duration")!.width;
+      if (time && time.width < wide) {
+        time.width = wide;
+        saveColumns(out);
+      }
+    }
+    localStorage.setItem(TIME_WIDENED, "1");
+  } catch {
+    // Storage unavailable: the column keeps its saved width.
   }
 
   return out;

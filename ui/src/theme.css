@@ -314,6 +314,11 @@ body {
   text-align: right;
   color: var(--fg2);
 }
+/* The playing track's Time cell, counting up. */
+.num.nowtime {
+  color: var(--acc);
+  white-space: nowrap;
+}
 .dim {
   color: var(--fg2);
   overflow: hidden;

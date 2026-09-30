@@ -148,6 +148,11 @@ export default function Pane(props: {
   onArt: (fileId: number) => void;
   /** Loads a row into the player. */
   onPlay: (row: RowDisplay, tabId: number) => void;
+  /**
+   * The loaded track and how far into it the player is, so its row can show
+   * `1:43 / 5:50` in the Time column. Null when nothing is playing or paused.
+   */
+  nowPlaying: { fileId: number; position: string } | null;
   /** Key of the drop target a file drag is over, so this pane can light up. */
   dropKey: string | null;
 }) {
@@ -1219,6 +1224,13 @@ export default function Pane(props: {
                                   </For>
                                 </>
                               );
+                              /** Elapsed time, when this is the playing row's Time cell. */
+                              function elapsed(col: Column): string | undefined {
+                                const now = props.nowPlaying;
+                                return col.key === "duration" && now?.fileId === r().fileId
+                                  ? now.position
+                                  : undefined;
+                              }
                               function cell(col: Column) {
                                 return col.key === "name" ? (
                                         <span class="name" title={r().name} data-edit="name">
@@ -1232,7 +1244,9 @@ export default function Pane(props: {
                                           data-edit={EDITABLE.has(col.key) ? col.key : undefined}
                                           class={`${
                                             col.num ? "num mono" : col.dim ? "dim" : "mono"
-                                          }${col.key === "key" ? " keycol" : ""}`}
+                                          }${col.key === "key" ? " keycol" : ""}${
+                                            elapsed(col) ? " nowtime" : ""
+                                          }`}
                                           style={
                                             col.key === "key"
                                               ? { color: keyColour(r().keyNorm) }
@@ -1240,7 +1254,9 @@ export default function Pane(props: {
                                           }
                                           title={cellText(r(), col.key)}
                                         >
-                                          {cellText(r(), col.key)}
+                                          {elapsed(col)
+                                            ? `${elapsed(col)} / ${cellText(r(), col.key)}`
+                                            : cellText(r(), col.key)}
                                         </span>
                                       );
                               }

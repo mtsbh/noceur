@@ -558,6 +558,15 @@ export default function App() {
   const [finding, setFinding] = createSignal(false);
   const [transport, setTransport] = createSignal<TransportState | null>(null);
   /**
+   * The row the Time column counts up in: the loaded track, once it has
+   * started. A stopped track shows its plain length again.
+   */
+  const nowPlaying = createMemo(() => {
+    const t = transport();
+    if (!t?.fileId || !(t.playing || t.positionMs > 0)) return null;
+    return { fileId: t.fileId, position: t.position };
+  });
+  /**
    * The tab whose listing the player is walking.
    *
    * Next and previous follow the folder the track was started from, not whatever
@@ -1784,6 +1793,7 @@ export default function App() {
                         }
                         onArt={(fileId) => setEditing([fileId])}
                         onPlay={playRow}
+                        nowPlaying={nowPlaying()}
                         dropKey={dropOver()?.key ?? null}
                       />
                     )}
