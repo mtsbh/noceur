@@ -267,6 +267,15 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+/// Names of the files directly in a folder that contain `needle`.
+pub fn names_containing(db: &Db, dir_id: i64, needle: &str) -> Result<Vec<String>, IndexError> {
+    let mut stmt = db
+        .conn()
+        .prepare("SELECT name FROM file WHERE dir_id = ?1 AND instr(name, ?2) > 0")?;
+    let rows = stmt.query_map(rusqlite::params![dir_id, needle], |r| r.get(0))?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
 /// Total rows in the view, ignoring `offset` and `limit`.
 pub fn count(db: &Db, dir_id: i64, opts: ListOptions) -> Result<i64, IndexError> {
     let sql = format!(
@@ -543,6 +552,15 @@ mod tests {
         let dir = rows.iter().find(|r| r.kind == 0).unwrap();
         assert!(dir.bpm.is_none());
         assert!(dir.artist.is_none());
+    }
+
+    #[test]
+    fn names_containing_finds_only_matches_in_that_folder() {
+        let (db, _d, dir_id) = setup();
+        assert_eq!(names_containing(&db, dir_id, ".txt").unwrap(), ["aaa.txt"]);
+        assert!(names_containing(&db, dir_id, ".noceur-writing")
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

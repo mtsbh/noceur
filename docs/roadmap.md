@@ -148,7 +148,9 @@ downloads rather than CD rips.
       a cell whose tag differs from the measurement; clicking the dot writes it. The playing
       track is written a second or two after it starts: into a copy that then replaces the
       file, so the player, still reading the original through its open handle, is not
-      disturbed, and the transport shows the new BPM and key at once. Dates are preserved as in
+      disturbed, and the transport shows the new BPM and key at once. A copy left behind by a crash
+      mid-write is cleared when its folder is next opened: deleted beside an intact original,
+      renamed back if the original is gone. Dates are preserved as in
       any retag, creation date included.
 
 When a step changes what the app can do, the README's feature list is updated with it.

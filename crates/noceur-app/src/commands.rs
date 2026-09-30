@@ -42,6 +42,7 @@ const FIRST_WINDOW: i64 = 200;
 #[tauri::command]
 pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<DirListing, String> {
     let db = state.db.clone();
+    let background = state.background.clone();
     let path = PathBuf::from(&req.path);
     let show = req.show;
 
@@ -50,7 +51,17 @@ pub async fn open_dir(state: State<'_, AppState>, req: ListRequest) -> Result<Di
 
         let started = Instant::now();
         let volume_id = volume::for_path(&db, &path).map_err(|e| e.to_string())?;
-        let dir_id = noceur_index::scan_dir(&db, volume_id, &path).map_err(|e| e.to_string())?;
+        let mut dir_id =
+            noceur_index::scan_dir(&db, volume_id, &path).map_err(|e| e.to_string())?;
+        // Copies a tag write left behind when the app stopped halfway through
+        // one. Found in the index rather than by listing the folder again, so a
+        // folder with none costs one query.
+        let leftovers =
+            noceur_index::query::names_containing(&db, dir_id, crate::background::WRITING)
+                .map_err(|e| e.to_string())?;
+        if !leftovers.is_empty() && crate::background::sweep(&background, &path, &leftovers) {
+            dir_id = noceur_index::scan_dir(&db, volume_id, &path).map_err(|e| e.to_string())?;
+        }
         let scan_ms = started.elapsed().as_millis() as u64;
 
         let total = noceur_index::count(&db, dir_id, options(&req.order, show, 0, FIRST_WINDOW)?)

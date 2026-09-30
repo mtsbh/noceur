@@ -92,7 +92,14 @@ pub struct Background {
     settings: Mutex<Settings>,
     queue: Mutex<Queue>,
     wake: Condvar,
+    /// Copies [`write_beside`] is writing right now, which [`sweep`] must not
+    /// mistake for leftovers.
+    writing: Mutex<HashSet<std::path::PathBuf>>,
 }
+
+/// Marks the copy [`write_beside`] writes into, before the extension:
+/// `Track.noceur-writing.wav`.
+pub const WRITING: &str = ".noceur-writing";
 
 #[derive(Default)]
 struct Queue {
@@ -110,6 +117,7 @@ impl Background {
             settings: Mutex::new(settings),
             queue: Mutex::new(Queue::default()),
             wake: Condvar::new(),
+            writing: Mutex::new(HashSet::new()),
         }
     }
 
@@ -360,7 +368,7 @@ fn process(state: &AppState, file_id: i64) -> Result<bool, String> {
     let in_player = playing(state) == Some(file_id);
     let written = crate::timestamp::preserving(&found.path, keep_dates, || {
         if in_player {
-            write_beside(&found.path, &edit)
+            write_beside(&state.background, &found.path, &edit)
         } else {
             noceur_tags::edit::write(&found.path, &edit).map_err(|e| e.to_string())
         }
@@ -409,24 +417,29 @@ fn process(state: &AppState, file_id: i64) -> Result<bool, String> {
 /// deletion, as every `std::fs::File` does.
 ///
 /// Costs a copy of the file, on the background thread.
-fn write_beside(path: &std::path::Path, edit: &noceur_tags::Edit) -> Result<(), String> {
+fn write_beside(
+    bg: &Background,
+    path: &std::path::Path,
+    edit: &noceur_tags::Edit,
+) -> Result<(), String> {
     // The extension stays last: it is how the tag writer knows the format.
     let stem = path
         .file_stem()
         .map(|n| n.to_string_lossy().into_owned())
         .ok_or("no file name")?;
     let copy = match path.extension() {
-        Some(ext) => {
-            path.with_file_name(format!("{stem}.noceur-writing.{}", ext.to_string_lossy()))
-        }
-        None => path.with_file_name(format!("{stem}.noceur-writing")),
+        Some(ext) => path.with_file_name(format!("{stem}{WRITING}.{}", ext.to_string_lossy())),
+        None => path.with_file_name(format!("{stem}{WRITING}")),
     };
     let created = std::fs::metadata(path).and_then(|m| m.created()).ok();
 
+    let writing = || bg.writing.lock().unwrap_or_else(|e| e.into_inner());
+    writing().insert(copy.clone());
     let result = std::fs::copy(path, &copy)
         .map_err(|e| e.to_string())
         .and_then(|_| noceur_tags::edit::write(&copy, edit).map_err(|e| e.to_string()))
         .and_then(|_| std::fs::rename(&copy, path).map_err(|e| e.to_string()));
+    writing().remove(&copy);
     if result.is_err() {
         let _ = std::fs::remove_file(&copy);
         return result;
@@ -443,6 +456,41 @@ fn write_beside(path: &std::path::Path, edit: &noceur_tags::Edit) -> Result<(), 
     #[cfg(not(windows))]
     let _ = created;
     Ok(())
+}
+
+/// Clears copies [`write_beside`] left in a folder, from a crash or a power
+/// cut between the copy and the rename. `names` are the folder's file names.
+///
+/// A leftover whose original is there is deleted: the original is intact,
+/// since only the rename would have changed it. One whose original is gone is
+/// renamed back rather than deleted, because it may be the only copy left. A
+/// copy being written right now is not a leftover. Returns whether anything
+/// was touched, so the caller knows to read the folder again.
+pub fn sweep(bg: &Background, folder: &std::path::Path, names: &[String]) -> bool {
+    let mut touched = false;
+    for name in names {
+        let Some(at) = name.find(WRITING) else {
+            continue;
+        };
+        let original = format!("{}{}", &name[..at], &name[at + WRITING.len()..]);
+        let copy = folder.join(name);
+        if bg
+            .writing
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&copy)
+        {
+            continue;
+        }
+        let original = folder.join(original);
+        let done = if original.exists() {
+            std::fs::remove_file(&copy)
+        } else {
+            std::fs::rename(&copy, &original)
+        };
+        touched |= done.is_ok();
+    }
+    touched
 }
 
 /// The background analysis settings.
@@ -648,6 +696,40 @@ mod tests {
         release_held(&mut bg.lock(), &state);
         assert!(bg.lock().held.is_empty());
         assert_eq!(bg.lock().order.front(), Some(&7));
+    }
+
+    /// A leftover next to its intact original goes; one without an original
+    /// becomes it; one being written stays.
+    #[test]
+    fn leftover_copies_are_cleared_safely() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let at = |n: &str| dir.path().join(n);
+        std::fs::write(at("a.wav"), b"original").unwrap();
+        std::fs::write(at("a.noceur-writing.wav"), b"leftover").unwrap();
+        std::fs::write(at("b.noceur-writing.flac"), b"only copy").unwrap();
+        std::fs::write(at("c.noceur-writing.mp3"), b"in progress").unwrap();
+        std::fs::write(at("d.mp3"), b"unrelated").unwrap();
+
+        let bg = Background::new(Settings::default());
+        bg.writing
+            .lock()
+            .unwrap()
+            .insert(at("c.noceur-writing.mp3"));
+
+        let names: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(sweep(&bg, dir.path(), &names));
+
+        assert_eq!(std::fs::read(at("a.wav")).unwrap(), b"original");
+        assert!(!at("a.noceur-writing.wav").exists());
+        assert_eq!(std::fs::read(at("b.flac")).unwrap(), b"only copy");
+        assert!(!at("b.noceur-writing.flac").exists());
+        assert!(at("c.noceur-writing.mp3").exists(), "being written");
+        assert!(at("d.mp3").exists());
+
+        assert!(!sweep(&bg, dir.path(), &["d.mp3".into()]), "nothing to do");
     }
 
     fn detected(bpm: f64, key: i64) -> Detected {
