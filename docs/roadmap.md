@@ -52,9 +52,15 @@ up without changes of their own.
       kick-grid fit agreed with the detection, not the tag — a third of the library's BPM
       tags are exactly 1 BPM low. About 1.2 s for a 6½-minute WAV, nearly
       all of it decoding.
-- [ ] **8. Key detection.** Chroma features against key profiles (Krumhansl/Temperley), or
-      libKeyFinder (GPL-3, compatible with this project's licence). Written in the same
-      notation as the existing key column (Camelot / Open Key / standard).
+- [x] **8. Key detection.** KeyNet (Korzeniowski & Widmer 2018), the convolutional network
+      MusicalKeyCNN trained on GiantSteps-MTG, run in Rust (`noceur-audio::key`) with its weights
+      embedded (`models/keynet.bin`, MIT, 1.8 MB). Input is librosa's constant-Q spectrogram (105
+      bins, 24 per octave from 65 Hz, 0.2 s frames), reproduced in Rust to within 0.2–0.4% at a
+      quarter of the sample rate; the network is nine convolutions written out as im2col matrix
+      products. Same answer as PyTorch on all 604 GiantSteps test tracks: 73.8 MIREX weighted,
+      67.2% exactly right, against Mixed In Key 10.3's 75.7 / 69.4 and rekordbox 7.12's
+      65.5 / 56.8 on the same tracks (`tests/key_giantsteps.rs`). Written in Camelot. The dialog
+      became Detect BPM & key: one decode per file, both fields tag → detected with a box each.
 
 ## Mp3tag compatibility
 
@@ -83,5 +89,31 @@ up without changes of their own.
 - [ ] **11. Keyboard navigation in the list.** Arrow keys, `Home` / `End`, `Page Up` /
       `Page Down`, `Enter` to open or play, `Backspace` for the parent folder, `Ctrl+A`. Found
       missing while writing the shortcuts overview.
+
+## Quality and loudness
+
+Ideas taken from AudioAuditor's feature list, reshaped for a DJ library that comes largely from
+downloads rather than CD rips.
+
+- [ ] **12. Loudness.** Integrated loudness (LUFS, ITU-R BS.1770 / EBU R128) and true peak
+      (dBTP, 4× oversampling), as columns and in the quality report. Optionally written as
+      ReplayGain track gain and peak, so players that read it can level-match.
+- [ ] **13. Damage check.** Files that are broken rather than lossy: decode errors, files cut
+      off before their stated length, dropouts (runs of digital silence mid-track), clicks, and
+      "24-bit" files whose low 8 bits are always zero (16-bit padded). Part of Check quality, so a
+      bad download from Soulseek is caught before it is played out.
+- [ ] **14. Clipping after gain.** The clipping check looks for samples at full scale. A track
+      that clipped and was then turned down (normalised to −0.3 dB, say) has the same flat tops
+      at a lower level; detect runs of identical peak samples at the file's own maximum, and
+      report how far below full scale they sit.
+- [ ] **15. Library overview.** One page of statistics from the index, no listening history
+      needed: track count and total hours, BPM spread, keys on the Camelot wheel, formats and
+      sample rates, quality verdicts, top labels, genres and artists, folders with the most
+      problems.
+- [ ] **16. Maybe: processing markers.** Platinum Notes detection (its spectral fingerprint:
+      a boost near the cutoff, a flat top octave, a sharp wall), only if it can be validated on
+      files known to have been through it. Also an offline scan for AI-generator provenance
+      markers (tags, C2PA manifests), which only finds tracks that declare themselves; no audio is
+      uploaded anywhere.
 
 When a step changes what the app can do, the README's feature list is updated with it.
