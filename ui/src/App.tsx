@@ -1715,6 +1715,13 @@ export default function App() {
       // space, not a transport command.
       if (isTyping(e) || finding() || mod || e.altKey) return;
 
+      // Moving through the list: arrows, Home / End, Page Up / Down, Enter,
+      // Backspace. Not while a dialog sits over it.
+      if (!document.querySelector(".scrim") && focusHandle()?.key(e)) {
+        e.preventDefault();
+        return;
+      }
+
       if (e.key === " ") {
         e.preventDefault();
         transportCmd("toggle").then(setTransport).catch(() => {});

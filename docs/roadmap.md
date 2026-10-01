@@ -93,9 +93,10 @@ actions stay for anyone who wants title formatting.
 
 ## Browsing
 
-- [ ] **11. Keyboard navigation in the list.** Arrow keys, `Home` / `End`, `Page Up` /
-      `Page Down`, `Enter` to open or play, `Backspace` for the parent folder, `Ctrl+A`. Found
-      missing while writing the shortcuts overview.
+- [x] **11. Keyboard navigation in the list.** Arrow keys (all four in the icon view),
+      `Home` / `End`, `Page Up` / `Page Down`, with `Shift` to extend the selection; `Enter`
+      opens a folder or plays a track, `Backspace` goes to the parent folder, `Ctrl+A` selects
+      all. Rows not loaded yet are read on the way, so `End` works in a folder of any size.
 
 ## Quality and loudness
 

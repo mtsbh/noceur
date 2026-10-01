@@ -45,6 +45,12 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
   {
     title: "Files",
     items: [
+      [["↑", "↓"], "Move in the list"],
+      [["Home", "End"], "First / last"],
+      [["PgUp", "PgDn"], "Page up / down"],
+      [["Shift", "Move"], "Extend selection"],
+      [["Enter"], "Open folder / play"],
+      [["Backspace"], "Parent folder"],
       [["Ctrl", "A"], "Select all"],
       [["Ctrl", "C"], "Copy"],
       [["Ctrl", "X"], "Cut"],

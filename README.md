@@ -96,6 +96,9 @@ Noceur, on your `PATH`, or set its path in Settings → Files.
 | --- | --- |
 | `Space` | Play / pause |
 | Double-click | Open folder / play track |
+| `↑` `↓` `Home` `End` `PgUp` `PgDn` | Move in the list (`Shift` extends the selection) |
+| `Enter` / `Backspace` | Open folder or play / parent folder |
+| `Ctrl+A` | Select all |
 | `F2` | Edit metadata |
 | `Alt+F1` | File name from tags (`Artist - Title`) |
 | `Alt+F2` | Tags from file name (`Artist - Title`) |

@@ -109,6 +109,12 @@ export type PaneHandle = {
   /** Steps this pane's own history. Each pane has its own, as a browser tab does. */
   back: () => void;
   forward: () => void;
+  /**
+   * Moves through the list from the keyboard: arrows, Home / End, Page Up /
+   * Page Down (Shift extends), Enter opens or plays, Backspace goes up.
+   * Returns whether the key was one of these.
+   */
+  key: (e: KeyboardEvent) => boolean;
 };
 
 /**
@@ -470,6 +476,7 @@ export default function Pane(props: {
       },
       back,
       forward,
+      key: onKey,
       navigate: (path, select) => {
         pendingSelect = select ?? null;
         if (norm(path) === norm(current())) {
@@ -695,6 +702,7 @@ export default function Pane(props: {
     const next = props.tab.history.slice(0, props.tab.cursor + 1);
     next.push(path);
     props.onTab({ history: next, cursor: next.length - 1 });
+    cursor = -1;
     setSelected(null);
     setSelection(new Set<number>());
   }
@@ -766,9 +774,119 @@ export default function Pane(props: {
     if (selected() === null && all.size > 0) setSelected(rowAt(0)!.fileId);
   }
 
+  /**
+   * Where the keyboard is in the list, as a listing index. The anchor stays
+   * where Shift started, so this is the end of the range that moves.
+   */
+  let cursor = -1;
+
+  /** The row at an index, reading its window first when it is not loaded. */
+  async function loadRow(index: number): Promise<RowDisplay | undefined> {
+    const have = rowAt(index);
+    if (have) return have;
+    const l = listing();
+    if (!l) return undefined;
+    const page = Math.floor(index / PAGE);
+    const asked = order();
+    const shown = props.show;
+    try {
+      const w = await listRows(l.dirId, page * PAGE, PAGE, asked, shown);
+      if (listing()?.dirId !== l.dirId || order() !== asked || props.show !== shown) return;
+      setPages(page, w.rows);
+    } catch (e) {
+      setWindowError(String(e));
+    }
+    return rowAt(index);
+  }
+
+  /** Rows that fit in the scroll box, for Page Up / Page Down. */
+  function pageRows(): number {
+    const h = scrollEl?.clientHeight ?? 0;
+    const per = grid() ? TILE_H : props.rowHeight;
+    return Math.max(1, Math.floor(h / per) - 1);
+  }
+
+  /** Moves the keyboard to `index`, selecting it or, with Shift, the range to it. */
+  async function moveTo(index: number, extend: boolean) {
+    const count = total();
+    if (count === 0) return;
+    const to = Math.max(0, Math.min(count - 1, index));
+    const row = await loadRow(to);
+    if (!row) return;
+    cursor = to;
+    virtualizer.scrollToIndex(grid() ? Math.floor(to / perRow()) : to);
+
+    const anchor = selected() === null ? -1 : indexOf(selected()!);
+    if (extend && anchor >= 0) {
+      // Shift+End in a long folder crosses windows nobody scrolled to.
+      const [lo, hi] = [Math.min(anchor, to), Math.max(anchor, to)];
+      for (let p = Math.floor(lo / PAGE); p <= Math.floor(hi / PAGE); p++) {
+        await loadRow(Math.max(lo, p * PAGE));
+      }
+      const next = new Set<number>();
+      for (let i = Math.min(anchor, to); i <= Math.max(anchor, to); i++) {
+        const at = rowAt(i);
+        if (at) next.add(at.fileId);
+      }
+      setSelection(next);
+      return;
+    }
+    setSelection(new Set([row.fileId]));
+    setSelected(row.fileId);
+  }
+
+  function onKey(e: KeyboardEvent): boolean {
+    if (e.key === "Backspace") {
+      void up();
+      return true;
+    }
+    if (e.key === "Enter") {
+      const at = cursor >= 0 && rowAt(cursor) ? cursor : indexOf(selected() ?? -1);
+      const row = at >= 0 ? rowAt(at) : undefined;
+      if (!row) return false;
+      if (row.kind === 0) onRow(row);
+      else if (row.kind === 1) props.onPlay(row, props.tab.id);
+      return true;
+    }
+
+    // From the end of the range Shift is growing, otherwise from the anchor.
+    const here = (() => {
+      if (cursor >= 0 && rowAt(cursor) && selection().has(rowAt(cursor)!.fileId)) return cursor;
+      return selected() === null ? -1 : indexOf(selected()!);
+    })();
+    const across = grid() ? perRow() : 1;
+    const target = (() => {
+      switch (e.key) {
+        case "ArrowDown":
+          return here < 0 ? 0 : here + across;
+        case "ArrowUp":
+          return here < 0 ? 0 : here - across;
+        case "ArrowRight":
+          return grid() ? (here < 0 ? 0 : here + 1) : null;
+        case "ArrowLeft":
+          return grid() ? (here < 0 ? 0 : here - 1) : null;
+        case "Home":
+          return 0;
+        case "End":
+          return total() - 1;
+        case "PageDown":
+          return Math.max(here, 0) + pageRows() * across;
+        case "PageUp":
+          return Math.max(here, 0) - pageRows() * across;
+        default:
+          return null;
+      }
+    })();
+    if (target === null) return false;
+    void moveTo(target, e.shiftKey);
+    return true;
+  }
+
   /** Ctrl adds and removes, shift extends from the anchor, a plain click replaces. */
   function selectRow(row: RowDisplay, e: MouseEvent) {
     const count = total();
+    // The keyboard picks up from wherever the mouse left it.
+    cursor = -1;
 
     if (e.ctrlKey || e.metaKey) {
       const next = new Set(selection());
