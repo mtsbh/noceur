@@ -32,47 +32,75 @@ const ORDER = [
  * Nothing is written and nothing is changed. This only ever tells you what you
  * have.
  */
-export default function Quality(props: {
+export type QualityRun = {
   fileIds: number[];
-  onClose: () => void;
-}) {
+  rows: () => QualityRow[];
+  done: () => number;
+  running: () => boolean;
+  error: () => string;
+  stop: () => void;
+};
+
+/**
+ * Starts checking files. Lives outside the dialog, so hiding the dialog to get
+ * back to the list leaves a two-hundred-file check running.
+ */
+export function startQuality(ids: number[]): QualityRun {
   const [rows, setRows] = createSignal<QualityRow[]>([]);
   const [done, setDone] = createSignal(0);
   const [running, setRunning] = createSignal(true);
   const [error, setError] = createSignal("");
-  /** Set when the dialog closes, so a batch in flight stops queueing more. */
-  let abandoned = false;
+  let stopped = false;
 
-  onCleanup(() => {
-    abandoned = true;
-  });
-
-  createEffect(() => {
-    const ids = props.fileIds;
-
-    (async () => {
-      for (let at = 0; at < ids.length; at += BATCH) {
-        if (abandoned) return;
-        try {
-          const batch = await analyseQuality(ids.slice(at, at + BATCH));
-          if (abandoned) return;
-          setRows((current) => [...current, ...batch]);
-          setDone(Math.min(at + BATCH, ids.length));
-        } catch (e) {
-          setError(String(e));
-          break;
-        }
+  (async () => {
+    for (let at = 0; at < ids.length; at += BATCH) {
+      if (stopped) break;
+      try {
+        const batch = await analyseQuality(ids.slice(at, at + BATCH));
+        if (stopped) break;
+        setRows((current) => [...current, ...batch]);
+        setDone(Math.min(at + BATCH, ids.length));
+      } catch (e) {
+        setError(String(e));
+        break;
       }
+    }
+    setRunning(false);
+  })();
+
+  return {
+    fileIds: ids,
+    rows,
+    done,
+    running,
+    error,
+    stop: () => {
+      stopped = true;
       setRunning(false);
-    })();
-  });
+    },
+  };
+}
+
+export default function Quality(props: {
+  run: QualityRun;
+  /** Hides the report; the check carries on. */
+  onHide: () => void;
+  /** Drops the report, stopping the check if it is still going. */
+  onClose: () => void;
+  /** Selects these files in the list, so a verdict can be acted on. */
+  onSelect: (fileIds: number[]) => void;
+}) {
+  const rows = () => props.run.rows();
+  const done = () => props.run.done();
+  const running = () => props.run.running();
+  const error = () => props.run.error();
 
   createEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        props.onClose();
+        props.onHide();
       }
     };
     window.addEventListener("keydown", onKey, true);
@@ -109,7 +137,7 @@ export default function Quality(props: {
 
   return (
     <>
-      <div class="scrim" onPointerDown={props.onClose} />
+      <div class="scrim" onPointerDown={props.onHide} />
       <div class="renamer wide" role="dialog" aria-label="Check quality">
         <header class="sethead">
           <span class="settitle">Check quality</span>
@@ -118,13 +146,13 @@ export default function Quality(props: {
               when={running()}
               fallback={`${rows().length} ${rows().length === 1 ? "track" : "tracks"}`}
             >
-              {done()} of {props.fileIds.length}…
+              {done()} of {props.run.fileIds.length}…
             </Show>
           </span>
           <button
             class="setclose"
-            onClick={props.onClose}
-            data-tip="Close"
+            onClick={props.onHide}
+            data-tip={running() ? "Hide, keep checking" : "Hide"}
             data-tip-at="end"
             aria-label="Close"
           >
@@ -138,9 +166,19 @@ export default function Quality(props: {
               <For each={ORDER}>
                 {(verdict) => (
                   <Show when={count(verdict) > 0}>
-                    <span class={`qualtally ${verdict}`}>
+                    <button
+                      class={`qualtally ${verdict}`}
+                      data-tip="Select in list"
+                      onClick={() =>
+                        props.onSelect(
+                          rows()
+                            .filter((r) => r.verdict === verdict)
+                            .map((r) => r.fileId),
+                        )
+                      }
+                    >
                       {count(verdict)} {verdict}
-                    </span>
+                    </button>
                   </Show>
                 )}
               </For>
@@ -185,9 +223,21 @@ export default function Quality(props: {
               </Show>
             </Show>
           </span>
-          <button class="btn" onClick={props.onClose}>
-            {running() ? "Stop" : "Close"}
-          </button>
+          <Show
+            when={running()}
+            fallback={
+              <button class="btn" onClick={props.onClose}>
+                Close
+              </button>
+            }
+          >
+            <button class="btn" onClick={props.onHide}>
+              Hide
+            </button>
+            <button class="btn" onClick={() => props.run.stop()}>
+              Stop
+            </button>
+          </Show>
         </footer>
       </div>
     </>

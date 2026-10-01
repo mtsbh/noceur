@@ -83,6 +83,10 @@ export type PaneHandle = {
   refreshRows: () => void;
   /** Every selected file id. */
   selection: () => number[];
+  /** Selects every entry in the folder, fetching rows not loaded yet. */
+  selectAll: () => void;
+  /** Replaces the selection with these files. */
+  select: (fileIds: number[]) => void;
   /** The selected ids that are audio files — what the dialogs act on. */
   audioSelection: () => number[];
   /** A loaded row by id, for things that need its tags — a web search. */
@@ -127,6 +131,9 @@ export default function Pane(props: {
   /** Writes back to the tab record: navigation, sort, selection, scroll. */
   onTab: (patch: Partial<Tab>) => void;
   onReady: (handle: PaneHandle) => void;
+  /** A hidden quality check, shown in the status line; empty when none. */
+  checkStatus: string;
+  onCheckOpen: () => void;
   onGone: (tabId: number) => void;
 
   /** Columns, art size and the header drags are global — every pane shares them. */
@@ -439,6 +446,14 @@ export default function Pane(props: {
         return undefined;
       },
       selection: () => [...selection()],
+      selectAll,
+      select: (fileIds) => {
+        setSelection(new Set(fileIds));
+        if (fileIds.length === 0) return;
+        setSelected(fileIds[0]);
+        const at = indexOf(fileIds[0]);
+        if (at >= 0) virtualizer.scrollToIndex(grid() ? Math.floor(at / perRow()) : at);
+      },
       audioSelection,
       step: (fileId, by) => {
         const at = indexOf(fileId);
@@ -717,6 +732,38 @@ export default function Pane(props: {
     // Also kept as the seed for the next new tab. The order belongs to this tab,
     // but "how do you like your listings" is an answer worth carrying forward.
     rememberOrder(next);
+  }
+
+  /**
+   * Ctrl+A. The ids of rows off screen are only known once their window is
+   * read, so the missing pages are fetched first and filed like scrolled-to
+   * ones.
+   */
+  async function selectAll() {
+    const l = listing();
+    if (!l) return;
+    const asked = order();
+    const shown = props.show;
+    const count = total();
+    const missing: number[] = [];
+    for (let p = 0; p * PAGE < count; p++) if (pages[p] === undefined) missing.push(p);
+    try {
+      const windows = await Promise.all(
+        missing.map((p) => listRows(l.dirId, p * PAGE, PAGE, asked, shown)),
+      );
+      if (listing()?.dirId !== l.dirId || order() !== asked || props.show !== shown) return;
+      for (const w of windows) setPages(Math.floor(w.offset / PAGE), w.rows);
+    } catch (e) {
+      setWindowError(String(e));
+      return;
+    }
+    const all = new Set<number>();
+    for (let i = 0; i < count; i++) {
+      const row = rowAt(i);
+      if (row) all.add(row.fileId);
+    }
+    setSelection(all);
+    if (selected() === null && all.size > 0) setSelected(rowAt(0)!.fileId);
   }
 
   /** Ctrl adds and removes, shift extends from the anchor, a plain click replaces. */
@@ -1422,6 +1469,11 @@ export default function Pane(props: {
         </Show>
         <Show when={analysing() > 0}>
           <span class="working">measuring BPM &amp; key…</span>
+        </Show>
+        <Show when={props.checkStatus}>
+          <button class="working statuslink" onClick={() => props.onCheckOpen()}>
+            {props.checkStatus}
+          </button>
         </Show>
         <Show when={windowError()}>
           <span class="slow">{windowError()}</span>

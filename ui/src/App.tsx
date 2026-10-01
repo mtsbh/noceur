@@ -52,7 +52,7 @@ import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
 import Cleanup from "./Cleanup";
 import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
-import Quality from "./Quality";
+import Quality, { startQuality, type QualityRun } from "./Quality";
 import Analysis from "./Analysis";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
@@ -531,7 +531,23 @@ export default function App() {
   /** Files the converter is open on, or null when it is closed. */
   const [converting, setConverting] = createSignal<number[] | null>(null);
   /** Files the quality report is open on, or null when it is closed. */
-  const [checking, setChecking] = createSignal<number[] | null>(null);
+  // The quality check outlives its dialog: hiding the report leaves it running,
+  // and the status line brings it back.
+  const [checking, setChecking] = createSignal<QualityRun | null>(null);
+  const [checkShown, setCheckShown] = createSignal(false);
+  /** What the status line says about a hidden check, or nothing. */
+  const checkStatus = () => {
+    const run = checking();
+    if (!run || checkShown()) return "";
+    return run.running()
+      ? `checking quality… ${run.done()} of ${run.fileIds.length}`
+      : "quality report";
+  };
+  function checkQuality(ids: number[]) {
+    checking()?.stop();
+    setChecking(startQuality(ids));
+    setCheckShown(true);
+  }
   /** Files BPM and key detection is open on, or null when it is closed. */
   const [timing, setTiming] = createSignal<number[] | null>(null);
   /** Files the duplicate finder is measuring, or null when it is closed. */
@@ -613,7 +629,7 @@ export default function App() {
         setCleaning(ids);
         break;
       case "quality":
-        setChecking(ids);
+        checkQuality(ids);
         break;
       case "bpm":
         setTiming(ids);
@@ -1375,7 +1391,7 @@ export default function App() {
         label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
         icon: SpectrumIcon,
         disabled: audio,
-        run: () => setChecking(ids),
+        run: () => checkQuality(ids),
       },
       {
         kind: "item",
@@ -1554,6 +1570,13 @@ export default function App() {
             );
           })
           .catch(() => {});
+        return;
+      }
+      // Ctrl+A selects the whole folder in the focused pane. Text boxes keep
+      // their own select-all.
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "a" && !isTyping(e)) {
+        e.preventDefault();
+        focusHandle()?.selectAll();
         return;
       }
       // Ctrl+Shift+N makes a folder where you are, as it does in Explorer.
@@ -1810,6 +1833,8 @@ export default function App() {
                         onPlay={playRow}
                         nowPlaying={nowPlaying()}
                         dropKey={dropOver()?.key ?? null}
+                        checkStatus={layout.focus === group.id ? checkStatus() : ""}
+                        onCheckOpen={() => setCheckShown(true)}
                       />
                     )}
                   </Show>
@@ -1928,8 +1953,22 @@ export default function App() {
         )}
       </Show>
 
-      <Show when={checking()}>
-        {(ids) => <Quality fileIds={ids()} onClose={() => setChecking(null)} />}
+      <Show when={checkShown() && checking()}>
+        {(run) => (
+          <Quality
+            run={run()}
+            onHide={() => setCheckShown(false)}
+            onClose={() => {
+              run().stop();
+              setChecking(null);
+              setCheckShown(false);
+            }}
+            onSelect={(picked) => {
+              focusHandle()?.select(picked);
+              setCheckShown(false);
+            }}
+          />
+        )}
       </Show>
 
       <Show when={timing()}>

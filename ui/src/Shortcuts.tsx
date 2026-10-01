@@ -45,6 +45,7 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
   {
     title: "Files",
     items: [
+      [["Ctrl", "A"], "Select all"],
       [["Ctrl", "C"], "Copy"],
       [["Ctrl", "X"], "Cut"],
       [["Ctrl", "V"], "Paste"],

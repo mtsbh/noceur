@@ -123,6 +123,9 @@ pub fn bpm(value: Option<f64>, source: BpmSource) -> String {
         BpmSource::Analysed => format!("{v:.1}"),
         BpmSource::Tag => {
             // Keep the tag's own precision: 123 stays 123, 124.5 stays 124.5.
+            // Tags are read as f32, so 122.2 arrives as 122.19999694824219;
+            // two decimals is more than any tag carries.
+            let v = (v * 100.0).round() / 100.0;
             if (v.fract()).abs() < f64::EPSILON {
                 format!("{}", v as i64)
             } else {
@@ -632,6 +635,9 @@ mod tests {
     fn bpm_from_tags_keeps_its_own_precision() {
         assert_eq!(bpm(Some(123.0), BpmSource::Tag), "123");
         assert_eq!(bpm(Some(124.5), BpmSource::Tag), "124.5");
+        // An f32 tag widened to f64.
+        assert_eq!(bpm(Some(f64::from(122.2f32)), BpmSource::Tag), "122.2");
+        assert_eq!(bpm(Some(f64::from(127.99f32)), BpmSource::Tag), "127.99");
     }
 
     #[test]
