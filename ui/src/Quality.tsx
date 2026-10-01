@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
-import { analyseQuality, type QualityRow } from "./api";
+import { analyseQuality, writeReplayGain, type QualityRow } from "./api";
 
 /**
  * Files analysed per round trip.
@@ -129,6 +129,35 @@ export default function Quality(props: {
    */
   const clipped = (r: QualityRow) => r.clipRun >= 8 && r.clipPercent >= 0.01;
 
+  /** True peak with its sign, `≥` when only a lower bound. */
+  const peak = (r: QualityRow) => {
+    if (r.truePeak === null) return "—";
+    const v = Math.round(r.truePeak * 10) / 10;
+    const text = v === 0 ? "0.0" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
+    return r.peakFloor ? `≥ ${text}` : text;
+  };
+  /** Over full scale once reconstructed: it clips in a DAC or a decoder. */
+  const over = (r: QualityRow) => r.truePeak !== null && (r.truePeak > 0 || r.peakFloor);
+
+  const measured = () => rows().filter((r) => r.lufs !== null);
+  const [gainNote, setGainNote] = createSignal("");
+  const [writing, setWriting] = createSignal(false);
+  async function replayGain() {
+    setWriting(true);
+    try {
+      const r = await writeReplayGain(measured().map((m) => m.fileId));
+      setGainNote(
+        r.failures.length
+          ? `ReplayGain on ${r.written} · ${r.failures.length} failed`
+          : `ReplayGain on ${r.written}`,
+      );
+    } catch (e) {
+      setGainNote(String(e));
+    } finally {
+      setWriting(false);
+    }
+  }
+
   /** What the file says it is, for the left-hand column. */
   const claim = (r: QualityRow) => {
     if (r.lossless) return "lossless";
@@ -203,6 +232,19 @@ export default function Quality(props: {
                     <span class={`qualclip mono ${clipped(r) ? "bad" : ""}`}>
                       <Show when={clipped(r)}>{r.clipPercent.toFixed(2)}%</Show>
                     </span>
+                    <span class="quallufs mono" data-tip="Integrated loudness">
+                      {r.lufs === null ? "—" : r.lufs.toFixed(1)}
+                    </span>
+                    <span
+                      class={`qualpeak mono ${over(r) ? "bad" : ""}`}
+                      data-tip={
+                        r.peakFloor
+                          ? "True peak, at least: the decoder stops at full scale"
+                          : "True peak, dBTP"
+                      }
+                    >
+                      {peak(r)}
+                    </span>
                     <span class="qualwhy">{r.reason}</span>
                   </div>
                 )}
@@ -218,11 +260,25 @@ export default function Quality(props: {
         <footer class="tagfoot">
           <span class="sethint credit">
             <Show when={!running()} fallback="Analyzing…">
-              <Show when={suspect() > 0} fallback="No issues">
-                {suspect()} of {rows().length} suspect
+              <Show when={gainNote()} fallback={
+                <Show when={suspect() > 0} fallback="No issues">
+                  {suspect()} of {rows().length} suspect
+                </Show>
+              }>
+                {gainNote()}
               </Show>
             </Show>
           </span>
+          <Show when={!running() && measured().length > 0}>
+            <button
+              class="btn"
+              disabled={writing()}
+              data-tip="Track gain to -18 LUFS, and true peak"
+              onClick={replayGain}
+            >
+              {writing() ? "Writing…" : "Write ReplayGain"}
+            </button>
+          </Show>
           <Show
             when={running()}
             fallback={

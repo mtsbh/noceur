@@ -71,6 +71,10 @@ pub struct RowDisplay {
     pub bpm_differs: bool,
     /// The file is tagged with a key and it is not the one measured.
     pub key_differs: bool,
+    /// Integrated loudness, `-9.4`; empty until Check quality has measured it.
+    pub lufs: String,
+    /// True peak in dBTP, `+0.6`, or `≥ +0.5` when it is only a lower bound.
+    pub true_peak: String,
     /// Whether this row has an image worth requesting — embedded cover art for
     /// audio, the shell's own icon for a directory. Files with neither are left
     /// alone, so a folder of untagged tracks issues no requests at all.
@@ -425,8 +429,32 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
         bpm_differs: is_audio && bpm_differs(row.bpm, row.detected_bpm),
         key_differs: is_audio
             && key_differs(row.key_norm, row.key_tag.as_deref(), row.detected_key),
+        lufs: match row.lufs {
+            Some(v) if is_audio => format!("{v:.1}"),
+            _ => String::new(),
+        },
+        true_peak: match row.true_peak {
+            Some(v) if is_audio => peak(v, row.peak_floor),
+            _ => String::new(),
+        },
         // A directory always has one: the shell will give us its icon.
         has_art: row.kind == 0 || (is_audio && row.has_artwork),
+    }
+}
+
+/// A true peak with its sign, `+0.6` / `-1.2`, and `≥` when it is a lower
+/// bound.
+pub fn peak(db: f64, floor: bool) -> String {
+    let v = (db * 10.0).round() / 10.0;
+    let text = if v == 0.0 {
+        "0.0".to_string()
+    } else {
+        format!("{v:+.1}")
+    };
+    if floor {
+        format!("≥ {text}")
+    } else {
+        text
     }
 }
 
@@ -482,7 +510,27 @@ mod tests {
             rating: Some(4),
             detected_bpm: None,
             detected_key: None,
+            lufs: None,
+            true_peak: None,
+            peak_floor: false,
         }
+    }
+
+    #[test]
+    fn loudness_shows_once_measured() {
+        let d = display(&row(), KeyNotation::Camelot);
+        assert_eq!((d.lufs.as_str(), d.true_peak.as_str()), ("", ""));
+        let measured = ListRow {
+            lufs: Some(-9.44),
+            true_peak: Some(0.52),
+            peak_floor: true,
+            ..row()
+        };
+        let d = display(&measured, KeyNotation::Camelot);
+        assert_eq!(d.lufs, "-9.4");
+        assert_eq!(d.true_peak, "≥ +0.5");
+        assert_eq!(peak(-1.23, false), "-1.2");
+        assert_eq!(peak(-0.02, false), "0.0");
     }
 
     /// A directory has no cover art but always has a shell icon, so it still

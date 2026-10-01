@@ -117,6 +117,58 @@ pub fn carry(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
     Ok(())
 }
 
+/// Integrated loudness and true peak for one content.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Loudness {
+    pub lufs: Option<f64>,
+    /// dBTP.
+    pub true_peak: Option<f64>,
+    /// The true peak is a lower bound: the decoder clipped at full scale.
+    pub peak_floor: bool,
+}
+
+/// Records a loudness measurement.
+pub fn set_loudness(db: &Db, content_id: i64, l: &Loudness) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO loudness (content_id, lufs, true_peak, peak_floor)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(content_id) DO UPDATE SET
+             lufs = excluded.lufs, true_peak = excluded.true_peak,
+             peak_floor = excluded.peak_floor",
+        params![content_id, l.lufs, l.true_peak, l.peak_floor as i64],
+    )?;
+    Ok(())
+}
+
+/// The stored loudness of one content, if it has been measured.
+pub fn loudness(db: &Db, content_id: i64) -> Result<Option<Loudness>, IndexError> {
+    Ok(db
+        .conn()
+        .query_row(
+            "SELECT lufs, true_peak, peak_floor FROM loudness WHERE content_id = ?1",
+            params![content_id],
+            |r| {
+                Ok(Loudness {
+                    lufs: r.get(0)?,
+                    true_peak: r.get(1)?,
+                    peak_floor: r.get::<_, i64>(2)? != 0,
+                })
+            },
+        )
+        .optional()?)
+}
+
+/// [`carry`], for loudness.
+pub fn carry_loudness(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO loudness (content_id, lufs, true_peak, peak_floor)
+         SELECT ?2, lufs, true_peak, peak_floor FROM loudness WHERE content_id = ?1
+         ON CONFLICT(content_id) DO NOTHING",
+        params![from, to],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,5 +253,20 @@ mod tests {
         set(&db, 1, &METHOD, Some(&d)).unwrap();
         carry(&db, 1, 3).unwrap();
         assert_eq!(get(&db, 3).unwrap().unwrap().detected, Some(d));
+    }
+
+    #[test]
+    fn loudness_round_trips_and_follows_a_tag_write() {
+        let db = db();
+        assert_eq!(loudness(&db, 1).unwrap(), None);
+        let l = Loudness {
+            lufs: Some(-9.4),
+            true_peak: Some(0.6),
+            peak_floor: true,
+        };
+        set_loudness(&db, 1, &l).unwrap();
+        assert_eq!(loudness(&db, 1).unwrap(), Some(l));
+        carry_loudness(&db, 1, 3).unwrap();
+        assert_eq!(loudness(&db, 3).unwrap(), Some(l));
     }
 }

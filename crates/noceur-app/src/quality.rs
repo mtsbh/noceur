@@ -9,8 +9,10 @@
 //! shows progress, which is the same shape the tag probe uses and for the same
 //! reason — one command per folder would be a command that appears to hang.
 
+use crate::dto::{WriteFailure, WriteReport};
 use crate::state::AppState;
 use noceur_audio::quality::{self, Claim};
+use noceur_index::analysis::Loudness;
 use tauri::State;
 
 /// What one file turned out to be.
@@ -33,7 +35,20 @@ pub struct QualityRow {
     pub clip_percent: f32,
     /// Longest unbroken run of full-scale samples.
     pub clip_run: u32,
+    /// Integrated loudness, LUFS.
+    pub lufs: Option<f32>,
+    /// True peak, dBTP.
+    pub true_peak: Option<f32>,
+    /// The true peak is at least this: the decoder clipped a lossy file at
+    /// full scale, so the overs above it were never seen.
+    pub peak_floor: bool,
     pub reason: String,
+}
+
+/// Whether a lossy file's decode reached full scale. Symphonia clips MP3
+/// output to ±1.0, so past this its true peak is only a lower bound.
+fn peak_is_floor(lossless: bool, sample_peak: f32) -> bool {
+    !lossless && sample_peak >= 0.9999
 }
 
 /// Analyses a batch of files.
@@ -61,13 +76,14 @@ pub async fn analyse_quality(
                         .ok()
                         .flatten()
                         .filter(|f| f.kind == 1)
-                        .map(|f| (*id, f.path))
+                        .map(|f| (*id, f.path, f.content_id))
                 })
                 .collect::<Vec<_>>()
         };
 
         let mut out = Vec::with_capacity(targets.len());
-        for (file_id, path) in targets {
+        let mut measured = Vec::new();
+        for (file_id, path, content_id) in targets {
             let name = path
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -87,6 +103,21 @@ pub async fn analyse_quality(
             match quality::analyse(&path) {
                 Ok(spectrum) => {
                     let report = quality::judge(&spectrum, claim);
+                    let loud = report.loudness;
+                    // Only a file known to be lossy: one whose header would not
+                    // parse is as likely a WAV, whose decoder does not clip.
+                    let known_lossy = meta.as_ref().is_some_and(|m| !m.lossless);
+                    let peak_floor = peak_is_floor(!known_lossy, loud.sample_peak);
+                    if let Some(content_id) = content_id {
+                        measured.push((
+                            content_id,
+                            Loudness {
+                                lufs: loud.lufs.map(f64::from),
+                                true_peak: loud.true_peak_db.map(f64::from),
+                                peak_floor,
+                            },
+                        ));
+                    }
                     out.push(QualityRow {
                         file_id,
                         name,
@@ -98,6 +129,9 @@ pub async fn analyse_quality(
                         lossless,
                         clip_percent: report.clipping.percent,
                         clip_run: report.clipping.longest_run,
+                        lufs: loud.lufs,
+                        true_peak: loud.true_peak_db,
+                        peak_floor,
                         reason: report.reason,
                     });
                 }
@@ -112,8 +146,20 @@ pub async fn analyse_quality(
                     lossless,
                     clip_percent: 0.0,
                     clip_run: 0,
+                    lufs: None,
+                    true_peak: None,
+                    peak_floor: false,
                     reason: e.to_string(),
                 }),
+            }
+        }
+
+        // Kept, so the list's LUFS and Peak columns have something to show.
+        if !measured.is_empty() {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            for (content_id, l) in &measured {
+                noceur_index::analysis::set_loudness(&db, *content_id, l)
+                    .map_err(|e| e.to_string())?;
             }
         }
 
@@ -121,4 +167,120 @@ pub async fn analyse_quality(
     })
     .await
     .map_err(|e| format!("quality task failed: {e}"))?
+}
+
+/// The ReplayGain 2.0 fields for a measurement: gain to -18 LUFS, and the true
+/// peak as a linear ratio. `None` when there is no loudness to go by.
+pub fn replay_gain_fields(l: &Loudness) -> Option<[(String, String); 2]> {
+    let lufs = l.lufs?;
+    let gain = noceur_audio::loudness::replay_gain_db(lufs as f32);
+    let peak = 10f64.powf(l.true_peak.unwrap_or(-120.0) / 20.0);
+    Some([
+        ("REPLAYGAIN_TRACK_GAIN".into(), format!("{gain:.2} dB")),
+        ("REPLAYGAIN_TRACK_PEAK".into(), format!("{peak:.6}")),
+    ])
+}
+
+/// Writes ReplayGain track gain and peak from what Check quality measured.
+/// Files not measured yet are skipped and named.
+#[tauri::command]
+pub async fn write_replay_gain(
+    state: State<'_, AppState>,
+    file_ids: Vec<i64>,
+) -> Result<WriteReport, String> {
+    let db = state.db.clone();
+    let keep_dates =
+        crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let targets = {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            let mut targets = Vec::new();
+            for id in &file_ids {
+                let Some(f) = noceur_index::thumb::locate(&db, *id)
+                    .map_err(|e| e.to_string())?
+                    .filter(|f| f.kind == 1)
+                else {
+                    continue;
+                };
+                let loud = match f.content_id {
+                    Some(c) => {
+                        noceur_index::analysis::loudness(&db, c).map_err(|e| e.to_string())?
+                    }
+                    None => None,
+                };
+                targets.push((*id, f.path, loud));
+            }
+            targets
+        };
+
+        let mut report = WriteReport::default();
+        let mut written = Vec::new();
+        for (id, path, loud) in targets {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let Some(fields) = loud.as_ref().and_then(replay_gain_fields) else {
+                report.failures.push(WriteFailure {
+                    name,
+                    reason: "not measured yet".into(),
+                });
+                continue;
+            };
+            let edit = noceur_tags::Edit {
+                custom: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, noceur_tags::Change::Set(v)))
+                    .collect(),
+                ..Default::default()
+            };
+            match crate::timestamp::preserving(&path, keep_dates, || {
+                noceur_tags::edit::write(&path, &edit)
+            }) {
+                Ok(()) => {
+                    report.written += 1;
+                    written.push(id);
+                }
+                Err(e) => report.failures.push(WriteFailure {
+                    name,
+                    reason: e.to_string(),
+                }),
+            }
+        }
+        if !written.is_empty() {
+            let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+            for id in written {
+                noceur_index::reprobe(&db, id).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|e| format!("tag write task failed: {e}"))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replay_gain_is_measured_against_minus_18() {
+        let [gain, peak] = replay_gain_fields(&Loudness {
+            lufs: Some(-9.5),
+            true_peak: Some(0.0),
+            peak_floor: false,
+        })
+        .unwrap();
+        assert_eq!(gain, ("REPLAYGAIN_TRACK_GAIN".into(), "-8.50 dB".into()));
+        assert_eq!(peak, ("REPLAYGAIN_TRACK_PEAK".into(), "1.000000".into()));
+        assert!(replay_gain_fields(&Loudness::default()).is_none());
+    }
+
+    #[test]
+    fn only_a_clipped_lossy_decode_is_a_floor() {
+        assert!(peak_is_floor(false, 1.0));
+        assert!(!peak_is_floor(true, 1.0), "lossless decoders do not clip");
+        assert!(!peak_is_floor(false, 0.95));
+    }
 }

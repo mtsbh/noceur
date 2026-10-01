@@ -103,9 +103,15 @@ actions stay for anyone who wants title formatting.
 Ideas taken from AudioAuditor's feature list, reshaped for a DJ library that comes largely from
 downloads rather than CD rips.
 
-- [ ] **12. Loudness.** Integrated loudness (LUFS, ITU-R BS.1770 / EBU R128) and true peak
-      (dBTP, 4× oversampling), as columns and in the quality report. Optionally written as
-      ReplayGain track gain and peak, so players that read it can level-match.
+- [x] **12. Loudness.** Integrated loudness (LUFS, ITU-R BS.1770-4: K-weighting, 400 ms
+      blocks, absolute and relative gates) and true peak (dBTP, 4× polyphase oversampling),
+      measured in Check quality's one pass over the file (`noceur-audio::loudness`). In the
+      report beside each track, kept in the index (`loudness` table, carried across tag writes)
+      and shown as the LUFS and Peak columns. Write ReplayGain (in the report) puts
+      `REPLAYGAIN_TRACK_GAIN` (to −18 LUFS) and `REPLAYGAIN_TRACK_PEAK` in the measured files.
+      Matches ffmpeg's `ebur128` to 0.1 LU on WAV, FLAC and MP3, and passes EBU Tech 3341 cases
+      1–3. Symphonia clips MP3 output at full scale, so a lossy file whose decode reaches it
+      shows its true peak as a lower bound (`≥ +0.5`).
 - [ ] **13. Damage check.** Files that are broken rather than lossy: decode errors, files cut
       off before their stated length, dropouts (runs of digital silence mid-track), clicks, and
       "24-bit" files whose low 8 bits are always zero (16-bit padded). Part of Check quality, so a

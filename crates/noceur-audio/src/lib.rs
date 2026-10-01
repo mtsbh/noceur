@@ -9,6 +9,7 @@ pub mod fft;
 pub mod fingerprint;
 pub mod identity;
 pub mod key;
+pub mod loudness;
 pub mod prefetch;
 pub mod quality;
 pub mod scope;

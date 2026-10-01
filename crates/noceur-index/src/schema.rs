@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 10;
+pub const SCHEMA_VERSION: i32 = 11;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -249,5 +249,19 @@ CREATE TABLE analysis (
     key_norm       INTEGER,
     key_confidence REAL,
     miss           INTEGER NOT NULL DEFAULT 0
+);
+"#;
+
+/// Integrated loudness and true peak, from Check quality.
+///
+/// Keyed by content and carried across tag writes, like `analysis`: a tag write
+/// does not change a sample. `peak_floor` marks a true peak that is only a lower
+/// bound, from a lossy file whose decoder clipped at full scale.
+const V11: &str = r#"
+CREATE TABLE loudness (
+    content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    lufs       REAL,
+    true_peak  REAL,
+    peak_floor INTEGER NOT NULL DEFAULT 0
 );
 "#;

@@ -21,6 +21,7 @@
 //! because a wrong accusation about somebody's library is worse than no answer.
 
 use crate::fft::{fft, hann};
+use crate::loudness::{Loudness, Meter};
 use crate::AudioError;
 use std::path::Path;
 
@@ -82,6 +83,8 @@ pub struct Spectrum {
     pub frames: usize,
     /// Measured across every sample, not the sampled windows the spectrum uses.
     pub clipping: Clipping,
+    /// Integrated loudness and true peak, from the same pass.
+    pub loudness: Loudness,
 }
 
 /// Counts full-scale runs as samples arrive.
@@ -357,6 +360,7 @@ pub struct Report {
     pub implied_kbps: Option<u32>,
     pub brickwalled: bool,
     pub clipping: Clipping,
+    pub loudness: Loudness,
     pub verdict: Verdict,
     /// Why, in one line, for the interface to show as it is.
     pub reason: String,
@@ -412,6 +416,7 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
         implied_kbps: implied,
         brickwalled,
         clipping: spectrum.clipping,
+        loudness: spectrum.loudness,
         verdict: Verdict::Unsure,
         reason: String::new(),
     };
@@ -550,11 +555,13 @@ pub fn spectrum(mono: &[f32], sample_rate: u32) -> Spectrum {
     }
 
     let mut clips = ClipCounter::default();
+    let mut meter = Meter::new(1, sample_rate);
     for sample in mono {
         clips.push(*sample);
+        meter.push(*sample);
     }
 
-    finish(power, frames, sample_rate, clips.finish())
+    finish(power, frames, sample_rate, clips.finish(), meter.finish())
 }
 
 /// Measures the spectrum of a file.
@@ -605,12 +612,14 @@ pub fn analyse(path: &Path) -> Result<Spectrum, AudioError> {
     let mut sum = 0f32;
     let mut in_frame = 0usize;
     let mut clips = ClipCounter::default();
+    let mut meter = Meter::new(channels, rate);
 
     for sample in decoder {
         // Every sample, unlike the spectrum, which is measured from windows
         // spread across the file. Clipping is rare and local: sampling for it
         // would miss most of it.
         clips.push(sample);
+        meter.push(sample);
 
         // Down-mixed as it arrives: the spectrum of the sum is what a listener
         // hears, and analysing one channel would miss anything panned away.
@@ -637,7 +646,7 @@ pub fn analyse(path: &Path) -> Result<Spectrum, AudioError> {
         }
     }
 
-    Ok(finish(power, frames, rate, clips.finish()))
+    Ok(finish(power, frames, rate, clips.finish(), meter.finish()))
 }
 
 /// Adds one block's power to the running total, unless it is silence.
@@ -658,7 +667,13 @@ fn accumulate(block: &[f32], window: &[f32], power: &mut [f64], frames: &mut usi
 }
 
 /// Turns accumulated power into a spectrum in dB relative to its own peak.
-fn finish(power: Vec<f64>, frames: usize, sample_rate: u32, clipping: Clipping) -> Spectrum {
+fn finish(
+    power: Vec<f64>,
+    frames: usize,
+    sample_rate: u32,
+    clipping: Clipping,
+    loudness: Loudness,
+) -> Spectrum {
     let bins_db = if frames == 0 {
         vec![-200.0; FFT_SIZE / 2]
     } else {
@@ -674,6 +689,7 @@ fn finish(power: Vec<f64>, frames: usize, sample_rate: u32, clipping: Clipping) 
         bins_db,
         frames,
         clipping,
+        loudness,
     }
 }
 

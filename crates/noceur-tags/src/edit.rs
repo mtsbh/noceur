@@ -960,6 +960,42 @@ mod tests {
         }
     }
 
+    /// Written through `custom`, ReplayGain lands in the field every player
+    /// reads it from: `TXXX:REPLAYGAIN_TRACK_GAIN` in ID3, the plain key in
+    /// Vorbis comments, the iTunes freeform atom in MP4.
+    #[test]
+    fn replay_gain_round_trips_in_every_tag_system() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments, TagType::Mp4Ilst] {
+            let mut t = Tag::new(kind);
+            round_trip(
+                &mut t,
+                &Edit {
+                    custom: vec![
+                        (
+                            "REPLAYGAIN_TRACK_GAIN".into(),
+                            Change::Set("-8.50 dB".into()),
+                        ),
+                        (
+                            "REPLAYGAIN_TRACK_PEAK".into(),
+                            Change::Set("0.988553".into()),
+                        ),
+                    ],
+                    ..Default::default()
+                },
+            );
+            assert_eq!(
+                t.get_string(&ItemKey::ReplayGainTrackGain),
+                Some("-8.50 dB"),
+                "{kind:?}"
+            );
+            assert_eq!(
+                t.get_string(&ItemKey::ReplayGainTrackPeak),
+                Some("0.988553"),
+                "{kind:?}"
+            );
+        }
+    }
+
     /// A bare name is not a valid MP4 atom and is dropped on save, so custom
     /// fields go where foobar2000, Mp3tag and DJ software look for them.
     #[test]

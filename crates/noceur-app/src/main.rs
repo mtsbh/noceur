@@ -166,6 +166,7 @@ fn main() {
             config::preserve_dates,
             config::set_preserve_dates,
             quality::analyse_quality,
+            quality::write_replay_gain,
             analysis::analyse_tracks,
             background::analysis_settings,
             background::set_analysis_settings,

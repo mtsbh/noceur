@@ -358,6 +358,7 @@ pub fn reprobe(db: &Db, file_id: i64) -> Result<(), IndexError> {
         if from != to {
             carry_envelope(db, from, to)?;
             crate::analysis::carry(db, from, to)?;
+            crate::analysis::carry_loudness(db, from, to)?;
         }
     }
     Ok(())

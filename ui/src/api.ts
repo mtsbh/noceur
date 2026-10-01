@@ -41,6 +41,10 @@ export type RowDisplay = {
   bpmDiffers: boolean;
   /** The file has a key tag and it is not the one measured. */
   keyDiffers: boolean;
+  /** Integrated loudness, `-9.4`; empty until Check quality has measured it. */
+  lufs: string;
+  /** True peak in dBTP, `+0.6`, or `≥ +0.5` when only a lower bound. */
+  truePeak: string;
 };
 
 /** The cover-art sizes the backend will render. */
@@ -123,6 +127,8 @@ export type SortColumn =
   | "bitDepth"
   | "codec"
   | "rating"
+  | "lufs"
+  | "truePeak"
   | "size"
   | "modified";
 
@@ -703,6 +709,12 @@ export type QualityRow = {
   clipPercent: number;
   /** Longest unbroken run of full-scale samples. */
   clipRun: number;
+  /** Integrated loudness, LUFS. */
+  lufs: number | null;
+  /** True peak, dBTP. */
+  truePeak: number | null;
+  /** The true peak is at least this: a lossy decode clipped at full scale. */
+  peakFloor: boolean;
   reason: string;
 };
 
@@ -716,6 +728,11 @@ export type QualityRow = {
  */
 export function analyseQuality(fileIds: number[]): Promise<QualityRow[]> {
   return invoke<QualityRow[]>("analyse_quality", { fileIds });
+}
+
+/** Writes ReplayGain track gain (to -18 LUFS) and peak from what was measured. */
+export function writeReplayGain(fileIds: number[]): Promise<WriteReport> {
+  return invoke<WriteReport>("write_replay_gain", { fileIds });
 }
 
 /** What one file measured at, beside what it is tagged with. Keys are Camelot. */
