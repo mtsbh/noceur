@@ -206,6 +206,13 @@ pub struct ListRow {
     pub detected_key: Option<i64>,
 }
 
+/// Marks the copy a background tag write fills before it replaces the track:
+/// `Track.noceur-writing.wav`. Indexed, so a leftover can be found and swept,
+/// but never listed — half a copy is not a track anyone should play.
+pub const WRITING: &str = ".noceur-writing";
+
+const HIDE_WRITING: &str = " AND instr(f.name, '.noceur-writing') = 0";
+
 const SELECT: &str = "
 SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        ct.artist, ct.title, ct.album, ct.bpm_tag, ct.key_tag, ct.key_norm,
@@ -224,7 +231,7 @@ WHERE f.dir_id = ?1";
 /// never reversed by `desc`.
 pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, IndexError> {
     let sql = format!(
-        "{SELECT}{audio}
+        "{SELECT}{audio}{HIDE_WRITING}
          ORDER BY f.kind ASC, {col} {dir}, f.name COLLATE NOCASE ASC
          LIMIT ?2 OFFSET ?3",
         audio = opts.show.sql(),
@@ -279,7 +286,7 @@ pub fn names_containing(db: &Db, dir_id: i64, needle: &str) -> Result<Vec<String
 /// Total rows in the view, ignoring `offset` and `limit`.
 pub fn count(db: &Db, dir_id: i64, opts: ListOptions) -> Result<i64, IndexError> {
     let sql = format!(
-        "SELECT COUNT(*) FROM file f WHERE f.dir_id = ?1{}",
+        "SELECT COUNT(*) FROM file f WHERE f.dir_id = ?1{}{HIDE_WRITING}",
         opts.show.sql()
     );
     Ok(db.conn().query_row(&sql, [dir_id], |r| r.get(0))?)
@@ -561,6 +568,26 @@ mod tests {
         assert!(names_containing(&db, dir_id, ".noceur-writing")
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn copies_being_written_are_indexed_but_not_listed() {
+        let (db, d, _) = setup();
+        fs::copy(
+            d.path().join("a.wav"),
+            d.path().join("a.noceur-writing.wav"),
+        )
+        .unwrap();
+        let vol = volume::upsert(&db, "u", VolumeKind::Fixed, "t", "/").unwrap();
+        let dir_id = scan_dir(&db, vol, d.path()).unwrap();
+
+        assert_eq!(
+            names_containing(&db, dir_id, WRITING).unwrap(),
+            ["a.noceur-writing.wav"]
+        );
+        let rows = list(&db, dir_id, ListOptions::default()).unwrap();
+        assert!(!names(&rows).contains(&"a.noceur-writing.wav"));
+        assert_eq!(count(&db, dir_id, ListOptions::default()).unwrap(), 5);
     }
 
     #[test]

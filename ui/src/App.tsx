@@ -31,6 +31,10 @@ import {
   undoRename,
   previewTool,
   applyCleanup,
+  previewRename,
+  applyRename,
+  previewFromName,
+  applyFromName,
   clipboardPut,
   clipboardFiles,
   clipboardRelease,
@@ -867,6 +871,54 @@ export default function App() {
     }
   }
 
+  /**
+   * Alt+F1: file names from the tags, as `Artist - Title`, at once.
+   * Like Clean up, no dialog — Ctrl+Z puts the names back.
+   */
+  async function nameFromTags(ids: number[]) {
+    if (ids.length === 0) return;
+    try {
+      const rows = await previewRename(ids, "%artist% - %title%");
+      const go = rows.filter((r) => !r.unchanged && !r.problem);
+      const skipped = rows.filter((r) => r.problem).length;
+      const tail = skipped ? ` · ${skipped} skipped` : "";
+      if (go.length === 0) {
+        flash(skipped ? `Nothing renamed${tail}` : "Names already match");
+        return;
+      }
+      const done = await applyRename(go.map((r) => [r.fileId, r.to] as [number, string]));
+      refetchAll();
+      const failed = done.failures.length ? ` · ${done.failures.length} failed` : "";
+      flash(`Renamed ${done.written}${failed}${tail} · Ctrl+Z to undo`);
+    } catch (e) {
+      flash(String(e));
+    }
+  }
+
+  /**
+   * Alt+F2: artist and title from `Artist - Title` file names, at once.
+   * Names that do not fit are left alone and counted.
+   */
+  async function tagsFromName(ids: number[]) {
+    if (ids.length === 0) return;
+    const pattern = "%artist% - %title%";
+    try {
+      const rows = await previewFromName(ids, pattern);
+      const skipped = rows.filter((r) => r.problem).length;
+      const tail = skipped ? ` · ${skipped} skipped` : "";
+      if (rows.length === skipped) {
+        flash(`Nothing tagged${tail}`);
+        return;
+      }
+      const done = await applyFromName(ids, pattern);
+      refetchAll();
+      const failed = done.failures.length ? ` · ${done.failures.length} failed` : "";
+      flash(`Tagged ${done.written}${failed}${tail}`);
+    } catch (e) {
+      flash(String(e));
+    }
+  }
+
   /** Runs a user-defined button on these files, through the preview if it writes. */
   function runButton(action: Action, ids: number[]) {
     if (actionWrites(action.kind)) {
@@ -1521,6 +1573,18 @@ export default function App() {
   createEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
+
+      // Alt+F1 names files from the tags, Alt+F2 tags them from their names,
+      // Alt+F3 finds metadata — the three converters a folder goes through.
+      if (e.altKey && !mod && !e.shiftKey && ["F1", "F2", "F3"].includes(e.key)) {
+        e.preventDefault();
+        const ids = audioSelection();
+        if (ids.length === 0) return;
+        if (e.key === "F1") void nameFromTags(ids);
+        else if (e.key === "F2") void tagsFromName(ids);
+        else runAction("match", ids);
+        return;
+      }
 
       // F1, or ? outside a text box, lists every shortcut.
       if (e.key === "F1" || (e.key === "?" && !mod && !isTyping(e))) {

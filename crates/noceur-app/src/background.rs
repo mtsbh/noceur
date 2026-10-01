@@ -98,8 +98,8 @@ pub struct Background {
 }
 
 /// Marks the copy [`write_beside`] writes into, before the extension:
-/// `Track.noceur-writing.wav`.
-pub const WRITING: &str = ".noceur-writing";
+/// `Track.noceur-writing.wav`. Listings leave these out.
+pub use noceur_index::query::WRITING;
 
 #[derive(Default)]
 struct Queue {

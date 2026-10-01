@@ -86,12 +86,10 @@ actions stay for anyone who wants title formatting.
       Own buttons (Settings → Actions) gain Fill if empty, Remove text, Remove brackets at the
       end and Cut N, all plain boxes; the expression language gains Mp3tag's `$regexp`,
       `$cutLeft`, `$cutRight`, `$eql`/`$neql` and `%_filename%`, so pasted Mp3tag strings run.
-- [ ] **10. Converters on shortcuts, as in Mp3tag.** `Shift+1`–`Shift+5` (ignored while typing
-      in a field; `Alt` stays free for AutoHotkey and ratings): Tag → File name (the rename
-      dialog), File name → Tag (tags from name), File name → File name (clean file name),
-      Text file → Tag (paste a tracklist, one line per selected file) and Tag → Tag (fill one
-      field from others, e.g. title from `%artist% - %title%`). Each opens on the last
-      pattern used, so a folder is two keys and Enter.
+- [x] **10. Converters on shortcuts.** One key each, no dialog: `Alt+F1` names the selected
+      files `Artist - Title` from their tags (Ctrl+Z undoes), `Alt+F2` fills artist and title
+      from `Artist - Title` file names (names that do not fit are skipped and counted), and
+      `Alt+F3` opens Find metadata.
 
 ## Browsing
 

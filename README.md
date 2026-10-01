@@ -97,6 +97,9 @@ Noceur, on your `PATH`, or set its path in Settings → Files.
 | `Space` | Play / pause |
 | Double-click | Open folder / play track |
 | `F2` | Edit metadata |
+| `Alt+F1` | File name from tags (`Artist - Title`) |
+| `Alt+F2` | Tags from file name (`Artist - Title`) |
+| `Alt+F3` | Find metadata |
 | `Del` | Move to Recycle Bin |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste files |
 | `Ctrl+Z` | Undo last rename |
