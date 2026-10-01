@@ -169,6 +169,13 @@ pub fn fields_of<'a>(meta: &noceur_tags::TrackMeta, path: &Path) -> Fields<'a> {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default(),
     );
+    // Mp3tag's name for the same thing, so its expressions run unchanged.
+    f.insert(
+        "_filename",
+        path.file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    );
     f.insert(
         "filename_ext",
         path.file_name()
@@ -843,6 +850,36 @@ mod tests {
         assert_eq!(
             run("$ifgreater($strchr(%title%,'('),0,$trim($left(%title%,$sub($strchr(%title%,'('),1))),%title%)"),
             "Rev8617"
+        );
+    }
+
+    /// The expressions the builder writes for its plainer operations, exactly
+    /// as `recipes.ts` produces them.
+    #[test]
+    fn the_builder_expressions_do_what_they_say() {
+        let path = Path::new(r"E:\music\01 Skee Mask - Rev8617 xyz.flac");
+        let mut m = meta();
+        m.title = Some("Rev8617 (ORIGINAL MIX) [Ilian Tape]".into());
+        m.album_artist = None;
+        let f = fields_of(&m, path);
+        let run = |src: &str| Script::parse(src).unwrap().run(&f);
+
+        assert_eq!(run("$if2(%albumartist%,%artist%)"), "Skee Mask");
+        assert_eq!(
+            run(r"$trim($regexp(%title%,'\s*\(Original Mix\)',,1))"),
+            "Rev8617 [Ilian Tape]"
+        );
+        assert_eq!(
+            run(r"$trim($regexp(%title%,'\s*[(\[][^()\[\]]*[)\]]\s*$',))"),
+            "Rev8617 (ORIGINAL MIX)"
+        );
+        assert_eq!(
+            run("$trim($cutLeft(%filename%,3))"),
+            "Skee Mask - Rev8617 xyz"
+        );
+        assert_eq!(
+            run("$trim($cutRight(%_filename%,4))"),
+            "01 Skee Mask - Rev8617"
         );
     }
 

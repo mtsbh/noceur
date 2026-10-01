@@ -107,6 +107,9 @@ pub struct Edit {
     /// ID3 and as a plain comment key elsewhere, which is where every other tag
     /// editor looks for them.
     pub custom: Vec<(String, Change)>,
+    /// Cuts a full date such as `2016-03-04` down to its year. Separate from
+    /// `year` because setting the year keeps the month and day after it.
+    pub date_to_year: bool,
 }
 
 impl Edit {
@@ -312,6 +315,12 @@ pub fn apply(
         Some(Some(v)) => tag.set_year(v),
         Some(None) => tag.remove_year(),
         None => {}
+    }
+    if edit.date_to_year {
+        if let Some(y) = tag.year() {
+            tag.remove_year();
+            tag.set_year(y);
+        }
     }
     match track_no {
         Some(Some(v)) => tag.set_track(v),
@@ -604,6 +613,23 @@ mod tests {
         f.extend_from_slice(&data_len.to_le_bytes());
         f.extend_from_slice(&vec![0u8; data_len as usize]);
         std::fs::write(path, f).unwrap();
+    }
+
+    #[test]
+    fn a_full_date_can_be_cut_to_its_year() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments, TagType::Mp4Ilst] {
+            let mut t = Tag::new(kind);
+            t.insert_text(ItemKey::RecordingDate, "2016-03-04".into());
+            let meta = round_trip(
+                &mut t,
+                &Edit {
+                    date_to_year: true,
+                    ..Default::default()
+                },
+            );
+            assert_eq!(meta.date.as_deref(), Some("2016"), "{kind:?}");
+            assert_eq!(meta.year, Some(2016), "{kind:?}");
+        }
     }
 
     #[test]

@@ -35,6 +35,7 @@ import {
   type Clip,
   folderIconUrl,
   type Action,
+  type ToolId,
   type Transport as TransportState,
   type ArtSize,
   type SortColumn,
@@ -50,12 +51,12 @@ import CoverPicker from "./CoverPicker";
 import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
 import Renamer from "./Renamer";
-import Cleanup from "./Cleanup";
 import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
 import Quality, { startQuality, type QualityRun } from "./Quality";
 import Analysis from "./Analysis";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
+import Tools, { TOOLS, type Tab as ToolTab } from "./Tools";
 import Duplicates from "./Duplicates";
 import Converter from "./Converter";
 import NewFolder from "./NewFolder";
@@ -503,13 +504,17 @@ export default function App() {
     null,
   );
   const [actionMenu, setActionMenu] = createSignal<{ x: number; y: number } | null>(null);
+  /** A built-in tag tool open on a selection. */
+  const [tooling, setTooling] = createSignal<{
+    start: ToolId | ToolTab;
+    fileIds: number[];
+  } | null>(null);
 
   /** Whether the spectrogram strip is showing. */
   const [spekOpen, setSpekOpen] = createSignal(false);
   const [spek, setSpek] = createSignal<Uint8Array>(new Uint8Array());
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
-  const [cleaning, setCleaning] = createSignal<number[] | null>(null);
   /** The folder a new folder is being named in, or null. */
   const [newFolderIn, setNewFolderIn] = createSignal<string | null>(null);
   const [showKeys, setShowKeys] = createSignal(false);
@@ -626,7 +631,7 @@ export default function App() {
         setRenaming(ids);
         break;
       case "clean":
-        setCleaning(ids);
+        setTooling({ start: "clean-name", fileIds: ids });
         break;
       case "quality":
         checkQuality(ids);
@@ -831,26 +836,43 @@ export default function App() {
    * changes nothing and simply runs, because a dialog asking permission to do
    * what was just clicked is a dialog nobody reads.
    */
-  function buttonItems(): MenuItem[] {
-    const ids = audioSelection();
-    if (buttons().length === 0) {
-      return [
-        {
-          kind: "item",
-          label: "No buttons yet — add them in Settings",
-          disabled: true,
-          run: () => {},
-        },
-      ];
-    }
-
+  function buttonItems(ids: number[] = audioSelection()): MenuItem[] {
     return buttons().map((action) => ({
       kind: "item" as const,
-      label: ids.length > 1 ? `${action.label} — ${ids.length} tracks` : action.label,
+      label: action.label,
       icon: actionIcon(action.icon),
       disabled: ids.length === 0,
       run: () => runButton(action, ids),
     }));
+  }
+
+  /**
+   * The Tools menu: the built-in tag tools, then the user's own buttons, then
+   * the way to make more. The same list on the toolbar and on right-click.
+   */
+  function toolItems(ids: number[] = audioSelection()): MenuItem[] {
+    const none = ids.length === 0;
+    return [
+      ...TOOLS.flatMap<MenuItem>((t, i) => [
+        ...(i > 0 && TOOLS[i - 1].tab !== t.tab ? [{ kind: "separator" } as MenuItem] : []),
+        {
+          kind: "item",
+          label: t.id === "cut-start" ? `${t.label}…` : t.label,
+          disabled: none,
+          run: () => setTooling({ start: t.id, fileIds: ids }),
+        },
+      ]),
+      {
+        kind: "item",
+        label: "Move into folders…",
+        disabled: none,
+        run: () => setTooling({ start: "move", fileIds: ids }),
+      },
+      { kind: "separator" },
+      ...buttonItems(ids),
+      ...(buttons().length ? [{ kind: "separator" } as MenuItem] : []),
+      { kind: "item", label: "Make a tool…", run: () => settingsAt("actions") },
+    ];
   }
 
   /** Runs a user-defined button on these files, through the preview if it writes. */
@@ -989,7 +1011,7 @@ export default function App() {
       },
       {
         id: "functions",
-        label: "Functions",
+        label: "Tools",
         icon: BoltIcon,
         on: () => Boolean(actionMenu()),
         run: (e) => {
@@ -1377,7 +1399,15 @@ export default function App() {
         label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
         icon: BroomIcon,
         disabled: audio,
-        run: () => setCleaning(ids),
+        run: () => setTooling({ start: "clean-name", fileIds: ids }),
+      },
+      {
+        kind: "item",
+        label: "Tools",
+        icon: BoltIcon,
+        disabled: audio,
+        run: () => {},
+        children: toolItems(ids),
       },
       {
         kind: "item",
@@ -1869,19 +1899,24 @@ export default function App() {
         )}
       </Show>
 
-      <Show when={cleaning()}>
-        {(ids) => (
-          <Cleanup fileIds={ids()} onClose={() => setCleaning(null)} onChanged={refetchAll} />
-        )}
-      </Show>
-
       <Show when={actionMenu()}>
         <Menu
           x={actionMenu()!.x}
           y={actionMenu()!.y}
-          items={buttonItems()}
+          items={toolItems()}
           onClose={() => setActionMenu(null)}
         />
+      </Show>
+
+      <Show when={tooling()}>
+        {(t) => (
+          <Tools
+            start={t().start}
+            fileIds={t().fileIds}
+            onClose={() => setTooling(null)}
+            onDone={refetchAll}
+          />
+        )}
       </Show>
 
       <Show when={running()}>

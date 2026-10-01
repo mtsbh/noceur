@@ -30,6 +30,7 @@ mod shellmenu;
 mod state;
 mod tagedit;
 mod timestamp;
+mod tools;
 mod undo;
 
 use state::AppState;
@@ -175,9 +176,8 @@ fn main() {
             actions::set_actions,
             actions::preview_action,
             actions::run_action,
-            cleanup::cleanup_rules,
-            cleanup::preview_cleanup,
             cleanup::apply_cleanup,
+            tools::preview_tool,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

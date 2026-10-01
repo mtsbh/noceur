@@ -875,9 +875,6 @@ export function runAction(
   return invoke<WriteReport>("run_action", { action, fileIds });
 }
 
-/** One cleanup rule, as the back end describes it. */
-export type CleanRule = { slug: string; label: string; hint: string };
-
 /** One tag field a cleanup would change. */
 export type CleanField = {
   field: string;
@@ -904,34 +901,37 @@ export type CleanApply = {
   fields: [string, string][];
 };
 
-/**
- * The rules this build knows about.
- *
- * Fetched rather than listed here, so what is on screen cannot drift from what
- * actually runs.
- */
-export function cleanupRules(): Promise<CleanRule[]> {
-  return invoke<CleanRule[]>("cleanup_rules");
-}
-
-/** Works out what the rules would do to the selection. Changes nothing. */
-export function previewCleanup(
-  fileIds: number[],
-  rules: string[],
-  name: boolean,
-  tags: boolean,
-): Promise<CleanPreview[]> {
-  return invoke<CleanPreview[]>("preview_cleanup", {
-    fileIds,
-    rules,
-    name,
-    tags,
-  });
-}
-
 /** Applies exactly what the preview showed. */
 export function applyCleanup(items: CleanApply[]): Promise<WriteReport> {
   return invoke<WriteReport>("apply_cleanup", { items });
+}
+
+// ── Tag tools ──────────────────────────────────────────────────────────────
+
+/** A built-in one-click tool. Names match `tools::Tool` in the back end. */
+export type ToolId =
+  | "clean-name"
+  | "album-artist"
+  | "artist-into-title"
+  | "artist-out-of-title"
+  | "remove-original"
+  | "trailing-brackets"
+  | "year-only"
+  | "clean-tags"
+  | "tidy-feat"
+  | "cut-start"
+  | "cut-end";
+
+/**
+ * Works out what a tool would do. Changes nothing; the result is applied with
+ * `applyCleanup`, exactly as a cleanup is.
+ */
+export function previewTool(
+  tool: ToolId,
+  count: number,
+  fileIds: number[],
+): Promise<CleanPreview[]> {
+  return invoke<CleanPreview[]>("preview_tool", { tool, count, fileIds });
 }
 
 // ── Converter ──────────────────────────────────────────────────────────────

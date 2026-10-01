@@ -30,48 +30,6 @@ pub enum Rule {
     Spacing,
 }
 
-/// Every rule, with the text the interface shows for it.
-///
-/// One list rather than one per language: a label that lives in the front end
-/// drifts from what the rule does the first time either of them changes.
-pub const CATALOGUE: &[(&str, &str, &str)] = &[
-    (
-        "mix",
-        "Remove (Original Mix)",
-        "Also (Original), (Original Version), and the same words after a dash. Every other mix and edit is left alone.",
-    ),
-    (
-        "track-number",
-        "Remove leading track number",
-        "01, 01., 01 -, (01). A single digit only goes when punctuation follows it, so 2 Bad Mice survives.",
-    ),
-    (
-        "underscores",
-        "Underscores to spaces",
-        "Every _ becomes a space.",
-    ),
-    (
-        "dots",
-        "Dots to spaces",
-        "Only for names that use dots instead of spaces, as scene releases do. A name that already has spaces is left alone.",
-    ),
-    (
-        "junk",
-        "Remove site names and bitrates",
-        "www.something.com, [320kbps], (Official Video), (HQ) and the rest of what a download picks up.",
-    ),
-    (
-        "feat",
-        "Tidy featuring",
-        "ft, Ft., FEAT and featuring all become feat.",
-    ),
-    (
-        "spacing",
-        "Tidy spacing",
-        "Doubled spaces, dashes missing a space on one side, and punctuation left dangling.",
-    ),
-];
-
 impl Rule {
     /// The name this rule is known by across the wire.
     pub fn slug(self) -> &'static str {
@@ -145,6 +103,70 @@ pub fn clean(text: &str, rules: &[Rule]) -> String {
     // Always last, and always run: every rule above takes something out of the
     // middle of a name and leaves the spaces and brackets that surrounded it.
     tidy_spacing(&s)
+}
+
+/// A file name reduced to `Artist - Title`.
+///
+/// Every rule that is safe on a name without asking, plus what only a name
+/// collects: a track number at the end as well as the front, dashes doubled or
+/// typed as `–`, and symbols a download site wrapped round it. This is the
+/// Clean up button: one click, every safe rule, the name only.
+pub fn clean_file_name(stem: &str) -> String {
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    // Runs of dashes that separate (a space on at least one side) become one.
+    // `Lo-Fi` has none and is left alone.
+    static SEPARATORS: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?:\s+[-–—]+\s*|\s*[-–—]+\s+)(?:[-–—]+\s*)*").unwrap());
+    // `Title - 03`, `Title (03)`, `Title [03]`.
+    static TRAILING_NUMBER: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?:\s+-\s+\d{1,3}|\s*[(\[]\d{1,3}[)\]])$").unwrap());
+
+    let mut s = stem.replace('_', " ");
+    // Guarded as the rule is: only a name with no spaces is a scene name.
+    if !s.contains(' ') {
+        s = s.replace('.', " ");
+    }
+    s = SEPARATORS.replace_all(&s, " - ").into_owned();
+    s = trim_symbols(&s).to_string();
+    s = strip_track_number(&s);
+    s = strip_junk(&s);
+    s = strip_original(&s);
+    s = TRAILING_NUMBER.replace(s.trim_end(), "").into_owned();
+    s = tidy_spacing(&s);
+    trim_symbols(&s).to_string()
+}
+
+/// Strips what is neither a word nor a closing mark from both ends: the `-`
+/// left by a removed number, `★`, `@`, `#`, a dangling `(`.
+fn trim_symbols(text: &str) -> &str {
+    text.trim_start_matches(|c: char| !c.is_alphanumeric() && !"([{'\"".contains(c))
+        .trim_end_matches(|c: char| !c.is_alphanumeric() && !")]}'\"!?.".contains(c))
+}
+
+/// Takes the last bracketed group off the end: `Title (Extended Mix)` → `Title`.
+///
+/// Only one, and only at the very end. `Title (feat. X) [Label]` loses the label
+/// and keeps the feature, which is what running it again is for.
+pub fn strip_trailing_brackets(text: &str) -> String {
+    let trimmed = text.trim_end();
+    match groups(trimmed).last() {
+        Some((start, end, _)) if *end == trimmed.len() && *start > 0 => {
+            tidy_spacing(&trimmed[..*start])
+        }
+        _ => text.to_string(),
+    }
+}
+
+/// Splits `Artist - Title` at the first spaced dash.
+///
+/// The first, because titles carry dashes (`Rev8617 - Edit`) far more often
+/// than artist names do. Nothing comes back when either side would be empty.
+pub fn split_artist_title(text: &str) -> Option<(String, String)> {
+    let (artist, title) = text.split_once(" - ")?;
+    let (artist, title) = (artist.trim(), title.trim());
+    (!artist.is_empty() && !title.is_empty()).then(|| (artist.to_string(), title.to_string()))
 }
 
 /// Collapses whitespace, evens out the dashes and clears the debris.
@@ -565,13 +587,63 @@ mod tests {
         assert_eq!(run("  01_Weird   name  ", &[]), "  01_Weird   name  ");
     }
 
+    // ── Tools ─────────────────────────────────────────────────────────────
+
     #[test]
-    fn every_catalogue_entry_is_a_real_rule() {
-        for (slug, label, hint) in CATALOGUE {
-            let rule = Rule::from_slug(slug).unwrap_or_else(|| panic!("no rule for {slug}"));
-            assert_eq!(rule.slug(), *slug);
-            assert!(!label.is_empty() && !hint.is_empty(), "{slug}");
+    fn a_file_name_comes_down_to_artist_and_title() {
+        for (from, to) in [
+            ("01 - Skee Mask - Rev8617", "Skee Mask - Rev8617"),
+            ("01. Skee Mask - Rev8617", "Skee Mask - Rev8617"),
+            ("Skee Mask - Rev8617 - 03", "Skee Mask - Rev8617"),
+            ("Skee Mask - Rev8617 [03]", "Skee Mask - Rev8617"),
+            ("Skee_Mask_-_Rev8617", "Skee Mask - Rev8617"),
+            ("Skee Mask -- Rev8617", "Skee Mask - Rev8617"),
+            ("Skee Mask – Rev8617", "Skee Mask - Rev8617"),
+            ("★ Skee Mask - Rev8617 ★", "Skee Mask - Rev8617"),
+            ("- Skee Mask - Rev8617 -", "Skee Mask - Rev8617"),
+            (
+                "Skee Mask  -  Rev8617 [www.site.com]",
+                "Skee Mask - Rev8617",
+            ),
+            ("Skee Mask - Rev8617 (Original Mix)", "Skee Mask - Rev8617"),
+            (
+                "01_Skee_Mask_-_Rev8617_(Original_Mix)",
+                "Skee Mask - Rev8617",
+            ),
+            ("Skee.Mask-Rev8617", "Skee Mask-Rev8617"),
+            (
+                "Skee Mask - Rev8617 (Extended Mix)",
+                "Skee Mask - Rev8617 (Extended Mix)",
+            ),
+            ("2 Bad Mice - Bombscare", "2 Bad Mice - Bombscare"),
+            ("Lo-Fi Artist - Hi-Fi Title", "Lo-Fi Artist - Hi-Fi Title"),
+        ] {
+            assert_eq!(clean_file_name(from), to, "{from}");
         }
+    }
+
+    #[test]
+    fn only_the_last_bracket_at_the_end_goes() {
+        assert_eq!(strip_trailing_brackets("Rev8617 (Extended Mix)"), "Rev8617");
+        assert_eq!(strip_trailing_brackets("Rev8617 [Ilian Tape]"), "Rev8617");
+        assert_eq!(
+            strip_trailing_brackets("Rev8617 (feat. X) [Label]"),
+            "Rev8617 (feat. X)"
+        );
+        assert_eq!(strip_trailing_brackets("Rev (Mix) 8617"), "Rev (Mix) 8617");
+        // A title that is nothing but brackets is left whole.
+        assert_eq!(strip_trailing_brackets("(Untitled)"), "(Untitled)");
+    }
+
+    #[test]
+    fn artist_and_title_split_at_the_first_dash() {
+        assert_eq!(
+            split_artist_title("Skee Mask - Rev8617 - Edit"),
+            Some(("Skee Mask".into(), "Rev8617 - Edit".into()))
+        );
+        assert_eq!(split_artist_title("Rev8617"), None);
+        assert_eq!(split_artist_title(" - Rev8617"), None);
+        assert_eq!(split_artist_title("Lo-Fi"), None);
     }
 
     #[test]

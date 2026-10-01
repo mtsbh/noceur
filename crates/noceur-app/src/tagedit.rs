@@ -106,6 +106,7 @@ pub async fn write_tags(
                 .into_iter()
                 .map(|(name, value)| (name, noceur_tags::Change::from_input(Some(value))))
                 .collect(),
+            date_to_year: false,
         };
         if change.is_empty() {
             return Ok(WriteReport::default());

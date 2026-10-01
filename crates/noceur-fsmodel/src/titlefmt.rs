@@ -19,11 +19,13 @@
 //! $ifgreater($strchr(%title%,'('),0,$left(%title%,$sub($strchr(%title%,'('),1)),%title%)
 //! ```
 //!
-//! What is not here, and is not planned: variables (`$puts`/`$get`), the
-//! playback and file-info fields that only mean something inside a player, and
-//! regular expressions. `$replace` is literal, exactly as it is in foobar2000 —
-//! an expression that looks like it takes a pattern is a mistake worth catching
-//! early rather than a feature worth inventing.
+//! Three of Mp3tag's functions are here too, because the expressions people
+//! bring from it lean on them: `$regexp(x,pattern,replacement[,ignorecase])`,
+//! `$cutLeft(x,n)` and `$cutRight(x,n)`. `$replace` stays literal, exactly as it
+//! is in foobar2000; a pattern is only ever a pattern inside `$regexp`.
+//!
+//! What is not here, and is not planned: variables (`$puts`/`$get`) and the
+//! playback and file-info fields that only mean something inside a player.
 
 use std::collections::HashMap;
 
@@ -91,6 +93,8 @@ pub enum ScriptError {
     UnknownFunction(String),
     #[error("${0} takes {1}, not {2}")]
     WrongArity(String, &'static str, usize),
+    #[error("$regexp pattern does not parse: {0}")]
+    BadPattern(String),
 }
 
 impl Script {
@@ -156,6 +160,15 @@ fn check(nodes: &[Node]) -> Result<(), ScriptError> {
                         arity.describe(),
                         args.len(),
                     ));
+                }
+                // A pattern written out in full is compiled now, so a typo in it
+                // is reported when the action is saved. One built from fields
+                // can only be checked when it runs.
+                if name == "regexp" {
+                    if let [Node::Literal(pattern)] = args[1].as_slice() {
+                        pattern_of(pattern, false)
+                            .map_err(|e| ScriptError::BadPattern(e.to_string()))?;
+                    }
                 }
                 for arg in args {
                     check(arg)?;
@@ -260,6 +273,27 @@ fn parse_until(chars: &mut Chars, stop: Option<&[char]>) -> Result<Vec<Node>, Sc
                 nodes.push(Node::Call(name.to_lowercase(), args));
             }
 
+            // Inside a function's arguments a bracket that opens is text, and so
+            // is the one that closes it: `$regexp(%title%,^(A|The)\s,)` is how
+            // Mp3tag expressions are written, unquoted. Without counting them the
+            // first `)` would end the call halfway through the pattern.
+            '(' if stop.is_some_and(|s| s.contains(&')')) => {
+                text.push('(');
+                for node in parse_until(chars, Some(&[')']))? {
+                    match node {
+                        Node::Literal(inner) => text.push_str(&inner),
+                        other => {
+                            flush(&mut text, &mut nodes);
+                            nodes.push(other);
+                        }
+                    }
+                }
+                if chars.next() != Some(')') {
+                    return Err(ScriptError::UnclosedCall("(".into()));
+                }
+                text.push(')');
+            }
+
             '[' => {
                 let inner = parse_until(chars, Some(&[']']))?;
                 if chars.next() != Some(']') {
@@ -337,6 +371,7 @@ impl Arity {
             Arity::Exactly(3) => "three arguments",
             Arity::Exactly(4) => "four arguments",
             Arity::Between(2, 3) => "two or three arguments",
+            Arity::Between(3, 4) => "three or four arguments",
             Arity::AtLeast(1) => "at least one argument",
             Arity::AtLeast(2) => "at least two arguments",
             Arity::OddFrom(3) => "a value and then pairs of arguments",
@@ -350,14 +385,17 @@ fn arity_of(name: &str) -> Option<Arity> {
         "upper" | "lower" | "caps" | "caps2" | "trim" | "len" | "num" | "abs" | "not" => {
             Arity::Exactly(1)
         }
-        "left" | "right" | "strchr" | "strrchr" | "repeat" => Arity::Exactly(2),
+        "left" | "right" | "strchr" | "strrchr" | "repeat" | "cutleft" | "cutright" => {
+            Arity::Exactly(2)
+        }
+        "regexp" => Arity::Between(3, 4),
         "substr" | "insert" => Arity::Exactly(3),
         "replace" => Arity::OddFrom(3),
         "if" => Arity::Between(2, 3),
         "if2" | "if3" => Arity::AtLeast(2),
         "ifequal" | "ifgreater" | "iflonger" => Arity::Exactly(4),
         "add" | "sub" | "mul" | "div" | "min" | "max" | "and" | "or" => Arity::AtLeast(1),
-        "meta" | "strstr" => Arity::Exactly(2),
+        "meta" | "strstr" | "eql" | "neql" => Arity::Exactly(2),
         "pad" | "padcut" => Arity::Exactly(2),
         _ => return None,
     })
@@ -438,6 +476,32 @@ fn call(name: &str, args: &[Vec<Node>], fields: &Fields) -> Value {
                 slice(&s, at, tail_len.max(0))
             ))
         }
+        // Mp3tag's: everything but the first or last n characters.
+        "cutleft" => {
+            let s = text(0);
+            let total = s.chars().count() as i64;
+            let n = number(1).clamp(0, total);
+            Value::known(slice(&s, n, total - n))
+        }
+        "cutright" => {
+            let s = text(0);
+            let total = s.chars().count() as i64;
+            let n = number(1).clamp(0, total);
+            Value::known(slice(&s, 0, total - n))
+        }
+
+        // Mp3tag's, with `$1` for a captured group. A pattern that will not
+        // compile leaves the value as it was: a field that only sometimes builds
+        // a bad pattern must not empty a tag.
+        "regexp" => {
+            let s = text(0);
+            let ignore_case = number(3) != 0;
+            match pattern_of(&text(1), ignore_case) {
+                Ok(re) => Value::known(re.replace_all(&s, text(2).as_str()).into_owned()),
+                Err(_) => Value::known(s),
+            }
+        }
+
         "repeat" => Value::known(text(0).repeat(number(1).clamp(0, 4096) as usize)),
         "pad" => {
             let s = text(0);
@@ -472,6 +536,12 @@ fn call(name: &str, args: &[Vec<Node>], fields: &Fields) -> Value {
             });
             Value::known(total.to_string())
         }
+
+        // Mp3tag's text comparisons, as conditions for `$if`.
+        "eql" | "neql" => Value {
+            text: String::new(),
+            found: (text(0) == text(1)) == (name == "eql"),
+        },
 
         "not" => {
             let v = eval(&args[0], fields);
@@ -531,6 +601,56 @@ fn call(name: &str, args: &[Vec<Node>], fields: &Fields) -> Value {
         // Unreachable: `check` refuses unknown names at parse time.
         _ => Value::default(),
     }
+}
+
+/// Compiles a `$regexp` pattern, bounded so a pathological one cannot eat memory.
+fn pattern_of(pattern: &str, ignore_case: bool) -> Result<regex::Regex, regex::Error> {
+    regex::RegexBuilder::new(&perl_classes(pattern))
+        .case_insensitive(ignore_case)
+        .size_limit(1 << 20)
+        .build()
+}
+
+/// Escapes a `[` inside a character class.
+///
+/// Mp3tag's engine reads `[[{(]` as "one of `[`, `{`, `(`"; this one reads the
+/// inner `[` as the start of a nested class and refuses the pattern. `[:alpha:]`
+/// is left alone, since both engines agree on what that means.
+fn perl_classes(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let mut chars = pattern.chars().peekable();
+    let mut in_class = false;
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                out.push(c);
+                if let Some(next) = chars.next() {
+                    out.push(next);
+                }
+            }
+            '[' if in_class && chars.peek() != Some(&':') => out.push_str(r"\["),
+            '[' => {
+                in_class = true;
+                out.push(c);
+                // A `]` straight after the opening one, or after `^`, is a
+                // member rather than the end.
+                if chars.peek() == Some(&'^') {
+                    out.push(chars.next().unwrap_or('^'));
+                }
+                if chars.peek() == Some(&']') {
+                    chars.next();
+                    out.push_str(r"\]");
+                }
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Characters `n` from `from`, both counted in characters rather than bytes.
@@ -810,6 +930,84 @@ mod tests {
         // A regular expression would match everything; this must match nothing.
         assert_eq!(run("$replace(%x%,'.','-')", &f), "a-b");
         assert_eq!(run("$replace(%x%,'(,|&)',';')", &f), "a.b");
+    }
+
+    // ── Mp3tag's functions ────────────────────────────────────────────────
+
+    #[test]
+    fn cut_left_and_right_drop_characters_from_either_end() {
+        let f = fields(&[("_filename", "01 Skee Mask - Rev8617 xyz")]);
+        assert_eq!(
+            run("$cutLeft(%_filename%,3)", &f),
+            "Skee Mask - Rev8617 xyz"
+        );
+        assert_eq!(
+            run("$cutRight(%_filename%,4)", &f),
+            "01 Skee Mask - Rev8617"
+        );
+        assert_eq!(run("$cutLeft(%_filename%,99)", &f), "");
+        assert_eq!(
+            run("$cutRight(%_filename%,-2)", &f),
+            "01 Skee Mask - Rev8617 xyz"
+        );
+    }
+
+    #[test]
+    fn regexp_replaces_with_captured_groups() {
+        let f = fields(&[("title", "Rev8617 (Original Mix)")]);
+        assert_eq!(run(r"$regexp(%title%,'\s*\(.*\)$',)", &f), "Rev8617");
+        let f = fields(&[("_filename", "01 - Skee Mask - Rev8617")]);
+        assert_eq!(
+            run(r"$regexp(%_filename%,'^\s*\d+\s*-\s*',)", &f),
+            "Skee Mask - Rev8617"
+        );
+        let f = fields(&[("artist", "Mask, Skee")]);
+        assert_eq!(
+            run("$regexp(%artist%,'(.+), (.+)','$2 $1')", &f),
+            "Skee Mask"
+        );
+    }
+
+    #[test]
+    fn regexp_can_ignore_case() {
+        let f = fields(&[("title", "Rev8617 (ORIGINAL MIX)")]);
+        assert_eq!(
+            run(r"$regexp(%title%,' \(original mix\)',,1)", &f),
+            "Rev8617"
+        );
+        assert_eq!(
+            run(r"$regexp(%title%,' \(original mix\)',)", &f),
+            "Rev8617 (ORIGINAL MIX)"
+        );
+    }
+
+    /// Mp3tag expressions leave brackets in a pattern unquoted. Counted, they
+    /// stay part of the argument instead of ending the call.
+    #[test]
+    fn an_mp3tag_expression_runs_as_written() {
+        let expr = r"$if($eql($regexp(%title%,^(A|An|The|El|Los|La|Las|Le|Les|De)\s,),%title%),,$regexp(%title%,'^(.+?)\s(.+?)(\s[[{(].)$','$2, $1$3'))";
+        assert_eq!(Script::parse(expr).err(), None);
+        // An article, so the inner replace changes it and the else branch runs.
+        let f = fields(&[("title", "The Beatles (Remastered)")]);
+        assert_eq!(run(expr, &f), "The Beatles (Remastered)");
+        // No article: unchanged, equal, and the empty first branch is taken.
+        let f = fields(&[("title", "Rev8617")]);
+        assert_eq!(run(expr, &f), "");
+    }
+
+    #[test]
+    fn eql_compares_text() {
+        let f = fields(&[("a", "x"), ("b", "x"), ("c", "y")]);
+        assert_eq!(run("$if($eql(%a%,%b%),same,diff)", &f), "same");
+        assert_eq!(run("$if($neql(%a%,%c%),diff,same)", &f), "diff");
+    }
+
+    #[test]
+    fn a_broken_pattern_is_refused_when_saved() {
+        assert!(matches!(
+            Script::parse("$regexp(%title%,'(unclosed',)"),
+            Err(ScriptError::BadPattern(_))
+        ));
     }
 
     // ── What is refused, and when ─────────────────────────────────────────

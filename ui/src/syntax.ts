@@ -111,6 +111,15 @@ export const SYNTAX: HelpSection[] = [
       },
       { code: "$left(x,n)", about: "First n characters.", example: "$left(%album%,6)", result: "Random" },
       { code: "$right(x,n)", about: "Last n characters.", example: "$right(%album%,8)", result: "Memories" },
+      { code: "$cutLeft(x,n)", about: "All but the first n characters.", example: "$cutLeft(%album%,7)", result: "Access Memories" },
+      { code: "$cutRight(x,n)", about: "All but the last n characters.", example: "$cutRight(%album%,9)", result: "Random Access" },
+      {
+        code: "$regexp(x,pattern,with)",
+        about: "Mp3tag's pattern replace. $1 is the first group. Add ,1 to ignore case.",
+        example: "$regexp(%album%,'^Random ',)",
+        result: "Access Memories",
+      },
+      { code: "$eql(a,b)", about: "Present when a and b are the same text. $neql for different." },
       {
         code: "$substr(x,from,to)",
         about: "Characters from…to, counting from 1, both ends included.",

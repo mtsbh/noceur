@@ -70,18 +70,21 @@ What Mp3tag actions are used for, built in, so nobody has to write
 preview and, at most, a number or a template picked from a list. The custom
 actions stay for anyone who wants title formatting.
 
-- [ ] **9. One-click tag tools.** Each previews old → new and writes only what changes:
-      - **Clean file name**: leaves `Artist - Title.ext`. Drops track numbers at either end,
-        stray dashes, underscores, doubled spaces and download symbols.
-      - **Album artist from artist**: fills an empty album artist with the artist.
-      - **Artist into title** / **Artist out of title**: `Artist - Title` in the title field,
-        or split back out of it.
-      - **Remove "(Original Mix)"**: from title and album.
-      - **Remove brackets at the end**: a trailing `(…)` or `[…]` off the title.
-      - **Year only**: `2016-03-04` becomes `2016`.
-      - **Trim the file name**: the first or last N characters.
-      - **Move into folders**: a root and a pattern such as `%artist% - %album% [%year%]`,
-        picked from presets or typed, with the moves previewed.
+- [x] **9. One-click tag tools.** Each previews old → new and writes only what changes.
+      The broom (Clean up) is one click: the file name down to `Artist - Title`, without
+      track numbers at either end, `(Original Mix)`, underscores, site names, doubled or `–`
+      dashes and stray symbols. The rest are in the Tools dialog, on tabs by what they act on
+      (also listed in the Tools menu on the toolbar and on right-click):
+      - **Name**: Clean, Cut the first or last N characters.
+      - **Tags**: Clean (underscores, site names, spacing), Remove (Original Mix) from title
+        and album, Remove brackets at the end, Tidy featuring, Album artist from artist,
+        Artist into title, Artist out of title, Year only (`2016-03-04` → `2016`).
+      - **Move**: into folders from one Mp3tag-style path such as
+        `E:\music\%artist% - %album% '['%year%']'`, with presets; the file keeps its name.
+
+      Own buttons (Settings → Actions) gain Fill if empty, Remove text, Remove brackets at the
+      end and Cut N, all plain boxes; the expression language gains Mp3tag's `$regexp`,
+      `$cutLeft`, `$cutRight`, `$eql`/`$neql` and `%_filename%`, so pasted Mp3tag strings run.
 - [ ] **10. Converters on shortcuts, as in Mp3tag.** `Shift+1`–`Shift+5` (ignored while typing
       in a field; `Alt` stays free for AutoHotkey and ratings): Tag → File name (the rename
       dialog), File name → Tag (tags from name), File name → File name (clean file name),
@@ -152,5 +155,11 @@ downloads rather than CD rips.
       mid-write is cleared when its folder is next opened: deleted beside an intact original,
       renamed back if the original is gone. Dates are preserved as in
       any retag, creation date included.
+
+## Sidebar
+
+- [ ] **19. Maybe: a track sidebar.** Large album art with a tagging panel under it. Genres
+      (and perhaps artist, label) as links that list the library's tracks with that value, and
+      buttons that search the track on other sites. Shape not settled yet.
 
 When a step changes what the app can do, the README's feature list is updated with it.

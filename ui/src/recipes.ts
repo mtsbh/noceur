@@ -54,6 +54,11 @@ export function lit(text: string): string {
   return `'${text.replace(/'/g, "''")}'`;
 }
 
+/** Plain text as a pattern that matches only itself. */
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Everything up to the first `mark`, trimmed — or the whole value if it is not
  * there.
@@ -119,6 +124,50 @@ export const RECIPES: Recipe[] = [
     build: (f) => `$left(%${f}%,4)`,
   },
   {
+    id: "tag.fill",
+    label: "Fill if empty",
+    kind: "tag",
+    hint: "copies another field in, only where this one is blank",
+    field: true,
+    slots: [{ label: "From", placeholder: "artist", value: "artist" }],
+    build: (f, v) => `$if2(%${f}%,%${(v[0] || "artist").replace(/%/g, "")}%)`,
+  },
+  {
+    id: "tag.remove",
+    label: "Remove text",
+    kind: "tag",
+    hint: "takes it out wherever it appears, any case",
+    field: true,
+    slots: [{ label: "Text", placeholder: "(Original Mix)", value: "(Original Mix)" }],
+    build: (f, v) => `$trim($regexp(%${f}%,${lit(`\\s*${escapeRegex(v[0] ?? "")}`)},,1))`,
+  },
+  {
+    id: "tag.endbrackets",
+    label: "Remove brackets at the end",
+    kind: "tag",
+    hint: "Track (Extended Mix) → Track · only the last ( ) or [ ]",
+    field: true,
+    build: (f) => `$trim($regexp(%${f}%,${lit("\\s*[(\\[][^()\\[\\]]*[)\\]]\\s*$")},))`,
+  },
+  {
+    id: "tag.cutleft",
+    label: "Cut the first N characters",
+    kind: "tag",
+    hint: "01 Track → Track",
+    field: true,
+    slots: [{ label: "Cut", placeholder: "3", value: "3" }],
+    build: (f, v) => `$trim($cutLeft(%${f}%,${Number(v[0]) || 0}))`,
+  },
+  {
+    id: "tag.cutright",
+    label: "Cut the last N characters",
+    kind: "tag",
+    hint: "Track xyz → Track",
+    field: true,
+    slots: [{ label: "Cut", placeholder: "4", value: "4" }],
+    build: (f, v) => `$trim($cutRight(%${f}%,${Number(v[0]) || 0}))`,
+  },
+  {
     id: "tag.first",
     label: "Keep the first N characters",
     kind: "tag",
@@ -174,6 +223,22 @@ export const RECIPES: Recipe[] = [
     kind: "rename",
     hint: "keeps an album in its own order",
     build: () => `$num(%tracknumber%,2). %artist% - %title%`,
+  },
+  {
+    id: "rename.cutleft",
+    label: "Cut the first N characters",
+    kind: "rename",
+    hint: "01 Bicep - Glue.wav → Bicep - Glue.wav",
+    slots: [{ label: "Cut", placeholder: "3", value: "3" }],
+    build: (_f, v) => `$trim($cutLeft(%filename%,${Number(v[0]) || 0}))`,
+  },
+  {
+    id: "rename.cutright",
+    label: "Cut the last N characters",
+    kind: "rename",
+    hint: "Bicep - Glue xyz.wav → Bicep - Glue.wav",
+    slots: [{ label: "Cut", placeholder: "4", value: "4" }],
+    build: (_f, v) => `$trim($cutRight(%filename%,${Number(v[0]) || 0}))`,
   },
   {
     id: "rename.title",

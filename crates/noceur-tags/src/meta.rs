@@ -29,6 +29,8 @@ pub struct TrackMeta {
     pub album_artist: Option<String>,
     pub genre: Option<String>,
     pub year: Option<u32>,
+    /// The date exactly as tagged, which may be `2016-03-04` where `year` is 2016.
+    pub date: Option<String>,
     pub track_no: Option<u32>,
     pub comment: Option<String>,
     pub isrc: Option<String>,
@@ -131,6 +133,11 @@ pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag) {
     meta.album = tag.album().map(|s| s.to_string());
     meta.genre = tag.genre().map(|s| s.to_string());
     meta.year = tag.year();
+    meta.date = tag
+        .get_string(&ItemKey::RecordingDate)
+        .or_else(|| tag.get_string(&ItemKey::Year))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     meta.track_no = tag.track();
     meta.comment = tag.comment().map(|s| s.to_string());
     meta.album_artist = tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string());
