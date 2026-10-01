@@ -36,12 +36,11 @@ function split(path: string): { root: string; pattern: string } {
  *
  * One path, like Mp3tag's: the folders named outright must exist, the ones
  * built from tags are made. The file keeps its own name. Every destination is
- * listed before anything moves. The second view of the Actions dialog, which
+ * listed before anything moves. The right side of the Actions dialog, which
  * owns the frame and Escape.
  */
 export default function FolderMover(props: {
   fileIds: number[];
-  onBack: () => void;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -111,11 +110,8 @@ export default function FolderMover(props: {
   }
 
   return (
-    <>
+    <div class="actright">
         <div class="renamebody">
-          <button class="actlink rulemove" onClick={props.onBack}>
-            ← Actions
-          </button>
           <input
             type="text"
             class="toolpath mono"
@@ -182,6 +178,6 @@ export default function FolderMover(props: {
             {busy() ? "Moving…" : `Move ${ready().length}`}
           </button>
         </footer>
-    </>
+    </div>
   );
 }

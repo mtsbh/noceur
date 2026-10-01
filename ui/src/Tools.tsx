@@ -45,12 +45,13 @@ function load<T>(key: string, fallback: T): T {
 }
 
 /**
- * Actions in one tick list, name first, then tags.
+ * Actions in one tick list on the left, name first, then tags; the preview
+ * on the right.
  *
  * Tick any number; they run in list order, each on what the one before left,
  * and the preview shows the combined result old → new. Only files with
  * something to change are written. Moving into folders has a box and preview
- * of its own, so it is a second view rather than a tick.
+ * of its own, so picking it swaps the right side rather than adding a tick.
  */
 export default function Tools(props: {
   fileIds: number[];
@@ -77,6 +78,7 @@ export default function Tools(props: {
   const renamesOnly = () => ENTRIES.every((e) => e.tab === "name" || !ticked(e.id));
 
   function toggle(id: ToolId) {
+    setMoving(false);
     const next = ticked(id) ? ticks().filter((t) => t !== id) : [...ticks(), id];
     setTicks(next);
     localStorage.setItem(TICKS_KEY, JSON.stringify(next));
@@ -145,7 +147,7 @@ export default function Tools(props: {
   return (
     <>
       <div class="scrim" onPointerDown={props.onClose} />
-      <div class="renamer" role="dialog" aria-label="Actions">
+      <div class="renamer actwide" role="dialog" aria-label="Actions">
         <header class="sethead">
           <span class="settitle">Actions</span>
           <span class="tagsubject">
@@ -162,157 +164,169 @@ export default function Tools(props: {
           </button>
         </header>
 
-        <Switch>
-          <Match when={moving()}>
-            <FolderMover
-              fileIds={props.fileIds}
-              onBack={() => setMoving(false)}
-              onClose={props.onClose}
-              onDone={props.onDone}
-            />
-          </Match>
-          <Match when={true}>
-            <div class="renamebody">
-              <div class="rulelist">
-                <For each={GROUPS}>
-                  {([group, title]) => (
-                    <>
-                      <p class="rulegroup">{title}</p>
-                      <For each={ENTRIES.filter((e) => e.tab === group)}>
-                        {(e) => (
-                          <label class="rule">
+        <div class="actsplit">
+          <div class="actleft">
+            <For each={GROUPS}>
+              {([group, title]) => (
+                <div class="actgroup">
+                  <p class="rulegroup">{title}</p>
+                  <For each={ENTRIES.filter((e) => e.tab === group)}>
+                    {(e) => (
+                      <>
+                        <label class={`rule ${ticked(e.id) && !moving() ? "on" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={ticked(e.id)}
+                            onChange={() => toggle(e.id)}
+                          />
+                          <span class="rulelabel">{e.label}</span>
+                          <span class="rulehint">{e.hint}</span>
+                        </label>
+                        <Show when={e.id === "cut-start" && ticked(e.id)}>
+                          <div class="toolopts">
+                            <div class="setseg" role="group" aria-label="Cut from">
+                              <button
+                                class={`segbtn ${fromEnd() ? "" : "on"}`}
+                                onClick={() => setFromEnd(false)}
+                              >
+                                First
+                              </button>
+                              <button
+                                class={`segbtn ${fromEnd() ? "on" : ""}`}
+                                onClick={() => setFromEnd(true)}
+                              >
+                                Last
+                              </button>
+                            </div>
                             <input
-                              type="checkbox"
-                              checked={ticked(e.id)}
-                              onChange={() => toggle(e.id)}
+                              type="number"
+                              class="toolcount"
+                              min="1"
+                              max="200"
+                              value={count()}
+                              aria-label="Characters"
+                              onInput={(ev) =>
+                                setCount(Math.max(0, Number(ev.currentTarget.value) || 0))
+                              }
+                              onKeyDown={(ev) => {
+                                if (ev.key === "Enter") apply();
+                              }}
                             />
-                            <span class="rulelabel">{e.label}</span>
-                            <span class="rulehint">{e.hint}</span>
-                          </label>
-                        )}
-                      </For>
-                    </>
-                  )}
-                </For>
-                <button class="actlink rulemove" onClick={() => setMoving(true)}>
-                  Move into folders…
-                </button>
-              </div>
-
-              <Show when={ticked("cut-start")}>
-                <div class="toolopts">
-                  <div class="setseg" role="group" aria-label="Cut from">
-                    <button
-                      class={`segbtn ${fromEnd() ? "" : "on"}`}
-                      onClick={() => setFromEnd(false)}
-                    >
-                      First
-                    </button>
-                    <button
-                      class={`segbtn ${fromEnd() ? "on" : ""}`}
-                      onClick={() => setFromEnd(true)}
-                    >
-                      Last
-                    </button>
-                  </div>
-                  <input
-                    type="number"
-                    class="toolcount"
-                    min="1"
-                    max="200"
-                    value={count()}
-                    aria-label="Characters"
-                    onInput={(ev) => setCount(Math.max(0, Number(ev.currentTarget.value) || 0))}
-                    onKeyDown={(ev) => {
-                      if (ev.key === "Enter") apply();
-                    }}
-                  />
-                  <span class="sethint">characters</span>
-                </div>
-              </Show>
-
-              <Show
-                when={chosen().length > 0}
-                fallback={<p class="sethint">Tick an action to preview</p>}
-              >
-                <Show when={rows()} fallback={<p class="sethint">Reading…</p>}>
-                  <Show
-                    when={willChange().length > 0 || problems().length > 0}
-                    fallback={<p class="sethint">Nothing to change</p>}
-                  >
-                    <div class="renamelist">
-                      <For each={rows()!.filter((r) => !r.unchanged || r.problem)}>
-                        {(r) => (
-                          <div class={`cleanrow ${r.problem ? "bad" : ""}`}>
-                            <Show
-                              when={r.to !== r.from || r.problem}
-                              fallback={<div class="renamerow toolfile">{r.from}</div>}
-                            >
-                              <div class="renamerow">
-                                <span class="renamefrom">{r.from}</span>
-                                <span class="renamearrow">→</span>
-                                <span class="renameto">{r.problem || r.to}</span>
-                              </div>
-                            </Show>
-                            <For each={r.fields}>
-                              {(f) => (
-                                <div class="renamerow tagchange">
-                                  <span class="renamefrom">
-                                    <span class="fieldname">{f.label}</span> {f.from || "—"}
-                                  </span>
-                                  <span class="renamearrow">→</span>
-                                  <span class="renameto">{f.to}</span>
-                                </div>
-                              )}
-                            </For>
+                            <span class="sethint">characters</span>
                           </div>
+                        </Show>
+                      </>
+                    )}
+                  </For>
+                </div>
+              )}
+            </For>
+            <div class="actgroup">
+              <p class="rulegroup">Files</p>
+              <button
+                class={`rule actmove ${moving() ? "on" : ""}`}
+                onClick={() => setMoving(!moving())}
+              >
+                <span class="actmoveicon" aria-hidden="true">
+                  →
+                </span>
+                <span class="rulelabel">Move into folders</span>
+                <span class="rulehint">Folders built from tags</span>
+              </button>
+            </div>
+          </div>
+
+          <Switch>
+            <Match when={moving()}>
+              <FolderMover fileIds={props.fileIds} onClose={props.onClose} onDone={props.onDone} />
+            </Match>
+            <Match when={true}>
+              <div class="actright">
+                <div class="renamebody">
+                  <Show
+                    when={chosen().length > 0}
+                    fallback={<p class="sethint">Tick an action to preview</p>}
+                  >
+                    <Show when={rows()} fallback={<p class="sethint">Reading…</p>}>
+                      <Show
+                        when={willChange().length > 0 || problems().length > 0}
+                        fallback={<p class="sethint">Nothing to change</p>}
+                      >
+                        <div class="renamelist">
+                          <For each={rows()!.filter((r) => !r.unchanged || r.problem)}>
+                            {(r) => (
+                              <div class={`cleanrow ${r.problem ? "bad" : ""}`}>
+                                <Show
+                                  when={r.to !== r.from || r.problem}
+                                  fallback={<div class="renamerow toolfile">{r.from}</div>}
+                                >
+                                  <div class="renamerow">
+                                    <span class="renamefrom">{r.from}</span>
+                                    <span class="renamearrow">→</span>
+                                    <span class="renameto">{r.problem || r.to}</span>
+                                  </div>
+                                </Show>
+                                <For each={r.fields}>
+                                  {(f) => (
+                                    <div class="renamerow tagchange">
+                                      <span class="renamefrom">
+                                        <span class="fieldname">{f.label}</span> {f.from || "—"}
+                                      </span>
+                                      <span class="renamearrow">→</span>
+                                      <span class="renameto">{f.to}</span>
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                    </Show>
+                  </Show>
+
+                  <Show when={error()}>
+                    <p class="tagerror">{error()}</p>
+                  </Show>
+
+                  <Show when={report() && report()!.failures.length > 0}>
+                    <div class="tagfailures">
+                      <p>
+                        Done {report()!.written}, failed {report()!.failures.length}:
+                      </p>
+                      <For each={report()!.failures}>
+                        {(f) => (
+                          <p class="tagfail">
+                            <b>{f.name}</b> — {f.reason}
+                          </p>
                         )}
                       </For>
                     </div>
                   </Show>
-                </Show>
-              </Show>
-
-              <Show when={error()}>
-                <p class="tagerror">{error()}</p>
-              </Show>
-
-              <Show when={report() && report()!.failures.length > 0}>
-                <div class="tagfailures">
-                  <p>
-                    Done {report()!.written}, failed {report()!.failures.length}:
-                  </p>
-                  <For each={report()!.failures}>
-                    {(f) => (
-                      <p class="tagfail">
-                        <b>{f.name}</b> — {f.reason}
-                      </p>
-                    )}
-                  </For>
                 </div>
-              </Show>
-            </div>
 
-            <footer class="tagfoot">
-              <span class="sethint credit">
-                <Show when={problems().length > 0}>{problems().length} skipped · </Show>
-                <Show when={renamesOnly()} fallback="Tag edits cannot be undone">
-                  Undo: Ctrl+Z
-                </Show>
-              </span>
-              <button class="btn" onClick={props.onClose}>
-                Cancel
-              </button>
-              <button
-                class="btn primary"
-                disabled={willChange().length === 0 || busy()}
-                onClick={apply}
-              >
-                {busy() ? "Writing…" : `Apply to ${willChange().length}`}
-              </button>
-            </footer>
-          </Match>
-        </Switch>
+                <footer class="tagfoot">
+                  <span class="sethint credit">
+                    <Show when={problems().length > 0}>{problems().length} skipped · </Show>
+                    <Show when={renamesOnly()} fallback="Tag edits cannot be undone">
+                      Undo: Ctrl+Z
+                    </Show>
+                  </span>
+                  <button class="btn" onClick={props.onClose}>
+                    Cancel
+                  </button>
+                  <button
+                    class="btn primary"
+                    disabled={willChange().length === 0 || busy()}
+                    onClick={apply}
+                  >
+                    {busy() ? "Writing…" : `Apply to ${willChange().length}`}
+                  </button>
+                </footer>
+              </div>
+            </Match>
+          </Switch>
+        </div>
       </div>
     </>
   );
