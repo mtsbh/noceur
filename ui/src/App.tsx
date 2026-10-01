@@ -871,7 +871,7 @@ export default function App() {
       { kind: "separator" },
       ...buttonItems(ids),
       ...(buttons().length ? [{ kind: "separator" } as MenuItem] : []),
-      { kind: "item", label: "Make a tool…", run: () => settingsAt("actions") },
+      { kind: "item", label: "New action…", run: () => settingsAt("actions") },
     ];
   }
 
@@ -1011,7 +1011,7 @@ export default function App() {
       },
       {
         id: "functions",
-        label: "Tools",
+        label: "Actions",
         icon: BoltIcon,
         on: () => Boolean(actionMenu()),
         run: (e) => {
@@ -1403,7 +1403,7 @@ export default function App() {
       },
       {
         kind: "item",
-        label: "Tools",
+        label: "Actions",
         icon: BoltIcon,
         disabled: audio,
         run: () => {},

@@ -159,9 +159,9 @@ export default function Tools(props: {
   return (
     <>
       <div class="scrim" onPointerDown={props.onClose} />
-      <div class="renamer" role="dialog" aria-label="Tools">
+      <div class="renamer" role="dialog" aria-label="Actions">
         <header class="sethead">
-          <span class="settitle">Tools</span>
+          <span class="settitle">Actions</span>
           <span class="tagsubject">
             {props.fileIds.length} {props.fileIds.length === 1 ? "track" : "tracks"}
           </span>

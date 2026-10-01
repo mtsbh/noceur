@@ -73,8 +73,8 @@ actions stay for anyone who wants title formatting.
 - [x] **9. One-click tag tools.** Each previews old → new and writes only what changes.
       The broom (Clean up) is one click: the file name down to `Artist - Title`, without
       track numbers at either end, `(Original Mix)`, underscores, site names, doubled or `–`
-      dashes and stray symbols. The rest are in the Tools dialog, on tabs by what they act on
-      (also listed in the Tools menu on the toolbar and on right-click):
+      dashes and stray symbols. The rest are in the Actions dialog, on tabs by what they act on
+      (also listed in the Actions menu on the toolbar and on right-click):
       - **Name**: Clean, Cut the first or last N characters.
       - **Tags**: Clean (underscores, site names, spacing), Remove (Original Mix) from title
         and album, Remove brackets at the end, Tidy featuring, Album artist from artist,
