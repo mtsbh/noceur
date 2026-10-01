@@ -112,10 +112,26 @@ downloads rather than CD rips.
       Matches ffmpeg's `ebur128` to 0.1 LU on WAV, FLAC and MP3, and passes EBU Tech 3341 cases
       1–3. Symphonia clips MP3 output at full scale, so a lossy file whose decode reaches it
       shows its true peak as a lower bound (`≥ +0.5`).
-- [ ] **13. Damage check.** Files that are broken rather than lossy: decode errors, files cut
-      off before their stated length, dropouts (runs of digital silence mid-track), clicks, and
-      "24-bit" files whose low 8 bits are always zero (16-bit padded). Part of Check quality, so a
-      bad download from Soulseek is caught before it is played out.
+- [x] **13. Damage check.** Files that are broken rather than lossy, found in Check quality's one
+      pass (`noceur-audio::damage`), which now decodes with symphonia directly: rodio skips
+      undecodable packets silently, which is right for playback and hides exactly this.
+      Reported beside the verdict in the report (damaged files first, with their own tally),
+      kept in the index (`damage` table, carried across tag writes) and shown as the Damage
+      column. Finds: audio missing against the stated length (sample-exact for FLAC, WAV and AIFF,
+      so a corrupt FLAC frame symphonia resyncs past shows up too; MP3 only with a LAME/Info
+      tag), decode errors, dropouts (digital silence with the music at full level on both sides,
+      so DAW-faded stops are left alone), isolated single-sample clicks (not when the waveform
+      keeps ringing, not on a pulse train, not when a same-sign twin recurs anywhere in the
+      track), and 16-bit audio in a 24-bit file. Tuned on the 207 lossless files in `slsk`:
+      first pass flagged 204, mostly drum transients as clicks; the shipped rules flag a
+      handful, each a real bad sample, edit glitch or padded file on inspection. Symphonia's
+      AIFF reader decodes a trailing `ID3 ` chunk as a few frames of audio; a gap must be followed
+      by 100 ms of sound to count, so that is not reported as a dropout. MP3s commonly end in
+      tag bytes or padding the decoder trips over once the music is over (one error in most of
+      100 sampled downloads), so decode errors in the last second, or past the stated end, are
+      not counted. The report gained a header row (Claimed, Real, Reaches, Clip, LUFS, Peak),
+      a Real column with the bitrate the spectrum implies, and shows any clipping, red once it
+      is enough to hear.
 - [ ] **14. Clipping after gain.** The clipping check looks for samples at full scale. A track
       that clipped and was then turned down (normalised to −0.3 dB, say) has the same flat tops
       at a lower level; detect runs of identical peak samples at the file's own maximum, and

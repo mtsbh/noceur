@@ -75,6 +75,9 @@ pub struct RowDisplay {
     pub lufs: String,
     /// True peak in dBTP, `+0.6`, or `≥ +0.5` when it is only a lower bound.
     pub true_peak: String,
+    /// What Check quality found broken, `0:30 missing · 1 dropout`; empty when
+    /// sound or not checked.
+    pub damage: String,
     /// Whether this row has an image worth requesting — embedded cover art for
     /// audio, the shell's own icon for a directory. Files with neither are left
     /// alone, so a folder of untagged tracks issues no requests at all.
@@ -437,6 +440,7 @@ pub fn display(row: &ListRow, notation: KeyNotation) -> RowDisplay {
             Some(v) if is_audio => peak(v, row.peak_floor),
             _ => String::new(),
         },
+        damage: row.damage.clone().filter(|_| is_audio).unwrap_or_default(),
         // A directory always has one: the shell will give us its icon.
         has_art: row.kind == 0 || (is_audio && row.has_artwork),
     }
@@ -513,6 +517,7 @@ mod tests {
             lufs: None,
             true_peak: None,
             peak_floor: false,
+            damage: None,
         }
     }
 

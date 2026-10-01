@@ -45,6 +45,8 @@ export type RowDisplay = {
   lufs: string;
   /** True peak in dBTP, `+0.6`, or `≥ +0.5` when only a lower bound. */
   truePeak: string;
+  /** What Check quality found broken, `0:30 missing · 1 dropout`; empty when sound or unchecked. */
+  damage: string;
 };
 
 /** The cover-art sizes the backend will render. */
@@ -129,6 +131,7 @@ export type SortColumn =
   | "rating"
   | "lufs"
   | "truePeak"
+  | "damage"
   | "size"
   | "modified";
 
@@ -715,6 +718,8 @@ export type QualityRow = {
   truePeak: number | null;
   /** The true peak is at least this: a lossy decode clipped at full scale. */
   peakFloor: boolean;
+  /** What is broken, as opposed to lossy: `0:30 missing · 2 dropouts`. Empty when sound. */
+  damage: string;
   reason: string;
 };
 

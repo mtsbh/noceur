@@ -20,6 +20,7 @@
 //! does. Those come back as [`Verdict::Unsure`] with the measurement attached,
 //! because a wrong accusation about somebody's library is worse than no answer.
 
+use crate::damage::{Damage, Inspector};
 use crate::fft::{fft, hann};
 use crate::loudness::{Loudness, Meter};
 use crate::AudioError;
@@ -85,6 +86,8 @@ pub struct Spectrum {
     pub clipping: Clipping,
     /// Integrated loudness and true peak, from the same pass.
     pub loudness: Loudness,
+    /// Whatever is broken, as opposed to lossy.
+    pub damage: Damage,
 }
 
 /// Counts full-scale runs as samples arrive.
@@ -361,6 +364,7 @@ pub struct Report {
     pub brickwalled: bool,
     pub clipping: Clipping,
     pub loudness: Loudness,
+    pub damage: Damage,
     pub verdict: Verdict,
     /// Why, in one line, for the interface to show as it is.
     pub reason: String,
@@ -417,6 +421,7 @@ pub fn judge(spectrum: &Spectrum, claim: Claim) -> Report {
         brickwalled,
         clipping: spectrum.clipping,
         loudness: spectrum.loudness,
+        damage: spectrum.damage.clone(),
         verdict: Verdict::Unsure,
         reason: String::new(),
     };
@@ -556,13 +561,144 @@ pub fn spectrum(mono: &[f32], sample_rate: u32) -> Spectrum {
 
     let mut clips = ClipCounter::default();
     let mut meter = Meter::new(1, sample_rate);
+    let mut damage = Inspector::new(1, sample_rate);
     for sample in mono {
         clips.push(*sample);
         meter.push(*sample);
+        damage.push(*sample);
     }
 
-    finish(power, frames, sample_rate, clips.finish(), meter.finish())
+    finish(
+        power,
+        frames,
+        sample_rate,
+        clips.finish(),
+        meter.finish(),
+        damage.finish(),
+    )
 }
+
+/// Everything measured in the one pass over a file's samples.
+struct Pass {
+    channels: usize,
+    rate: u32,
+    step: usize,
+    window: Vec<f32>,
+    power: Vec<f64>,
+    frames: usize,
+    block: Vec<f32>,
+    at: usize,
+    sum: f32,
+    in_frame: usize,
+    clips: ClipCounter,
+    meter: Meter,
+    damage: Inspector,
+}
+
+impl Pass {
+    fn new(channels: usize, rate: u32, total: usize) -> Pass {
+        let channels = channels.max(1);
+        Pass {
+            channels,
+            rate,
+            // Spread the blocks across the file, but never so far apart that a
+            // short track yields too few to say anything.
+            step: (total / FRAMES.max(1)).max(FFT_SIZE),
+            window: hann(FFT_SIZE),
+            power: vec![0f64; FFT_SIZE / 2],
+            frames: 0,
+            block: Vec::with_capacity(FFT_SIZE),
+            at: 0,
+            sum: 0.0,
+            in_frame: 0,
+            clips: ClipCounter::default(),
+            meter: Meter::new(channels, rate),
+            damage: Inspector::new(channels, rate),
+        }
+    }
+
+    fn push(&mut self, sample: f32) {
+        // Every sample, unlike the spectrum, which is measured from windows
+        // spread across the file. Clipping and damage are rare and local:
+        // sampling for them would miss most of it.
+        self.clips.push(sample);
+        self.meter.push(sample);
+        self.damage.push(sample);
+
+        // Down-mixed as it arrives: the spectrum of the sum is what a listener
+        // hears, and analysing one channel would miss anything panned away.
+        self.sum += sample;
+        self.in_frame += 1;
+        if self.in_frame < self.channels {
+            return;
+        }
+        let mono = self.sum / self.channels as f32;
+        self.sum = 0.0;
+        self.in_frame = 0;
+
+        // Collecting a block, or waiting for the next one to start.
+        if self.block.is_empty() && !self.at.is_multiple_of(self.step) {
+            self.at += 1;
+            return;
+        }
+        self.block.push(mono);
+        self.at += 1;
+
+        if self.block.len() == FFT_SIZE {
+            accumulate(&self.block, &self.window, &mut self.power, &mut self.frames);
+            self.block.clear();
+        }
+    }
+
+    fn finish(self) -> Spectrum {
+        finish(
+            self.power,
+            self.frames,
+            self.rate,
+            self.clips.finish(),
+            self.meter.finish(),
+            self.damage.finish(),
+        )
+    }
+}
+
+/// An opened file, in the shape symphonia reads from.
+struct Media {
+    reader: crate::source::Skipping<std::io::BufReader<std::fs::File>>,
+    len: Option<u64>,
+}
+
+impl std::io::Read for Media {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.reader.read(buf)
+    }
+}
+
+impl std::io::Seek for Media {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.reader.seek(pos)
+    }
+}
+
+impl symphonia::core::io::MediaSource for Media {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        self.len
+    }
+}
+
+/// Whether a codec's stated length can be off by encoder padding.
+fn lossy(codec: symphonia::core::codecs::CodecType) -> bool {
+    use symphonia::core::codecs::{CODEC_TYPE_AAC, CODEC_TYPE_OPUS, CODEC_TYPE_VORBIS};
+    matches!(codec, CODEC_TYPE_AAC | CODEC_TYPE_OPUS | CODEC_TYPE_VORBIS)
+}
+
+/// Undecodable packets before giving up on a file: past this it is not a file
+/// with damage in it but damage with a file around it.
+const MAX_DECODE_ERRORS: u32 = 10_000;
 
 /// Measures the spectrum of a file.
 ///
@@ -571,82 +707,166 @@ pub fn spectrum(mono: &[f32], sample_rate: u32) -> Spectrum {
 /// it would cost a hundred megabytes to look at less than one percent of them.
 /// Blocks are taken at intervals across the file instead, and everything between
 /// them is decoded and dropped.
+///
+/// Symphonia directly rather than through rodio, which is what playback uses:
+/// rodio skips packets that will not decode without saying so, and ends early
+/// on a broken stream as though it had reached the end. For playing a file that
+/// is the right thing to do. For checking one it hides exactly what is being
+/// looked for.
 pub fn analyse(path: &Path) -> Result<Spectrum, AudioError> {
+    use symphonia::core::audio::SampleBuffer;
+    use symphonia::core::codecs::{
+        DecoderOptions, CODEC_TYPE_MP1, CODEC_TYPE_MP2, CODEC_TYPE_MP3, CODEC_TYPE_NULL,
+    };
+    use symphonia::core::errors::Error;
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+
+    let fail = |reason: String| AudioError::Decode {
+        path: path.display().to_string(),
+        reason,
+    };
+
     let full = crate::noceur_extended(path);
     let opened = crate::source::open(&full).map_err(|source| AudioError::Open {
         path: path.display().to_string(),
         source,
     })?;
-    let byte_len = opened.byte_len;
+    let media = Media {
+        reader: opened.reader,
+        len: opened.byte_len,
+    };
+    let stream = MediaSourceStream::new(Box::new(media), Default::default());
 
-    let mut builder = rodio::Decoder::builder().with_data(opened.reader);
-    if let Some(len) = byte_len {
-        builder = builder.with_byte_len(len);
-    }
+    let mut hint = Hint::new();
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        builder = builder.with_hint(ext);
+        hint.with_extension(ext);
     }
-    let decoder = builder.build().map_err(|e| AudioError::Decode {
-        path: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            stream,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|e| fail(e.to_string()))?;
+    let mut format = probed.format;
 
-    let channels = rodio::Source::channels(&decoder).get() as usize;
-    let rate = rodio::Source::sample_rate(&decoder).get();
-    let duration = rodio::Source::total_duration(&decoder);
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .ok_or_else(|| fail("no audio track".into()))?;
+    let track_id = track.id;
+    let params = track.codec_params.clone();
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&params, &DecoderOptions::default())
+        .map_err(|e| fail(e.to_string()))?;
 
-    let total = duration
-        .map(|d| (d.as_secs_f64() * rate as f64) as usize)
-        .filter(|f| *f > 0)
-        .unwrap_or(rate as usize * 300);
-    // Spread the blocks across the file, but never so far apart that a short
-    // track yields too few to say anything.
-    let step = (total / FRAMES.max(1)).max(FFT_SIZE);
+    let header_rate = params.sample_rate.unwrap_or(44_100);
+    let total = params
+        .n_frames
+        .map(|n| n as usize)
+        .filter(|n| *n > 0)
+        .unwrap_or(header_rate as usize * 300);
 
-    let window = hann(FFT_SIZE);
-    let mut power = vec![0f64; FFT_SIZE / 2];
-    let mut frames = 0usize;
+    // The length the header states, when it is a statement rather than a
+    // guess. FLAC and WAV write theirs down; an MP3 only does in a LAME/Info
+    // tag, and without one symphonia estimates from the file size — which a
+    // cut file shrinks along with it, and a VBR file gets wrong by a fifth.
+    let mpeg = matches!(
+        params.codec,
+        CODEC_TYPE_MP3 | CODEC_TYPE_MP2 | CODEC_TYPE_MP1
+    );
+    let stated_frames = params
+        .n_frames
+        .filter(|n| *n > 0 && (!mpeg || params.delay.is_some()));
 
-    let mut block: Vec<f32> = Vec::with_capacity(FFT_SIZE);
-    let mut at = 0usize;
-    let mut sum = 0f32;
-    let mut in_frame = 0usize;
-    let mut clips = ClipCounter::default();
-    let mut meter = Meter::new(channels, rate);
+    let mut pass: Option<Pass> = None;
+    let mut samples: Option<(SampleBuffer<f32>, u64)> = None;
+    let mut errors = 0u32;
+    // Where each one struck, in frames decoded before it.
+    let mut struck: Vec<u64> = Vec::new();
+    let mut frames = 0u64;
+    let mut stopped = None;
 
-    for sample in decoder {
-        // Every sample, unlike the spectrum, which is measured from windows
-        // spread across the file. Clipping is rare and local: sampling for it
-        // would miss most of it.
-        clips.push(sample);
-        meter.push(sample);
-
-        // Down-mixed as it arrives: the spectrum of the sum is what a listener
-        // hears, and analysing one channel would miss anything panned away.
-        sum += sample;
-        in_frame += 1;
-        if in_frame < channels {
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            // How every format says it has reached the end.
+            Err(Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(Error::ResetRequired) => break,
+            Err(Error::DecodeError(_)) if errors < MAX_DECODE_ERRORS => {
+                errors += 1;
+                struck.push(frames);
+                continue;
+            }
+            Err(e) => {
+                stopped = Some(e.to_string());
+                break;
+            }
+        };
+        if packet.track_id() != track_id {
             continue;
         }
-        let mono = sum / channels as f32;
-        sum = 0.0;
-        in_frame = 0;
 
-        // Collecting a block, or waiting for the next one to start.
-        if block.is_empty() && !at.is_multiple_of(step) {
-            at += 1;
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(Error::DecodeError(_)) if errors < MAX_DECODE_ERRORS => {
+                errors += 1;
+                struck.push(frames);
+                continue;
+            }
+            Err(e) => {
+                stopped = Some(e.to_string());
+                break;
+            }
+        };
+        if decoded.frames() == 0 {
             continue;
         }
-        block.push(mono);
-        at += 1;
 
-        if block.len() == FFT_SIZE {
-            accumulate(&block, &window, &mut power, &mut frames);
-            block.clear();
+        frames += decoded.frames() as u64;
+        let spec = *decoded.spec();
+        let capacity = decoded.capacity() as u64;
+        if samples.as_ref().is_none_or(|(_, cap)| *cap < capacity) {
+            samples = Some((SampleBuffer::new(capacity, spec), capacity));
+        }
+        let (buffer, _) = samples.as_mut().expect("just made");
+        buffer.copy_interleaved_ref(decoded);
+
+        let pass = pass.get_or_insert_with(|| Pass::new(spec.channels.count(), spec.rate, total));
+        for sample in buffer.samples() {
+            pass.push(*sample);
         }
     }
 
-    Ok(finish(power, frames, rate, clips.finish(), meter.finish()))
+    let Some(pass) = pass else {
+        return Err(fail(match stopped {
+            Some(why) => why,
+            None if errors > 0 => format!("no packet would decode ({errors} tried)"),
+            None => "no audio in the file".into(),
+        }));
+    };
+
+    let mut spectrum = pass.finish();
+    let damage = &mut spectrum.damage;
+    // Not in the last second. An MP3 commonly ends in a frame or two of
+    // tag bytes or padding that happen to look like a frame header, and the
+    // decoder trips over them after the music is over: across 100 downloaded
+    // MP3s, every file with a single error had it there. Nothing is heard.
+    // The same goes for the end the header states, when something has been
+    // appended after it.
+    let tail = stated_frames
+        .map_or(frames, |stated| stated.min(frames))
+        .saturating_sub(u64::from(spectrum.sample_rate));
+    damage.decode_errors = struck.iter().filter(|at| **at < tail).count() as u32;
+    damage.stopped = stopped;
+    damage.stated_secs = stated_frames.map(|n| n as f32 / spectrum.sample_rate.max(1) as f32);
+    damage.exact_length = !mpeg && !lossy(params.codec);
+    Ok(spectrum)
 }
 
 /// Adds one block's power to the running total, unless it is silence.
@@ -673,6 +893,7 @@ fn finish(
     sample_rate: u32,
     clipping: Clipping,
     loudness: Loudness,
+    damage: Damage,
 ) -> Spectrum {
     let bins_db = if frames == 0 {
         vec![-200.0; FFT_SIZE / 2]
@@ -690,6 +911,7 @@ fn finish(
         frames,
         clipping,
         loudness,
+        damage,
     }
 }
 

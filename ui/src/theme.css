@@ -3040,7 +3040,7 @@ label.artoffer:hover {
    report of two hundred rows, so they carry the meaning and the text explains
    it rather than the other way round. */
 .renamer.wide {
-  width: 900px;
+  width: 960px;
 }
 .qualsummary {
   display: flex;
@@ -3062,6 +3062,7 @@ label.artoffer:hover {
 .qualtally:hover {
   background: rgba(var(--fg-rgb), 0.06);
 }
+.qualtally.damaged,
 .qualtally.upscaled,
 .qualtally.transcoded {
   color: var(--qual-bad);
@@ -3077,7 +3078,7 @@ label.artoffer:hover {
 }
 .qualrow {
   display: grid;
-  grid-template-columns: 6px minmax(0, 1.4fr) 58px 68px 54px 44px 56px minmax(0, 1.3fr);
+  grid-template-columns: 6px minmax(0, 1.4fr) 58px 58px 68px 54px 44px 56px minmax(0, 1.3fr);
   gap: 8px;
   align-items: baseline;
   padding: 4px 0;
@@ -3090,6 +3091,7 @@ label.artoffer:hover {
   border-radius: 1px;
   background: var(--fg4);
 }
+.qualmark.damaged,
 .qualmark.upscaled,
 .qualmark.transcoded {
   background: var(--qual-bad);
@@ -3122,12 +3124,28 @@ label.artoffer:hover {
 .qualname {
   color: var(--fg);
 }
+/* Column names, in the list header's own small capitals; stays put on scroll. */
+.qualrow.qualhead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.qualhead > span {
+  color: var(--fg3);
+}
 .qualclaim,
+.qualreal,
 .qualcut,
 .qualclip {
   color: var(--fg2);
   text-align: right;
 }
+.qualreal.bad,
 .qualclip.bad {
   color: var(--qual-bad);
 }
@@ -3137,6 +3155,10 @@ label.artoffer:hover {
   text-align: right;
 }
 .qualpeak.bad {
+  color: var(--qual-bad);
+}
+.qualdamage,
+.damagecol {
   color: var(--qual-bad);
 }
 .qualwhy {

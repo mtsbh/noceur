@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 11;
+pub const SCHEMA_VERSION: i32 = 12;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -263,5 +263,16 @@ CREATE TABLE loudness (
     lufs       REAL,
     true_peak  REAL,
     peak_floor INTEGER NOT NULL DEFAULT 0
+);
+"#;
+
+/// What Check quality found broken in a content: `"0:30 missing · 2 dropouts"`,
+/// or empty for a sound file. No row is not checked yet.
+///
+/// Carried across tag writes like `loudness`: a tag write moves no sample.
+const V12: &str = r#"
+CREATE TABLE damage (
+    content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    summary    TEXT NOT NULL
 );
 "#;

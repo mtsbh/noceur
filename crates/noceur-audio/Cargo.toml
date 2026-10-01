@@ -33,6 +33,10 @@ rodio = { version = "0.22", default-features = false, features = [
   "symphonia-alac",
   "symphonia-adpcm",
 ] }
+# The same symphonia rodio decodes with, for Check quality, which has to see
+# the packets rodio quietly skips: a decode error is exactly what it looks for.
+# No features of its own; rodio's above choose the formats.
+symphonia = { version = "0.5", default-features = false }
 # Chromaprint fingerprints for AcoustID lookups. Pure Rust, and its output
 # matches `fpcalc`, so there is no C library or bundled executable to ship.
 rusty-chromaprint = "0.3"

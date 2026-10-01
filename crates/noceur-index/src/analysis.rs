@@ -169,6 +169,39 @@ pub fn carry_loudness(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
     Ok(())
 }
 
+/// Records what Check quality found broken, empty when nothing was.
+pub fn set_damage(db: &Db, content_id: i64, summary: &str) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO damage (content_id, summary) VALUES (?1, ?2)
+         ON CONFLICT(content_id) DO UPDATE SET summary = excluded.summary",
+        params![content_id, summary],
+    )?;
+    Ok(())
+}
+
+/// The stored damage summary of one content, if it has been checked.
+pub fn damage(db: &Db, content_id: i64) -> Result<Option<String>, IndexError> {
+    Ok(db
+        .conn()
+        .query_row(
+            "SELECT summary FROM damage WHERE content_id = ?1",
+            params![content_id],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
+/// [`carry`], for damage.
+pub fn carry_damage(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO damage (content_id, summary)
+         SELECT ?2, summary FROM damage WHERE content_id = ?1
+         ON CONFLICT(content_id) DO NOTHING",
+        params![from, to],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,5 +301,20 @@ mod tests {
         assert_eq!(loudness(&db, 1).unwrap(), Some(l));
         carry_loudness(&db, 1, 3).unwrap();
         assert_eq!(loudness(&db, 3).unwrap(), Some(l));
+    }
+
+    #[test]
+    fn damage_round_trips_and_follows_a_tag_write() {
+        let db = db();
+        assert_eq!(damage(&db, 1).unwrap(), None, "not checked");
+        set_damage(&db, 1, "").unwrap();
+        assert_eq!(
+            damage(&db, 1).unwrap().as_deref(),
+            Some(""),
+            "checked, sound"
+        );
+        set_damage(&db, 1, "1 dropout").unwrap();
+        carry_damage(&db, 1, 3).unwrap();
+        assert_eq!(damage(&db, 3).unwrap().as_deref(), Some("1 dropout"));
     }
 }

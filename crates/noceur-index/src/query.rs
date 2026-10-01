@@ -27,11 +27,12 @@ pub enum SortColumn {
     Rating,
     Lufs,
     TruePeak,
+    Damage,
 }
 
 impl SortColumn {
     /// Every column, in the order the list shows them.
-    pub fn all() -> [SortColumn; 21] {
+    pub fn all() -> [SortColumn; 22] {
         [
             SortColumn::Name,
             SortColumn::Bpm,
@@ -52,6 +53,7 @@ impl SortColumn {
             SortColumn::Rating,
             SortColumn::Lufs,
             SortColumn::TruePeak,
+            SortColumn::Damage,
             SortColumn::Size,
             SortColumn::Modified,
         ]
@@ -81,6 +83,7 @@ impl SortColumn {
             SortColumn::Rating => "rating",
             SortColumn::Lufs => "lufs",
             SortColumn::TruePeak => "truePeak",
+            SortColumn::Damage => "damage",
         }
     }
 
@@ -117,6 +120,7 @@ impl SortColumn {
             SortColumn::Rating => "ct.rating",
             SortColumn::Lufs => "l.lufs",
             SortColumn::TruePeak => "l.true_peak",
+            SortColumn::Damage => "NULLIF(dm.summary, '') COLLATE NOCASE",
         }
     }
 }
@@ -218,6 +222,8 @@ pub struct ListRow {
     pub true_peak: Option<f64>,
     /// The true peak is only a lower bound.
     pub peak_floor: bool,
+    /// What Check quality found broken: empty when nothing, `None` unchecked.
+    pub damage: Option<String>,
 }
 
 /// Marks the copy a background tag write fills before it replaces the track:
@@ -233,12 +239,13 @@ SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        c.duration_ms, COALESCE(ct.has_artwork, 0),
        ct.album_artist, ct.genre, ct.year, ct.track_no, ct.comment, ct.isrc,
        c.sample_rate, c.bit_depth, c.codec, ct.rating, a.bpm, a.key_norm,
-       l.lufs, l.true_peak, COALESCE(l.peak_floor, 0)
+       l.lufs, l.true_peak, COALESCE(l.peak_floor, 0), dm.summary
 FROM file f
 LEFT JOIN content     c  ON c.id  = f.content_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
 LEFT JOIN analysis    a  ON a.content_id  = f.content_id AND a.miss = 0
 LEFT JOIN loudness    l  ON l.content_id  = f.content_id
+LEFT JOIN damage      dm ON dm.content_id = f.content_id
 WHERE f.dir_id = ?1";
 
 /// Reads a window of a sorted, filtered directory listing.
@@ -288,6 +295,7 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
             lufs: r.get(27)?,
             true_peak: r.get(28)?,
             peak_floor: r.get::<_, i64>(29)? != 0,
+            damage: r.get(30)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)

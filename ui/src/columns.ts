@@ -50,6 +50,7 @@ export const DEFAULT_COLUMNS: Column[] = [
   // Filled by Check quality.
   { key: "lufs", label: "LUFS", width: 56, num: true, visible: false },
   { key: "truePeak", label: "Peak", width: 62, num: true, visible: false },
+  { key: "damage", label: "Damage", width: 140, visible: false },
   { key: "size", label: "Size", width: 88, num: true, visible: true },
   { key: "modified", label: "Date", width: 120, num: true, visible: false },
 ];
@@ -185,6 +186,8 @@ export function cellText(row: RowDisplay, key: SortColumn): string {
       return row.lufs;
     case "truePeak":
       return row.truePeak;
+    case "damage":
+      return row.damage;
     case "size":
       return row.size;
     case "modified":

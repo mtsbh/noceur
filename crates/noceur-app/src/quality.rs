@@ -42,6 +42,9 @@ pub struct QualityRow {
     /// The true peak is at least this: the decoder clipped a lossy file at
     /// full scale, so the overs above it were never seen.
     pub peak_floor: bool,
+    /// What is broken, as opposed to lossy: `0:30 missing · 2 dropouts`.
+    /// Empty when the file is sound.
+    pub damage: String,
     pub reason: String,
 }
 
@@ -83,6 +86,7 @@ pub async fn analyse_quality(
 
         let mut out = Vec::with_capacity(targets.len());
         let mut measured = Vec::new();
+        let mut broken = Vec::new();
         for (file_id, path, content_id) in targets {
             let name = path
                 .file_name()
@@ -103,12 +107,16 @@ pub async fn analyse_quality(
             match quality::analyse(&path) {
                 Ok(spectrum) => {
                     let report = quality::judge(&spectrum, claim);
+                    let damage = report
+                        .damage
+                        .summary(meta.as_ref().and_then(|m| m.bit_depth));
                     let loud = report.loudness;
                     // Only a file known to be lossy: one whose header would not
                     // parse is as likely a WAV, whose decoder does not clip.
                     let known_lossy = meta.as_ref().is_some_and(|m| !m.lossless);
                     let peak_floor = peak_is_floor(!known_lossy, loud.sample_peak);
                     if let Some(content_id) = content_id {
+                        broken.push((content_id, damage.clone()));
                         measured.push((
                             content_id,
                             Loudness {
@@ -132,6 +140,7 @@ pub async fn analyse_quality(
                         lufs: loud.lufs,
                         true_peak: loud.true_peak_db,
                         peak_floor,
+                        damage,
                         reason: report.reason,
                     });
                 }
@@ -149,16 +158,22 @@ pub async fn analyse_quality(
                     lufs: None,
                     true_peak: None,
                     peak_floor: false,
+                    damage: String::new(),
                     reason: e.to_string(),
                 }),
             }
         }
 
-        // Kept, so the list's LUFS and Peak columns have something to show.
+        // Kept, so the list's LUFS, Peak and Damage columns have something to
+        // show.
         if !measured.is_empty() {
             let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
             for (content_id, l) in &measured {
                 noceur_index::analysis::set_loudness(&db, *content_id, l)
+                    .map_err(|e| e.to_string())?;
+            }
+            for (content_id, summary) in &broken {
+                noceur_index::analysis::set_damage(&db, *content_id, summary)
                     .map_err(|e| e.to_string())?;
             }
         }

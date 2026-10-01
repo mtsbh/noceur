@@ -2189,6 +2189,7 @@ dependencies = [
  "noceur-tags",
  "rodio",
  "rusty-chromaprint",
+ "symphonia",
  "tempfile",
  "thiserror 2.0.19",
 ]

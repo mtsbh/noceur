@@ -107,17 +107,33 @@ export default function Quality(props: {
     onCleanup(() => window.removeEventListener("keydown", onKey, true));
   });
 
-  /** Worst first — a report you have to scroll to find the problems in is a list. */
+  /**
+   * Worst first — a report you have to scroll to find the problems in is a
+   * list. A damaged file goes ahead of everything: a transcode still plays.
+   */
   const sorted = () =>
     [...rows()].sort(
-      (a, b) => ORDER.indexOf(a.verdict) - ORDER.indexOf(b.verdict),
+      (a, b) =>
+        Number(b.damage !== "") - Number(a.damage !== "") ||
+        ORDER.indexOf(a.verdict) - ORDER.indexOf(b.verdict),
     );
 
+  /** Each file is tallied once: a damaged file under damaged, not also its verdict. */
+  const sound = () => rows().filter((r) => r.damage === "");
   const count = (verdict: string) =>
-    rows().filter((r) => r.verdict === verdict).length;
+    sound().filter((r) => r.verdict === verdict).length;
+
+  /** Broken rather than lossy: cut short, dropouts, decode errors. */
+  const damaged = () => rows().filter((r) => r.damage !== "");
 
   const suspect = () =>
-    count("upscaled") + count("transcoded") + count("upsampled");
+    rows().filter(
+      (r) =>
+        r.damage !== "" ||
+        r.verdict === "upscaled" ||
+        r.verdict === "transcoded" ||
+        r.verdict === "upsampled",
+    ).length;
 
   /**
    * Whether a file clips enough to be worth mentioning.
@@ -158,6 +174,21 @@ export default function Quality(props: {
     }
   }
 
+  /** Share of samples in a clipped run, `0.42%`, `<0.01%` for a trace. */
+  const clipText = (r: QualityRow) =>
+    r.clipPercent < 0.01 ? "<0.01%" : `${r.clipPercent.toFixed(2)}%`;
+
+  /**
+   * What the spectrum says the file really is: the bitrate its cutoff is
+   * typical of, or `lossless` / `full` when the content runs to the top.
+   */
+  const real = (r: QualityRow) => {
+    if (r.verdict === "unreadable") return "—";
+    if (r.impliedKbps) return `${r.impliedKbps}k`;
+    if (r.verdict === "upsampled") return "—";
+    return r.lossless ? "lossless" : "full";
+  };
+
   /** What the file says it is, for the left-hand column. */
   const claim = (r: QualityRow) => {
     if (r.lossless) return "lossless";
@@ -192,6 +223,15 @@ export default function Quality(props: {
         <div class="renamebody">
           <Show when={rows().length > 0} fallback={<p class="sethint">Reading…</p>}>
             <div class="qualsummary">
+              <Show when={damaged().length > 0}>
+                <button
+                  class="qualtally damaged"
+                  data-tip="Select in list"
+                  onClick={() => props.onSelect(damaged().map((r) => r.fileId))}
+                >
+                  {damaged().length} damaged
+                </button>
+              </Show>
               <For each={ORDER}>
                 {(verdict) => (
                   <Show when={count(verdict) > 0}>
@@ -200,7 +240,7 @@ export default function Quality(props: {
                       data-tip="Select in list"
                       onClick={() =>
                         props.onSelect(
-                          rows()
+                          sound()
                             .filter((r) => r.verdict === verdict)
                             .map((r) => r.fileId),
                         )
@@ -214,23 +254,40 @@ export default function Quality(props: {
             </div>
 
             <div class="quallist">
+              <div class="qualrow qualhead">
+                <span />
+                <span>Track</span>
+                <span class="qualclaim" data-tip="What the file says it is">Claimed</span>
+                <span class="qualreal" data-tip="What the spectrum says it was encoded at">Real</span>
+                <span class="qualcut" data-tip="Highest frequency with real signal">Reaches</span>
+                <span class="qualclip" data-tip="Samples pinned to full scale">Clip</span>
+                <span class="quallufs" data-tip="Integrated loudness, LUFS">LUFS</span>
+                <span class="qualpeak" data-tip="True peak, dBTP">Peak</span>
+                <span class="qualwhy">Result</span>
+              </div>
               <For each={sorted()}>
                 {(r) => (
                   <div class={`qualrow ${r.verdict}`}>
-                    <span class={`qualmark ${r.verdict}`} />
+                    <span class={`qualmark ${r.damage ? "damaged" : r.verdict}`} />
                     <span class="qualname" title={r.name}>
                       {r.name}
                     </span>
                     <span class="qualclaim mono">{claim(r)}</span>
+                    <span class={`qualreal mono ${r.verdict === "upscaled" || r.verdict === "transcoded" ? "bad" : ""}`}>
+                      {real(r)}
+                    </span>
                     <span class="qualcut mono">
                       <Show when={r.cutoffKhz > 0} fallback="—">
                         {r.cutoffKhz.toFixed(1)} kHz
                       </Show>
                     </span>
-                    {/* Only when there is something to say. A column of "0.0%"
-                        down a report of clean files is noise. */}
-                    <span class={`qualclip mono ${clipped(r) ? "bad" : ""}`}>
-                      <Show when={clipped(r)}>{r.clipPercent.toFixed(2)}%</Show>
+                    {/* Any clipping at all, red once it is enough to hear. Blank
+                        when there is none: a column of "0%" is noise. */}
+                    <span
+                      class={`qualclip mono ${clipped(r) ? "bad" : ""}`}
+                      data-tip={r.clipPercent > 0 ? `Longest run ${r.clipRun} samples` : undefined}
+                    >
+                      <Show when={r.clipPercent > 0}>{clipText(r)}</Show>
                     </span>
                     <span class="quallufs mono" data-tip="Integrated loudness">
                       {r.lufs === null ? "—" : r.lufs.toFixed(1)}
@@ -245,7 +302,12 @@ export default function Quality(props: {
                     >
                       {peak(r)}
                     </span>
-                    <span class="qualwhy">{r.reason}</span>
+                    <span class="qualwhy" title={r.damage ? `${r.damage} · ${r.reason}` : r.reason}>
+                      <Show when={r.damage}>
+                        <span class="qualdamage">{r.damage}</span> ·{" "}
+                      </Show>
+                      {r.reason}
+                    </span>
                   </div>
                 )}
               </For>
