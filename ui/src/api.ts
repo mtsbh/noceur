@@ -923,15 +923,15 @@ export type ToolId =
   | "cut-end";
 
 /**
- * Works out what a tool would do. Changes nothing; the result is applied with
+ * Works out what the tools, run in order, would do. Changes nothing; the result is applied with
  * `applyCleanup`, exactly as a cleanup is.
  */
 export function previewTool(
-  tool: ToolId,
+  tools: ToolId[],
   count: number,
   fileIds: number[],
 ): Promise<CleanPreview[]> {
-  return invoke<CleanPreview[]>("preview_tool", { tool, count, fileIds });
+  return invoke<CleanPreview[]>("preview_tool", { tools, count, fileIds });
 }
 
 // ── Converter ──────────────────────────────────────────────────────────────

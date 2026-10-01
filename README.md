@@ -55,7 +55,7 @@ same track often exists in more than one place.
 - Metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive, always picked by hand
 - Untagged files identified by sound (AcoustID fingerprint), then searched by what they turn out to be; the file name is the last resort
 - Tags from file name (`%artist% - %title%` patterns, with preview)
-- Rename from templates; Clean up takes a file name down to `Artist - Title` in one click
+- Rename from templates; Clean up renames to `Artist - Title` in one click (Ctrl+Z undoes)
 - Actions, previewed old → new: clean tags, remove (Original Mix) or trailing brackets, tidy featuring, album artist from artist, artist into or out of the title, year only, cut N characters off the name, move into folders built from tags
 - Your own buttons built by picking a field and an operation; Mp3tag expressions (`$regexp`, `$cutLeft`, `$cutRight`, `$eql`) run as pasted
 - File modification dates are preserved when retagging (configurable)

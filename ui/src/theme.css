@@ -3352,52 +3352,6 @@ label.artoffer:hover {
 .renamerow.toolfile {
   color: var(--fg3);
 }
-/* Tabs by what a tool acts on, under the dialog title. */
-.tooltabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--hair);
-}
-.tooltab {
-  padding: 7px 12px 6px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--fg3);
-  font: inherit;
-  cursor: pointer;
-}
-.tooltab:hover {
-  color: var(--fg);
-}
-.tooltab.on {
-  color: var(--fg);
-  border-bottom-color: var(--acc);
-}
-.toolpick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.toolpick .chip {
-  padding: 4px 10px;
-  border: 1px solid var(--hair2);
-  border-radius: 4px;
-  background: none;
-  color: var(--fg2);
-  font: inherit;
-  cursor: pointer;
-}
-.toolpick .chip:hover {
-  background: var(--raise);
-  color: var(--fg);
-}
-.toolpick .chip.on {
-  background: var(--acc-fill);
-  border-color: var(--acc-line);
-  color: var(--acc);
-}
 .toolpresets {
   display: flex;
   flex-wrap: wrap;
@@ -4108,9 +4062,18 @@ body.resizing-v * {
 .status .statuslink:hover {
   color: var(--acc);
 }
-.toolpick,
-.toolopts,
-.toolpath,
-.toolpresets {
-  margin-bottom: 10px;
+.rulegroup {
+  margin: 10px 0 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg4);
+}
+.rulegroup:first-child {
+  margin-top: 0;
+}
+.rulemove {
+  align-self: flex-start;
+  margin-top: 8px;
+  text-align: left;
 }

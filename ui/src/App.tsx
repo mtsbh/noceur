@@ -29,13 +29,14 @@ import {
   openUrl,
   openWith,
   undoRename,
+  previewTool,
+  applyCleanup,
   clipboardPut,
   clipboardFiles,
   clipboardRelease,
   type Clip,
   folderIconUrl,
   type Action,
-  type ToolId,
   type Transport as TransportState,
   type ArtSize,
   type SortColumn,
@@ -56,7 +57,7 @@ import Quality, { startQuality, type QualityRun } from "./Quality";
 import Analysis from "./Analysis";
 import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
-import Tools, { TOOLS, type Tab as ToolTab } from "./Tools";
+import Tools from "./Tools";
 import Duplicates from "./Duplicates";
 import Converter from "./Converter";
 import NewFolder from "./NewFolder";
@@ -503,12 +504,8 @@ export default function App() {
   const [running, setRunning] = createSignal<{ action: Action; fileIds: number[] } | null>(
     null,
   );
-  const [actionMenu, setActionMenu] = createSignal<{ x: number; y: number } | null>(null);
   /** A built-in tag tool open on a selection. */
-  const [tooling, setTooling] = createSignal<{
-    start: ToolId | ToolTab;
-    fileIds: number[];
-  } | null>(null);
+  const [tooling, setTooling] = createSignal<number[] | null>(null);
 
   /** Whether the spectrogram strip is showing. */
   const [spekOpen, setSpekOpen] = createSignal(false);
@@ -631,7 +628,7 @@ export default function App() {
         setRenaming(ids);
         break;
       case "clean":
-        setTooling({ start: "clean-name", fileIds: ids });
+        void cleanUp(ids);
         break;
       case "quality":
         checkQuality(ids);
@@ -847,32 +844,27 @@ export default function App() {
   }
 
   /**
-   * The Tools menu: the built-in tag tools, then the user's own buttons, then
-   * the way to make more. The same list on the toolbar and on right-click.
+   * Clean up: the selected file names down to `Artist - Title`, at once.
+   * No dialog — renames are undone with Ctrl+Z, and the note says so.
    */
-  function toolItems(ids: number[] = audioSelection()): MenuItem[] {
-    const none = ids.length === 0;
-    return [
-      ...TOOLS.flatMap<MenuItem>((t, i) => [
-        ...(i > 0 && TOOLS[i - 1].tab !== t.tab ? [{ kind: "separator" } as MenuItem] : []),
-        {
-          kind: "item",
-          label: t.id === "cut-start" ? `${t.label}…` : t.label,
-          disabled: none,
-          run: () => setTooling({ start: t.id, fileIds: ids }),
-        },
-      ]),
-      {
-        kind: "item",
-        label: "Move into folders…",
-        disabled: none,
-        run: () => setTooling({ start: "move", fileIds: ids }),
-      },
-      { kind: "separator" },
-      ...buttonItems(ids),
-      ...(buttons().length ? [{ kind: "separator" } as MenuItem] : []),
-      { kind: "item", label: "New action…", run: () => settingsAt("actions") },
-    ];
+  async function cleanUp(ids: number[]) {
+    if (ids.length === 0) return;
+    try {
+      const rows = await previewTool(["clean-name"], 0, ids);
+      const go = rows.filter((r) => !r.unchanged && !r.problem);
+      const skipped = rows.filter((r) => r.problem).length;
+      const tail = skipped ? ` · ${skipped} skipped` : "";
+      if (go.length === 0) {
+        flash(skipped ? `Nothing cleaned${tail}` : "Already clean");
+        return;
+      }
+      const done = await applyCleanup(go.map((r) => ({ fileId: r.fileId, name: r.to, fields: [] })));
+      refetchAll();
+      const failed = done.failures.length ? ` · ${done.failures.length} failed` : "";
+      flash(`Cleaned ${done.written}${failed}${tail} · Ctrl+Z to undo`);
+    } catch (e) {
+      flash(String(e));
+    }
   }
 
   /** Runs a user-defined button on these files, through the preview if it writes. */
@@ -1013,11 +1005,8 @@ export default function App() {
         id: "functions",
         label: "Actions",
         icon: BoltIcon,
-        on: () => Boolean(actionMenu()),
-        run: (e) => {
-          const box = e.currentTarget.getBoundingClientRect();
-          setActionMenu(actionMenu() ? null : { x: box.left - 150, y: box.bottom + 4 });
-        },
+        off: none,
+        run: () => setTooling(audioSelection()),
       },
       {
         id: "spek",
@@ -1396,19 +1385,29 @@ export default function App() {
       },
       {
         kind: "item",
-        label: many ? `Clean up ${ids.length} tracks…` : "Clean up…",
+        label: many ? `Clean up ${ids.length} names` : "Clean up name",
         icon: BroomIcon,
         disabled: audio,
-        run: () => setTooling({ start: "clean-name", fileIds: ids }),
+        run: () => void cleanUp(ids),
       },
       {
         kind: "item",
-        label: "Actions",
+        label: "Actions…",
         icon: BoltIcon,
         disabled: audio,
-        run: () => {},
-        children: toolItems(ids),
+        run: () => setTooling(ids),
       },
+      ...(buttons().length
+        ? ([
+            {
+              kind: "item",
+              label: "My actions",
+              disabled: audio,
+              run: () => {},
+              children: buttonItems(ids),
+            },
+          ] as MenuItem[])
+        : []),
       {
         kind: "item",
         label: many ? `Convert ${ids.length} tracks…` : "Convert…",
@@ -1899,20 +1898,10 @@ export default function App() {
         )}
       </Show>
 
-      <Show when={actionMenu()}>
-        <Menu
-          x={actionMenu()!.x}
-          y={actionMenu()!.y}
-          items={toolItems()}
-          onClose={() => setActionMenu(null)}
-        />
-      </Show>
-
       <Show when={tooling()}>
-        {(t) => (
+        {(ids) => (
           <Tools
-            start={t().start}
-            fileIds={t().fileIds}
+            fileIds={ids()}
             onClose={() => setTooling(null)}
             onDone={refetchAll}
           />

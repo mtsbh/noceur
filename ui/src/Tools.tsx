@@ -10,102 +10,89 @@ import {
   type WriteReport,
 } from "./api";
 
-export type Tab = "name" | "tags" | "move";
+/** Which half of the list an action sits in. */
+type Group = "name" | "tags";
 
-/** A built-in tool, and the tab it lives on. */
-export type ToolEntry = { id: ToolId; label: string; tab: Tab };
+/** One action, with the line that says what it does. Ticked ones run in this order. */
+type Entry = { id: ToolId; label: string; hint: string; tab: Group };
 
-/** The tools, in the order each tab and the Tools menu list them. */
-export const TOOLS: ToolEntry[] = [
-  { id: "clean-name", label: "Clean file name", tab: "name" },
-  { id: "cut-start", label: "Cut file name", tab: "name" },
-  { id: "clean-tags", label: "Clean tags", tab: "tags" },
-  { id: "remove-original", label: "Remove (Original Mix)", tab: "tags" },
-  { id: "trailing-brackets", label: "Remove brackets at end", tab: "tags" },
-  { id: "tidy-feat", label: "Tidy featuring", tab: "tags" },
-  { id: "album-artist", label: "Album artist from artist", tab: "tags" },
-  { id: "artist-into-title", label: "Artist into title", tab: "tags" },
-  { id: "artist-out-of-title", label: "Artist out of title", tab: "tags" },
-  { id: "year-only", label: "Year only", tab: "tags" },
+const ENTRIES: Entry[] = [
+  { id: "cut-start", label: "Cut characters", hint: "From the start or the end of the name.", tab: "name" },
+  { id: "clean-tags", label: "Clean", hint: "Underscores, site names and doubled spaces out of title, artist and album.", tab: "tags" },
+  { id: "remove-original", label: "Remove (Original Mix)", hint: "From title and album. Every other mix stays.", tab: "tags" },
+  { id: "trailing-brackets", label: "Remove brackets at end", hint: "Track (Extended Mix) → Track. Only the last ( ) or [ ].", tab: "tags" },
+  { id: "tidy-feat", label: "Tidy featuring", hint: "ft, Ft. and featuring become feat.", tab: "tags" },
+  { id: "artist-out-of-title", label: "Artist out of title", hint: "Title Artist - Track → artist Artist, title Track.", tab: "tags" },
+  { id: "artist-into-title", label: "Artist into title", hint: "Title Track → Artist - Track.", tab: "tags" },
+  { id: "album-artist", label: "Album artist from artist", hint: "Only where album artist is empty.", tab: "tags" },
+  { id: "year-only", label: "Year only", hint: "2016-03-04 → 2016.", tab: "tags" },
 ];
 
-const TABS: [Tab, string][] = [
-  ["name", "Name"],
+const GROUPS: [Group, string][] = [
+  ["name", "File name"],
   ["tags", "Tags"],
-  ["move", "Move"],
 ];
 
-/** What a tool is called on its own tab, where the tab already says what it acts on. */
-const SHORT: Partial<Record<ToolId, string>> = {
-  "clean-name": "Clean",
-  "cut-start": "Cut",
-  "clean-tags": "Clean",
-};
-
+const TICKS_KEY = "noceur.actionTicks";
 const CUT_KEY = "noceur.toolCut";
-const LAST_KEY = "noceur.toolLast";
+
+function load<T>(key: string, fallback: T): T {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? "") ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
- * The tools, on tabs by what they act on: the file name, the tags, the folder.
+ * Actions in one tick list, name first, then tags.
  *
- * One tool at a time, previewed old → new before anything is written; only the
- * files with something to change are touched.
+ * Tick any number; they run in list order, each on what the one before left,
+ * and the preview shows the combined result old → new. Only files with
+ * something to change are written. Moving into folders has a box and preview
+ * of its own, so it is a second view rather than a tick.
  */
 export default function Tools(props: {
-  /** The tool to open on, or a tab to open on its last-used tool. */
-  start: ToolId | Tab;
   fileIds: number[];
   onClose: () => void;
   onDone: () => void;
 }) {
-  const saved = (() => {
-    try {
-      return JSON.parse(localStorage.getItem(CUT_KEY) ?? "{}");
-    } catch {
-      return {};
-    }
-  })();
-
-  const first = (): { tab: Tab; tool: ToolId } => {
-    const s = props.start;
-    if (s === "move") return { tab: "move", tool: "clean-name" };
-    if (s === "name" || s === "tags") {
-      const last = localStorage.getItem(`${LAST_KEY}.${s}`) as ToolId | null;
-      const tool = TOOLS.find((t) => t.id === last && t.tab === s) ?? TOOLS.find((t) => t.tab === s)!;
-      return { tab: s, tool: tool.id };
-    }
-    return { tab: TOOLS.find((t) => t.id === s)?.tab ?? "name", tool: s };
-  };
-
-  const [tab, setTab] = createSignal<Tab>(first().tab);
-  const [tool, setTool] = createSignal<ToolId>(first().tool);
-  const [fromEnd, setFromEnd] = createSignal<boolean>(Boolean(saved.end));
-  const [count, setCount] = createSignal<number>(Number(saved.count) || 3);
+  const cut = load<{ count?: number; end?: boolean }>(CUT_KEY, {});
+  const [moving, setMoving] = createSignal(false);
+  const [ticks, setTicks] = createSignal<ToolId[]>(load<ToolId[]>(TICKS_KEY, ["remove-original"]));
+  const [fromEnd, setFromEnd] = createSignal<boolean>(Boolean(cut.end));
+  const [count, setCount] = createSignal<number>(Number(cut.count) || 3);
   const [rows, setRows] = createSignal<CleanPreview[] | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
   const [report, setReport] = createSignal<WriteReport | null>(null);
 
-  const cutting = () => tool() === "cut-start";
-  /** The tool as the back end knows it: cut is one entry here, two there. */
-  const wire = (): ToolId => (cutting() && fromEnd() ? "cut-end" : tool());
-  const renames = () => tab() === "name";
+  const ticked = (id: ToolId) => ticks().includes(id);
+  /** The ticked actions, in list order, as the back end names them. */
+  const chosen = (): ToolId[] =>
+    ENTRIES.filter((e) => ticked(e.id)).map((e) =>
+      e.id === "cut-start" && fromEnd() ? "cut-end" : e.id,
+    );
+  /** Whether only the name changes, which Ctrl+Z can put back. */
+  const renamesOnly = () => ENTRIES.every((e) => e.tab === "name" || !ticked(e.id));
 
-  function chooseTab(next: Tab) {
-    setTab(next);
-    if (next === "move") return;
-    if (TOOLS.find((t) => t.id === tool())?.tab === next) return;
-    const last = localStorage.getItem(`${LAST_KEY}.${next}`) as ToolId | null;
-    setTool((TOOLS.find((t) => t.id === last && t.tab === next) ?? TOOLS.find((t) => t.tab === next)!).id);
+  function toggle(id: ToolId) {
+    const next = ticked(id) ? ticks().filter((t) => t !== id) : [...ticks(), id];
+    setTicks(next);
+    localStorage.setItem(TICKS_KEY, JSON.stringify(next));
   }
 
   createEffect(() => {
-    if (tab() === "move") return;
-    const [t, n, ids] = [wire(), count(), props.fileIds];
-    setRows(null);
+    if (moving()) return;
+    const [tools, n, ids] = [chosen(), count(), props.fileIds] as const;
     setError("");
     setReport(null);
-    previewTool(t, n, ids)
+    if (tools.length === 0) {
+      setRows([]);
+      return;
+    }
+    setRows(null);
+    previewTool(tools, n, ids)
       .then(setRows)
       .catch((e) => {
         setRows([]);
@@ -131,8 +118,7 @@ export default function Tools(props: {
   function apply() {
     const targets = willChange();
     if (targets.length === 0 || busy()) return;
-    localStorage.setItem(`${LAST_KEY}.${tab()}`, tool());
-    if (cutting()) {
+    if (ticked("cut-start")) {
       localStorage.setItem(CUT_KEY, JSON.stringify({ count: count(), end: fromEnd() }));
     }
     setBusy(true);
@@ -176,45 +162,44 @@ export default function Tools(props: {
           </button>
         </header>
 
-        <div class="tooltabs" role="tablist">
-          <For each={TABS}>
-            {([id, label]) => (
-              <button
-                role="tab"
-                class={`tooltab ${tab() === id ? "on" : ""}`}
-                aria-selected={tab() === id}
-                onClick={() => chooseTab(id)}
-              >
-                {label}
-              </button>
-            )}
-          </For>
-        </div>
-
         <Switch>
-          <Match when={tab() === "move"}>
+          <Match when={moving()}>
             <FolderMover
               fileIds={props.fileIds}
+              onBack={() => setMoving(false)}
               onClose={props.onClose}
               onDone={props.onDone}
             />
           </Match>
           <Match when={true}>
             <div class="renamebody">
-              <div class="toolpick" role="group" aria-label="Tool">
-                <For each={TOOLS.filter((t) => t.tab === tab())}>
-                  {(t) => (
-                    <button
-                      class={`chip ${tool() === t.id ? "on" : ""}`}
-                      onClick={() => setTool(t.id)}
-                    >
-                      {SHORT[t.id] ?? t.label}
-                    </button>
+              <div class="rulelist">
+                <For each={GROUPS}>
+                  {([group, title]) => (
+                    <>
+                      <p class="rulegroup">{title}</p>
+                      <For each={ENTRIES.filter((e) => e.tab === group)}>
+                        {(e) => (
+                          <label class="rule">
+                            <input
+                              type="checkbox"
+                              checked={ticked(e.id)}
+                              onChange={() => toggle(e.id)}
+                            />
+                            <span class="rulelabel">{e.label}</span>
+                            <span class="rulehint">{e.hint}</span>
+                          </label>
+                        )}
+                      </For>
+                    </>
                   )}
                 </For>
+                <button class="actlink rulemove" onClick={() => setMoving(true)}>
+                  Move into folders…
+                </button>
               </div>
 
-              <Show when={cutting()}>
+              <Show when={ticked("cut-start")}>
                 <div class="toolopts">
                   <div class="setseg" role="group" aria-label="Cut from">
                     <button
@@ -237,49 +222,54 @@ export default function Tools(props: {
                     max="200"
                     value={count()}
                     aria-label="Characters"
-                    onInput={(e) => setCount(Math.max(0, Number(e.currentTarget.value) || 0))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") apply();
+                    onInput={(ev) => setCount(Math.max(0, Number(ev.currentTarget.value) || 0))}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter") apply();
                     }}
                   />
                   <span class="sethint">characters</span>
                 </div>
               </Show>
 
-              <Show when={rows()} fallback={<p class="sethint">Reading…</p>}>
-                <Show
-                  when={willChange().length > 0 || problems().length > 0}
-                  fallback={<p class="sethint">Nothing to change</p>}
-                >
-                  <div class="renamelist">
-                    <For each={rows()!.filter((r) => !r.unchanged || r.problem)}>
-                      {(r) => (
-                        <div class={`cleanrow ${r.problem ? "bad" : ""}`}>
-                          <Show
-                            when={renames() || r.problem}
-                            fallback={<div class="renamerow toolfile">{r.from}</div>}
-                          >
-                            <div class="renamerow">
-                              <span class="renamefrom">{r.from}</span>
-                              <span class="renamearrow">→</span>
-                              <span class="renameto">{r.problem || r.to}</span>
-                            </div>
-                          </Show>
-                          <For each={r.fields}>
-                            {(f) => (
-                              <div class="renamerow tagchange">
-                                <span class="renamefrom">
-                                  <span class="fieldname">{f.label}</span> {f.from || "—"}
-                                </span>
+              <Show
+                when={chosen().length > 0}
+                fallback={<p class="sethint">Tick an action to preview</p>}
+              >
+                <Show when={rows()} fallback={<p class="sethint">Reading…</p>}>
+                  <Show
+                    when={willChange().length > 0 || problems().length > 0}
+                    fallback={<p class="sethint">Nothing to change</p>}
+                  >
+                    <div class="renamelist">
+                      <For each={rows()!.filter((r) => !r.unchanged || r.problem)}>
+                        {(r) => (
+                          <div class={`cleanrow ${r.problem ? "bad" : ""}`}>
+                            <Show
+                              when={r.to !== r.from || r.problem}
+                              fallback={<div class="renamerow toolfile">{r.from}</div>}
+                            >
+                              <div class="renamerow">
+                                <span class="renamefrom">{r.from}</span>
                                 <span class="renamearrow">→</span>
-                                <span class="renameto">{f.to}</span>
+                                <span class="renameto">{r.problem || r.to}</span>
                               </div>
-                            )}
-                          </For>
-                        </div>
-                      )}
-                    </For>
-                  </div>
+                            </Show>
+                            <For each={r.fields}>
+                              {(f) => (
+                                <div class="renamerow tagchange">
+                                  <span class="renamefrom">
+                                    <span class="fieldname">{f.label}</span> {f.from || "—"}
+                                  </span>
+                                  <span class="renamearrow">→</span>
+                                  <span class="renameto">{f.to}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
                 </Show>
               </Show>
 
@@ -306,7 +296,7 @@ export default function Tools(props: {
             <footer class="tagfoot">
               <span class="sethint credit">
                 <Show when={problems().length > 0}>{problems().length} skipped · </Show>
-                <Show when={renames()} fallback="Tag edits cannot be undone">
+                <Show when={renamesOnly()} fallback="Tag edits cannot be undone">
                   Undo: Ctrl+Z
                 </Show>
               </span>

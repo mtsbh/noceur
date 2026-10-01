@@ -156,16 +156,53 @@ fn plan(tool: Tool, count: usize, meta: &TrackMeta, stem: &str) -> (String, Vec<
     (new_stem, fields)
 }
 
-/// Works out what a tool would do to the selection. Changes nothing.
+/// Several tools in order, each seeing what the one before it left.
+///
+/// A field two tools change shows once, from its value on disk to its last.
+fn plan_all(
+    tools: &[Tool],
+    count: usize,
+    meta: &TrackMeta,
+    stem: &str,
+) -> (String, Vec<CleanField>) {
+    let mut meta = meta.clone();
+    let mut stem = stem.to_string();
+    let mut out: Vec<CleanField> = Vec::new();
+
+    for &tool in tools {
+        let (next, fields) = plan(tool, count, &meta, &stem);
+        stem = next;
+        for f in fields {
+            let value = Some(f.to.clone()).filter(|v| !v.is_empty());
+            match f.field.as_str() {
+                "title" => meta.title = value,
+                "artist" => meta.artist = value,
+                "album" => meta.album = value,
+                "albumartist" => meta.album_artist = value,
+                "date" => meta.date = value,
+                _ => {}
+            }
+            match out.iter_mut().find(|o| o.field == f.field) {
+                Some(o) => o.to = f.to,
+                None => out.push(f),
+            }
+        }
+    }
+    out.retain(|f| f.from != f.to);
+    (stem, out)
+}
+
+/// Works out what the ticked tools would do to the selection. Changes nothing.
 #[tauri::command]
 pub async fn preview_tool(
     state: State<'_, AppState>,
-    tool: Tool,
+    tools: Vec<Tool>,
     count: Option<usize>,
     file_ids: Vec<i64>,
 ) -> Result<Vec<CleanPreview>, String> {
     let db = state.db.clone();
     let count = count.unwrap_or(0);
+    let renames = tools.iter().all(|t| t.renames());
 
     tauri::async_runtime::spawn_blocking(move || {
         let found = {
@@ -198,17 +235,17 @@ pub async fn preview_tool(
                 .map(|e| e.to_string_lossy().into_owned())
                 .unwrap_or_default();
 
-            // A name tool reads no tags: it runs on every keystroke of the count.
-            let meta = if tool.renames() {
+            // Name tools read no tags: they run on every keystroke of the count.
+            let meta = if renames {
                 TrackMeta::default()
             } else {
                 noceur_tags::read(path).unwrap_or_default()
             };
-            let (stem_to, fields) = plan(tool, count, &meta, &stem);
+            let (stem_to, fields) = plan_all(&tools, count, &meta, &stem);
 
             let mut to = from.clone();
             let mut problem = String::new();
-            if tool.renames() {
+            if stem_to != stem {
                 let clean = noceur_fsmodel::rename::sanitise(&stem_to);
                 if clean.is_empty() {
                     problem = "that leaves nothing to name it".into();
@@ -362,6 +399,35 @@ mod tests {
                 "Skee_Mask ft Other".into(),
                 "Skee_Mask feat. Other".into()
             ))
+        );
+    }
+
+    /// Ticked together, each tool works on what the one before left.
+    #[test]
+    fn ticked_tools_run_in_order_and_merge() {
+        let m = meta("", "Skee Mask - Rev8617 (Original Mix)");
+        let (_, f) = plan_all(
+            &[
+                Tool::RemoveOriginal,
+                Tool::ArtistOutOfTitle,
+                Tool::AlbumArtist,
+            ],
+            0,
+            &m,
+            "x",
+        );
+        let got: Vec<_> = f.into_iter().map(|f| (f.field, f.from, f.to)).collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "title".into(),
+                    "Skee Mask - Rev8617 (Original Mix)".into(),
+                    "Rev8617".into()
+                ),
+                ("artist".into(), "".into(), "Skee Mask".into()),
+                ("albumartist".into(), "".into(), "Skee Mask".into()),
+            ]
         );
     }
 

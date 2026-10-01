@@ -71,15 +71,16 @@ preview and, at most, a number or a template picked from a list. The custom
 actions stay for anyone who wants title formatting.
 
 - [x] **9. One-click tag tools.** Each previews old → new and writes only what changes.
-      The broom (Clean up) is one click: the file name down to `Artist - Title`, without
-      track numbers at either end, `(Original Mix)`, underscores, site names, doubled or `–`
-      dashes and stray symbols. The rest are in the Actions dialog, on tabs by what they act on
-      (also listed in the Actions menu on the toolbar and on right-click):
-      - **Name**: Clean, Cut the first or last N characters.
+      The broom (Clean up) renames at once, no dialog (Ctrl+Z undoes): the file name down to
+      `Artist - Title`, without track numbers at either end, `(Original Mix)`, underscores,
+      site names, doubled or `–` dashes and stray symbols. The rest are in the Actions dialog
+      (toolbar button, or Actions… on right-click): one tick list, any number at once, run in
+      order with one combined preview:
+      - **File name**: Cut the first or last N characters.
       - **Tags**: Clean (underscores, site names, spacing), Remove (Original Mix) from title
-        and album, Remove brackets at the end, Tidy featuring, Album artist from artist,
-        Artist into title, Artist out of title, Year only (`2016-03-04` → `2016`).
-      - **Move**: into folders from one Mp3tag-style path such as
+        and album, Remove brackets at the end, Tidy featuring, Artist out of title, Artist
+        into title, Album artist from artist, Year only (`2016-03-04` → `2016`).
+      - **Move into folders…** (a second view): one Mp3tag-style path such as
         `E:\music\%artist% - %album% '['%year%']'`, with presets; the file keeps its name.
 
       Own buttons (Settings → Actions) gain Fill if empty, Remove text, Remove brackets at the
