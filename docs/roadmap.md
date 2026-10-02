@@ -129,7 +129,7 @@ downloads rather than CD rips.
       by 100 ms of sound to count, so that is not reported as a dropout. MP3s commonly end in
       tag bytes or padding the decoder trips over once the music is over (one error in most of
       100 sampled downloads), so decode errors in the last second, or past the stated end, are
-      not counted. The report gained a header row (Claimed bitrate, Actual bitrate, Reaches,
+      not counted. The report gained a header row (Claimed bitrate, Actual bitrate, Cutoff,
       Clip, LUFS, Peak), an Actual bitrate column with the bitrate the spectrum implies, and shows any clipping, red once it
       is enough to hear.
 - [ ] **14. Clipping after gain.** The clipping check looks for samples at full scale. A track

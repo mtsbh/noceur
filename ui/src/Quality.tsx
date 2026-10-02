@@ -259,7 +259,7 @@ export default function Quality(props: {
                 <span>Track</span>
                 <span class="qualclaim" data-tip="What the file's header says">Claimed bitrate</span>
                 <span class="qualreal" data-tip="What the audio itself shows it was encoded at">Actual bitrate</span>
-                <span class="qualcut" data-tip="Highest frequency with real signal">Reaches</span>
+                <span class="qualcut" data-tip="Highest frequency with real signal">Cutoff</span>
                 <span class="qualclip" data-tip="Samples pinned to full scale">Clip</span>
                 <span class="quallufs" data-tip="Integrated loudness, LUFS">LUFS</span>
                 <span class="qualpeak" data-tip="True peak, dBTP">Peak</span>
