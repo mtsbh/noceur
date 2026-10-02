@@ -106,8 +106,8 @@ downloads rather than CD rips.
 - [x] **12. Loudness.** Integrated loudness (LUFS, ITU-R BS.1770-4: K-weighting, 400 ms
       blocks, absolute and relative gates) and true peak (dBTP, 4× polyphase oversampling),
       measured in Check quality's one pass over the file (`noceur-audio::loudness`). In the
-      report beside each track, kept in the index (`loudness` table, carried across tag writes)
-      and shown as the LUFS and Peak columns. Write ReplayGain (in the report) puts
+      report beside each track, and kept in the index (`loudness` table, carried across tag
+      writes) for Write ReplayGain. Shown only in the report, not as list columns. Write ReplayGain (in the report) puts
       `REPLAYGAIN_TRACK_GAIN` (to −18 LUFS) and `REPLAYGAIN_TRACK_PEAK` in the measured files.
       Matches ffmpeg's `ebur128` to 0.1 LU on WAV, FLAC and MP3, and passes EBU Tech 3341 cases
       1–3. Symphonia clips MP3 output at full scale, so a lossy file whose decode reaches it
@@ -116,8 +116,8 @@ downloads rather than CD rips.
       pass (`noceur-audio::damage`), which now decodes with symphonia directly: rodio skips
       undecodable packets silently, which is right for playback and hides exactly this.
       Reported beside the verdict in the report (damaged files first, with their own tally),
-      kept in the index (`damage` table, carried across tag writes) and shown as the Damage
-      column. Finds: audio missing against the stated length (sample-exact for FLAC, WAV and AIFF,
+      and kept in the index (`damage` table, carried across tag writes) for a later library
+      overview; like loudness, it is not a list column. Finds: audio missing against the stated length (sample-exact for FLAC, WAV and AIFF,
       so a corrupt FLAC frame symphonia resyncs past shows up too; MP3 only with a LAME/Info
       tag), decode errors, dropouts (digital silence with the music at full level on both sides,
       so DAW-faded stops are left alone), isolated single-sample clicks (not when the waveform
@@ -129,8 +129,8 @@ downloads rather than CD rips.
       by 100 ms of sound to count, so that is not reported as a dropout. MP3s commonly end in
       tag bytes or padding the decoder trips over once the music is over (one error in most of
       100 sampled downloads), so decode errors in the last second, or past the stated end, are
-      not counted. The report gained a header row (Claimed, Real, Reaches, Clip, LUFS, Peak),
-      a Real column with the bitrate the spectrum implies, and shows any clipping, red once it
+      not counted. The report gained a header row (Claimed bitrate, Actual bitrate, Reaches,
+      Clip, LUFS, Peak), an Actual bitrate column with the bitrate the spectrum implies, and shows any clipping, red once it
       is enough to hear.
 - [ ] **14. Clipping after gain.** The clipping check looks for samples at full scale. A track
       that clipped and was then turned down (normalised to −0.3 dB, say) has the same flat tops

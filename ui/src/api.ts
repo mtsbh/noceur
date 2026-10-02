@@ -41,12 +41,6 @@ export type RowDisplay = {
   bpmDiffers: boolean;
   /** The file has a key tag and it is not the one measured. */
   keyDiffers: boolean;
-  /** Integrated loudness, `-9.4`; empty until Check quality has measured it. */
-  lufs: string;
-  /** True peak in dBTP, `+0.6`, or `≥ +0.5` when only a lower bound. */
-  truePeak: string;
-  /** What Check quality found broken, `0:30 missing · 1 dropout`; empty when sound or unchecked. */
-  damage: string;
 };
 
 /** The cover-art sizes the backend will render. */
@@ -129,9 +123,6 @@ export type SortColumn =
   | "bitDepth"
   | "codec"
   | "rating"
-  | "lufs"
-  | "truePeak"
-  | "damage"
   | "size"
   | "modified";
 

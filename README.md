@@ -63,7 +63,7 @@ same track often exists in more than one place.
 **Analysis**
 - Quality check: detects lossy sources in lossless containers, upscaled MP3s, upsampled files and clipping, with an estimate of the original bitrate
 - Damage check: files cut short of their stated length, decode errors, dropouts, clicks and 16-bit audio padded to 24, in the same pass
-- Loudness: integrated LUFS and true peak (ITU-R BS.1770 / EBU R128) from the quality check, as list columns, and optionally written as ReplayGain
+- Loudness: integrated LUFS and true peak (ITU-R BS.1770 / EBU R128) in the quality report, and optionally written as ReplayGain
 - Duplicate finder based on decoded audio, independent of tags and file names
 - BPM and key detection, shown next to the tagged values and written only for the ones you tick; half/double time settled by a range, keys by a neural network (KeyNet) that agrees with Mixed In Key on about two tracks in three
 - Optional: BPM and key measured automatically for each track you play, written only into empty fields (or shown, or overwritten), with the list marking where a tag disagrees

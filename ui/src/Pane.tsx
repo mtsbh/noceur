@@ -1467,8 +1467,6 @@ export default function Pane(props: {
                                           class={`${
                                             col.num ? "num mono" : col.dim ? "dim" : "mono"
                                           }${col.key === "key" ? " keycol" : ""}${
-                                            col.key === "damage" ? " damagecol" : ""
-                                          }${
                                             elapsed(col) ? " nowtime" : ""
                                           }`}
                                           style={

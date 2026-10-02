@@ -43,19 +43,17 @@ export const DEFAULT_COLUMNS: Column[] = [
   { key: "trackNo", label: "Track", width: 52, num: true, visible: false },
   { key: "comment", label: "Comment", width: 200, dim: true, visible: false },
   { key: "isrc", label: "ISRC", width: 116, dim: true, visible: false },
-  { key: "sampleRate", label: "Rate", width: 74, num: true, visible: false },
-  { key: "bitDepth", label: "Depth", width: 62, num: true, visible: false },
+  { key: "sampleRate", label: "Sample rate", width: 96, num: true, visible: false },
+  { key: "bitDepth", label: "Bit depth", width: 80, num: true, visible: false },
   { key: "codec", label: "Codec", width: 78, dim: true, visible: false },
   { key: "rating", label: "Rating", width: 80, visible: true },
-  // Filled by Check quality.
-  { key: "lufs", label: "LUFS", width: 56, num: true, visible: false },
-  { key: "truePeak", label: "Peak", width: 62, num: true, visible: false },
-  { key: "damage", label: "Damage", width: 140, visible: false },
   { key: "size", label: "Size", width: 88, num: true, visible: true },
   { key: "modified", label: "Date", width: 120, num: true, visible: false },
 ];
 
 const KEY = "noceur.columns";
+/** Set once a saved layout's Sample rate and Bit depth fit their longer names. */
+const LABELS_WIDENED = "noceur.labelsWidened";
 /**
  * Set once a saved layout's Time column has been widened to the new default.
  * Layouts saved before the playing row showed elapsed time had it at 62 px,
@@ -110,6 +108,17 @@ export function loadColumns(): Column[] {
       }
     }
     localStorage.setItem(TIME_WIDENED, "1");
+    // "Rate" and "Depth" became "Sample rate" and "Bit depth"; widen a saved
+    // layout once so the new names fit.
+    if (saved.length > 0 && !localStorage.getItem(LABELS_WIDENED)) {
+      for (const key of ["sampleRate", "bitDepth"] as SortColumn[]) {
+        const col = out.find((c) => c.key === key);
+        const wide = known.get(key)!.width;
+        if (col && col.width < wide) col.width = wide;
+      }
+      saveColumns(out);
+    }
+    localStorage.setItem(LABELS_WIDENED, "1");
   } catch {
     // Storage unavailable: the column keeps its saved width.
   }
@@ -182,12 +191,6 @@ export function cellText(row: RowDisplay, key: SortColumn): string {
       return row.codec;
     case "rating":
       return row.rating ? `${row.rating} of 5 stars` : row.kind === 1 ? "Unrated" : "";
-    case "lufs":
-      return row.lufs;
-    case "truePeak":
-      return row.truePeak;
-    case "damage":
-      return row.damage;
     case "size":
       return row.size;
     case "modified":

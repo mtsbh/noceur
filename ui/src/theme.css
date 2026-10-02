@@ -3040,7 +3040,7 @@ label.artoffer:hover {
    report of two hundred rows, so they carry the meaning and the text explains
    it rather than the other way round. */
 .renamer.wide {
-  width: 960px;
+  width: 1020px;
 }
 .qualsummary {
   display: flex;
@@ -3078,7 +3078,7 @@ label.artoffer:hover {
 }
 .qualrow {
   display: grid;
-  grid-template-columns: 6px minmax(0, 1.4fr) 58px 58px 68px 54px 44px 56px minmax(0, 1.3fr);
+  grid-template-columns: 6px minmax(0, 1.4fr) 92px 92px 68px 54px 44px 56px minmax(0, 1.3fr);
   gap: 8px;
   align-items: baseline;
   padding: 4px 0;
@@ -3157,8 +3157,7 @@ label.artoffer:hover {
 .qualpeak.bad {
   color: var(--qual-bad);
 }
-.qualdamage,
-.damagecol {
+.qualdamage {
   color: var(--qual-bad);
 }
 .qualwhy {
