@@ -180,8 +180,24 @@ downloads rather than CD rips.
 
 ## Sidebar
 
-- [ ] **19. Maybe: a track sidebar.** Large album art with a tagging panel under it. Genres
-      (and perhaps artist, label) as links that list the library's tracks with that value, and
-      buttons that search the track on other sites. Shape not settled yet.
+- [ ] **19. Track sidebar.** A panel docked on the right, opened and closed by an arrow button
+      on the window's right edge (and a shortcut); open or closed is remembered. Top to bottom:
+      - **Album art**, square, the full width of the panel.
+      - **Tag panel** for the selected track: file facts that cannot be edited (format, bitrate,
+        length, sample rate), then the music fields (album, artists, genre, title, track
+        number, year, album artist, BPM, key, label…), edited in place with Apply / Cancel.
+        Genres (and perhaps artist, label) as links that list the library's tracks with that
+        value.
+      - **Search buttons**: the track's `Artist - Title` on Google, YouTube, Discogs,
+        Beatport, Bandcamp, SoundCloud and others, each opening the browser.
+
+      While the sidebar is open, selecting a track starts playing it, so going down the list
+      is listening through it; with the sidebar closed, selecting does not play, as now.
+- [ ] **20. Send to Telegram.** A button (toolbar, right-click, and the sidebar) that sends the
+      selected files themselves to a Telegram chat, as audio with title, performer and cover so
+      Telegram shows them as tracks. Through the Bot API (`sendAudio`): the user's own bot
+      token and chat ID go in Settings → Telegram, and the button is hidden until both are set.
+      The Bot API takes files up to 50 MB, which most FLAC and MP3 fit and long WAVs do not;
+      those are named and skipped rather than failing the batch.
 
 When a step changes what the app can do, the README's feature list is updated with it.
