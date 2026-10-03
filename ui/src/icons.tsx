@@ -518,6 +518,16 @@ export function KeyboardIcon() {
   );
 }
 
+/** Three bars of a chart: the library overview. */
+export function ChartIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 13.6h11.2" />
+      <path d="M4.2 13.6V8.4M8 13.6V3.6M11.8 13.6V6.4" />
+    </Icon>
+  );
+}
+
 /**
  * Every glyph a toolbar button can be given when the bar is customised.
  *
@@ -541,6 +551,7 @@ export const BAR_ICONS: { name: string; label: string; icon: () => JSX.Element }
   { name: "tab", label: "Tab", icon: TabIcon },
   { name: "video", label: "Video", icon: VideoIcon },
   { name: "keyboard", label: "Keyboard", icon: KeyboardIcon },
+  { name: "chart", label: "Chart", icon: ChartIcon },
 ];
 
 export function barIcon(name?: string) {

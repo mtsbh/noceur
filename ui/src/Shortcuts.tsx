@@ -23,6 +23,7 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
     title: "Browsing",
     items: [
       [["Ctrl", "F"], "Search"],
+      [["Ctrl", "I"], "Library overview"],
       [["Alt", "←"], "Back"],
       [["Alt", "→"], "Forward"],
       [["Ctrl", "Click"], "Add to selection"],

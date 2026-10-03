@@ -66,6 +66,7 @@ same track often exists in more than one place.
 - Loudness: integrated LUFS and true peak (ITU-R BS.1770 / EBU R128) in the quality report, and optionally written as ReplayGain
 - Duplicate finder based on decoded audio, independent of tags and file names
 - BPM and key detection, shown next to the tagged values and written only for the ones you tick; half/double time settled by a range, keys by a neural network (KeyNet) that agrees with Mixed In Key on about two tracks in three
+- Library overview (`Ctrl+I`): tracks and playing time, BPM spread, keys on a Camelot wheel, formats and sample rates, quality and loudness, missing tags, top labels, genres and artists, and the folders with the most problems, for the whole library or one folder
 - Optional: BPM and key measured automatically for each track you play, written only into empty fields (or shown, or overwritten), with the list marking where a tag disagrees
 
 **Conversion**
@@ -110,6 +111,7 @@ Noceur, on your `PATH`, or set its path in Settings → Files.
 | `Ctrl+Z` | Undo last rename |
 | `Ctrl+Shift+N` | New folder |
 | `Ctrl+F` | Search |
+| `Ctrl+I` | Library overview |
 | `Ctrl+T` / `Ctrl+W` | New tab / close tab |
 | `Ctrl+Tab`, `Ctrl+1`–`9` | Switch tabs |
 | `Ctrl+\` | Toggle dual pane |

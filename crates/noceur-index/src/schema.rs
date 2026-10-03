@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 12;
+pub const SCHEMA_VERSION: i32 = 13;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -275,4 +275,13 @@ CREATE TABLE damage (
     content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
     summary    TEXT NOT NULL
 );
+"#;
+
+/// The record label, for the library overview's top labels.
+///
+/// Every tag row is marked stale, as in V9: the label was never read before, and
+/// nothing about the files has changed to make the scanner look again.
+const V13: &str = r#"
+ALTER TABLE content_tag ADD COLUMN label TEXT;
+UPDATE content_tag SET read_at = 0;
 "#;

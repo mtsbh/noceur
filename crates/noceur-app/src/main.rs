@@ -23,6 +23,7 @@ mod format;
 mod fromname;
 mod identity;
 mod newfolder;
+mod overview;
 mod placement;
 mod quality;
 mod renamer;
@@ -173,6 +174,7 @@ fn main() {
             background::analysis_status,
             identity::identify,
             identity::duplicates,
+            overview::overview,
             actions::actions,
             actions::set_actions,
             actions::preview_action,

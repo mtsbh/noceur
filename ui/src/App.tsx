@@ -63,6 +63,7 @@ import Spectrogram from "./Spectrogram";
 import ActionRunner from "./ActionRunner";
 import Tools from "./Tools";
 import Duplicates from "./Duplicates";
+import Overview from "./Overview";
 import Converter from "./Converter";
 import NewFolder from "./NewFolder";
 import Shortcuts from "./Shortcuts";
@@ -98,6 +99,7 @@ import {
   MoveIcon,
   NewFolderIcon,
   KeyboardIcon,
+  ChartIcon,
   OpenIcon,
   OpenWithIcon,
   PigIcon,
@@ -558,6 +560,8 @@ export default function App() {
   const [timing, setTiming] = createSignal<number[] | null>(null);
   /** Files the duplicate finder is measuring, or null when it is closed. */
   const [comparing, setComparing] = createSignal<number[] | null>(null);
+  /** Whether the library overview is open. */
+  const [surveying, setSurveying] = createSignal(false);
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -1003,6 +1007,12 @@ export default function App() {
         icon: NewFolderIcon,
         auto: false,
         run: () => setNewFolderIn(focusPath()),
+      },
+      {
+        id: "overview",
+        label: "Library overview",
+        icon: ChartIcon,
+        run: () => setSurveying(true),
       },
       {
         id: "shortcuts",
@@ -1599,6 +1609,12 @@ export default function App() {
         return;
       }
 
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        setSurveying((open) => !open);
+        return;
+      }
+
       // The tab and split shortcuts. Ctrl+T is the reason every bare-letter
       // shortcut below checks the modifier: without it, opening a tab would also
       // toggle quick tag.
@@ -2082,6 +2098,17 @@ export default function App() {
             onClose={() => setComparing(null)}
           />
         )}
+      </Show>
+
+      <Show when={surveying()}>
+        <Overview
+          folder={focusPath()}
+          onOpen={(path) => {
+            navigateFocused(path);
+            setSurveying(false);
+          }}
+          onClose={() => setSurveying(false)}
+        />
       </Show>
 
       <Show when={matching()}>

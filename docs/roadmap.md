@@ -142,10 +142,17 @@ downloads rather than CD rips.
       files in `slsk`: 13 clipped at full scale, 8 clipped and turned down (−0.02 to −0.5 dB,
       runs of 23 to 237 identical samples). Lossy files rarely show it: the decoder does not
       rebuild a flat top flat.
-- [ ] **15. Library overview.** One page of statistics from the index, no listening history
+- [x] **15. Library overview.** One page of statistics from the index, no listening history
       needed: track count and total hours, BPM spread, keys on the Camelot wheel, formats and
       sample rates, quality verdicts, top labels, genres and artists, folders with the most
-      problems.
+      problems. Opens from the toolbar's chart button or `Ctrl+I`, for the whole library or
+      (ticked) only the current folder. Measured BPM and key stand in where the tag is empty.
+      The BPM chart spans 60–200 and counts the rest as outside, since a few tags read near
+      1000. Quality shows what Check quality has stored: tracks checked, damaged, unreadable,
+      and a LUFS spread; there is also a count of tracks missing artist, title, genre, BPM, key
+      or cover art. Top lists ignore case and stray spaces. Clicking a problem folder opens
+      it. The record label is now read into the index (schema 13), so labels fill in as
+      folders are re-read. The query takes about 140 ms on 991 tracks.
 - [ ] **16. Maybe: processing markers.** Platinum Notes detection (its spectral fingerprint:
       a boost near the cutoff, a flat top octave, a sharp wall), only if it can be validated on
       files known to have been through it. Also an offline scan for AI-generator provenance

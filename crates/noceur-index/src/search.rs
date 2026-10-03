@@ -163,7 +163,7 @@ pub fn search(db: &Db, query: &str, scopes: &[String], limit: i64) -> Result<Vec
 ///
 /// Folder names really do contain `%` and `_`, and an unescaped one silently
 /// widens the scope to places the user did not ask about.
-fn like_prefix(path: &str) -> String {
+pub(crate) fn like_prefix(path: &str) -> String {
     path.trim_end_matches(['\\', '/'])
         .to_lowercase()
         .replace('\\', "\\\\")

@@ -3275,6 +3275,233 @@ label.artoffer:hover {
   text-align: right;
 }
 
+/* ── Library overview ──────────────────────────────────────────────────────
+   Cards in a two-column grid; the tempo chart and the problem folders take the
+   full width, since both read left to right. */
+.renamer.overview {
+  height: min(760px, calc(100vh - 80px));
+}
+.ovbody {
+  overflow-x: hidden;
+}
+.ovscope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+  font-size: 11px;
+  color: var(--fg2);
+  cursor: pointer;
+}
+.ovscope input {
+  accent-color: var(--acc);
+  margin: 0;
+}
+.ovhead {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ovfigure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--raise);
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+}
+.ovvalue {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.ovlabel {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.ovgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.ovcard {
+  padding: 10px 12px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  min-width: 0;
+}
+.ovwide {
+  grid-column: 1 / -1;
+}
+.ovtops {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.ovcard h3 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg2);
+}
+.ovcard h3.ovsub {
+  margin-top: 14px;
+}
+.ovnote {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fg4);
+}
+.ovhist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ovcols,
+.ovaxis {
+  display: flex;
+  gap: 1px;
+}
+.ovcols {
+  height: 90px;
+  align-items: flex-end;
+}
+.ovcol {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.ovcol:hover {
+  background: var(--hover);
+}
+.ovcolfill {
+  width: 100%;
+  min-height: 1px;
+  background: var(--acc);
+  border-radius: 1px 1px 0 0;
+  opacity: 0.8;
+}
+.ovtick {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+  font-size: 9px;
+  color: var(--fg4);
+  font-variant-numeric: tabular-nums;
+}
+.ovwheel {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  margin: 0 auto;
+}
+.ovseg {
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+.ovkey {
+  font-size: 9px;
+  fill: var(--fg);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.ovkey.none {
+  fill: var(--fg4);
+}
+.ovbars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ovbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 48px;
+  gap: 8px;
+  align-items: center;
+  font-size: 11.5px;
+}
+.ovbarname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.ovbartrack {
+  height: 6px;
+  background: var(--hair);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ovbarfill {
+  display: block;
+  height: 100%;
+  background: var(--acc);
+  opacity: 0.75;
+}
+.ovcount {
+  color: var(--fg3);
+  text-align: right;
+  font-size: 11px;
+}
+.ovfacts {
+  display: flex;
+  flex-direction: column;
+}
+.ovfact {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--hair);
+  font-size: 11.5px;
+  color: var(--fg2);
+}
+.ovfact:last-child {
+  border-bottom: none;
+}
+.ovfact .mono {
+  color: var(--fg);
+}
+.ovfact.bad .mono {
+  color: var(--qual-bad);
+}
+.ovfolder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 64px;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hair);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.ovfolder:last-child {
+  border-bottom: none;
+}
+.ovfolder:hover {
+  background: var(--hover);
+}
+.ovpath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.ovbad {
+  color: var(--qual-bad);
+}
+
 /* ── Clean up ──────────────────────────────────────────────────────────────
    Shares the rename dialog's shell and its before-and-after list, because it
    is the same promise: nothing is written until every result has been seen. */

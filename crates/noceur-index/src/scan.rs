@@ -243,15 +243,15 @@ fn probe_target(
     db.conn().execute(
         "INSERT INTO content_tag (content_id, artist, title, album, album_artist, genre,
                                   year, track_no, comment, isrc, bpm_tag, key_tag,
-                                  key_norm, has_artwork, read_at, rating)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
+                                  key_norm, has_artwork, read_at, rating, label)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
          ON CONFLICT(content_id) DO UPDATE SET
              artist=excluded.artist, title=excluded.title, album=excluded.album,
              album_artist=excluded.album_artist, genre=excluded.genre,
              year=excluded.year, track_no=excluded.track_no, comment=excluded.comment,
              isrc=excluded.isrc, bpm_tag=excluded.bpm_tag, key_tag=excluded.key_tag,
              key_norm=excluded.key_norm, has_artwork=excluded.has_artwork,
-             read_at=excluded.read_at, rating=excluded.rating",
+             read_at=excluded.read_at, rating=excluded.rating, label=excluded.label",
         params![
             content_id,
             meta.artist,
@@ -277,6 +277,7 @@ fn probe_target(
             // what is true: the tags are current as of that stamp.
             now().max(file_mtime),
             meta.rating.map(|v| v as i64),
+            meta.label,
         ],
     )?;
 

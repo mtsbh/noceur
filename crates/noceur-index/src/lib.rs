@@ -4,6 +4,7 @@ pub mod analysis;
 pub mod db;
 pub mod envelope;
 pub mod identity;
+pub mod overview;
 pub mod query;
 pub mod quickkey;
 pub mod scan;

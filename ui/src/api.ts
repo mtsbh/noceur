@@ -820,6 +820,52 @@ export function duplicates(scopes: string[]): Promise<DuplicateGroup[]> {
   return invoke<DuplicateGroup[]>("duplicates", { scopes });
 }
 
+/** One value and how many tracks carry it. */
+export type Tally = { value: string; count: number };
+
+/** A folder and what is wrong in it. */
+export type ProblemFolder = {
+  path: string;
+  tracks: number;
+  damaged: number;
+  unreadable: number;
+};
+
+/** Statistics over the indexed library. */
+export type Overview = {
+  tracks: number;
+  folders: number;
+  seconds: number;
+  bytes: number;
+  /** `[bpm, tracks]`, ascending. */
+  bpm: [number, number][];
+  /** Tracks per key, indexed by the canonical key value (0–23). */
+  keys: number[];
+  formats: Tally[];
+  /** `"44100/16"`, or `"44100/"` where the depth is unknown. */
+  sampleRates: Tally[];
+  /** `[whole LUFS, tracks]`, ascending. */
+  lufs: [number, number][];
+  checked: number;
+  damaged: number;
+  unreadable: number;
+  noArtist: number;
+  noTitle: number;
+  noGenre: number;
+  noBpm: number;
+  noKey: number;
+  noArt: number;
+  labels: Tally[];
+  genres: Tally[];
+  artists: Tally[];
+  problemFolders: ProblemFolder[];
+};
+
+/** The library at a glance, or one folder and everything under it. */
+export function overview(scope: string | null): Promise<Overview> {
+  return invoke<Overview>("overview", { scope });
+}
+
 /** What a user-defined action does. */
 export type ActionKind = "tag" | "rename" | "open" | "url" | "copy" | "move";
 
