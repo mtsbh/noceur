@@ -2231,6 +2231,7 @@ dependencies = [
 name = "noceur-online"
 version = "0.1.0"
 dependencies = [
+ "noceur-audio",
  "serde",
  "serde_json",
  "thiserror 2.0.19",

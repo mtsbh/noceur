@@ -14,6 +14,7 @@ pub mod loudness;
 pub mod prefetch;
 pub mod quality;
 pub mod scope;
+pub mod shazam;
 pub mod source;
 pub mod spectrogram;
 pub mod tempo;

@@ -577,24 +577,28 @@ export type TrackMatch = {
 
 /**
  * What the matches were searched with, when it was not the file's tags: the
- * fingerprint ("sound") or a guess from the file name ("name").
+ * AcoustID fingerprint ("sound"), Shazam ("shazam") or a guess from the file
+ * name ("name").
  */
-export type Query = { by: "sound" | "name"; artist: string; title: string };
+export type Query = { by: "sound" | "shazam" | "name"; artist: string; title: string };
 
 export type Matched = { matches: TrackMatch[]; query: Query | null };
 
 /**
  * Searches every source for what this file might be.
  *
- * Tries the file's tags, then its fingerprint, then its name, until one finds
- * something — the files that most need this are the ones with no tags.
+ * Tries the file's tags, then its fingerprint (AcoustID, then Shazam when on),
+ * then its name, until one finds something — the files that most need this are the ones with no tags.
  */
 export function matchTrack(fileId: number): Promise<Matched> {
   return invoke<Matched>("match_track", { fileId });
 }
 
-/** Which optional credentials are set. Never carries the values themselves. */
-export type Credentials = { discogs: boolean; tidal: boolean };
+/**
+ * Which optional credentials are set, and whether Shazam is on. Never carries
+ * the values themselves.
+ */
+export type Credentials = { discogs: boolean; tidal: boolean; shazam: boolean };
 
 export function credentials(): Promise<Credentials> {
   return invoke<Credentials>("credentials");
@@ -608,6 +612,11 @@ export function credentials(): Promise<Credentials> {
  */
 export function setDiscogsToken(token: string): Promise<Credentials> {
   return invoke<Credentials>("set_discogs_token", { token });
+}
+
+/** Turns Shazam lookups in Find metadata on or off. */
+export function setShazam(on: boolean): Promise<Credentials> {
+  return invoke<Credentials>("set_shazam", { on });
 }
 
 /** Stores the Tidal app's client ID and secret. Both empty clears them. */

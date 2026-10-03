@@ -177,7 +177,7 @@ downloads rather than CD rips.
 
 ## Identification
 
-- [ ] **17. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
+- [x] **17. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
       electronic music. The fingerprint is ported from SongRec (`marin-m/SongRec`, GPL-3.0,
       pure Rust: a peak-picked spectrogram of about 12 seconds, encoded as Shazam's signature),
       sent through `noceur-online`'s own HTTP client rather than SongRec's libsoup. The result

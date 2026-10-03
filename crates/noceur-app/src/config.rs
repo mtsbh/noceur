@@ -26,6 +26,11 @@ pub struct Config {
     pub tidal_client_id: String,
     #[serde(default)]
     pub tidal_client_secret: String,
+    /// Whether Find metadata may ask Shazam about tracks AcoustID does not
+    /// know. Off by default: it is Shazam's private app API, which can change
+    /// or block without notice, and the user should choose to rely on it.
+    #[serde(default)]
+    pub shazam: bool,
     /// Whether a tag write puts the file's modified date back afterwards.
     ///
     /// On by default. "Date modified" is what a DJ sorts by to find what
@@ -67,6 +72,7 @@ impl Default for Config {
             discogs_token: String::new(),
             tidal_client_id: String::new(),
             tidal_client_secret: String::new(),
+            shazam: false,
             preserve_dates: true,
             window: None,
             actions: Vec::new(),

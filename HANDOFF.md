@@ -66,7 +66,7 @@
    user. Range presets 70–180 / 60–120 / 85–175 / 100–200 are open wording.
 3. The user wants to pick 3–5 of their tracks and compare Noceur, rekordbox and Mixed In Key on
    BPM and key. `cargo run --release -p noceur-audio --example bpm|key -- <files>` prints ours.
-4. Roadmap: steps 1–16 are done. Next, in order: 17 Shazam lookup, 18 Send to Telegram, 19 track sidebar, then rekordbox last (20 playlists, 21 energy, 22 cues). Processing markers dropped (user, 2026-10-04).
+4. Roadmap: steps 1–17 are done (Shazam: `cargo run --release -p noceur-online --example shazam -- <files>` checks recognition by hand; `shazam::MAX_SKEW` rejects other tracks on the same sample). Next, in order: 18 Send to Telegram, 19 track sidebar, then rekordbox last (20 playlists, 21 energy, 22 cues). Processing markers dropped (user, 2026-10-04).
 5. Settings copy for sources is open: current "Discogs and Tidal need your own keys. Each is
    sent only to its service." (user not yet asked to pick).
 6. Known smaller issues:

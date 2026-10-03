@@ -162,6 +162,7 @@ fn main() {
             autotag::credentials,
             autotag::set_discogs_token,
             autotag::set_tidal,
+            autotag::set_shazam,
             renamer::preview_rename,
             renamer::apply_rename,
             config::preserve_dates,

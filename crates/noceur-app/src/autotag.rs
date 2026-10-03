@@ -12,9 +12,10 @@ use tauri::State;
 /// Searches every source for what this file might be.
 ///
 /// Reads the file rather than the index, like the tag editor does. When the
-/// tags have nothing to search with, it identifies the audio by fingerprint and
-/// then falls back to the file name, because the files that most need this are
-/// exactly the ones with no tags — promos, rips, things pulled off a stick.
+/// tags have nothing to search with, it identifies the audio by fingerprint
+/// (AcoustID, then Shazam when the user has turned it on) and then falls back
+/// to the file name, because the files that most need this are exactly the ones
+/// with no tags — promos, rips, things pulled off a stick.
 ///
 /// The duration comes from the file's own header and is used only as a tiebreak.
 #[tauri::command]
@@ -79,13 +80,23 @@ pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Mat
         // A fingerprint names the recording outright, where a file name is only
         // a guess; tags that find nothing may be wrong, or say only "Track 01".
         // A query already tried is not sent again.
+        //
+        // Shazam comes after AcoustID: it is a private API that rate-limits, so
+        // it is only asked about what AcoustID does not know. What it heard is
+        // a match in its own right (label, release, ISRC, sleeve) and also the
+        // artist and title the other sources are searched with.
         let mut result = Ok(Vec::new());
         let mut query = None;
         let mut tried: Vec<(String, String)> = Vec::new();
-        for by in [By::Tags, By::Sound, By::Name] {
+        for by in [By::Tags, By::Sound, By::Shazam, By::Name] {
+            let mut heard = None;
             let next = match by {
                 By::Tags => tagged.then(|| (tagged_artist.clone(), tagged_title.clone())),
                 By::Sound => identify(&found.path, meta.duration_ms).map(|h| (h.artist(), h.title)),
+                By::Shazam => {
+                    heard = config.shazam.then(|| shazam(&found.path)).flatten();
+                    heard.as_ref().map(|m| (m.artist(), m.title.clone()))
+                }
                 By::Name => Some(named.clone()),
             };
             let Some((artist, title)) = next else {
@@ -97,6 +108,12 @@ pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Mat
                 continue;
             }
             result = search(&artist, &title);
+            if let Some(heard) = heard {
+                // Kept even when the other sources find nothing, or fail.
+                let mut found = result.unwrap_or_default();
+                found.insert(0, heard);
+                result = Ok(found);
+            }
             tried.push((artist.clone(), title.clone()));
             query = Some(Query { by, artist, title });
             if result.as_ref().is_ok_and(|m| !m.is_empty()) {
@@ -157,6 +174,8 @@ pub enum By {
     Tags,
     /// The AcoustID fingerprint.
     Sound,
+    /// Shazam's signature.
+    Shazam,
     /// A guess from the file name.
     Name,
 }
@@ -186,6 +205,20 @@ fn identify(
         .ok()?
         .into_iter()
         .find(|h| h.score >= acoustid::MIN_SCORE)
+}
+
+/// What Shazam says a file is, as a match.
+///
+/// `None` for anything short of an answer, for the same reason as [`identify`]:
+/// Shazam unreachable, rate-limiting or not knowing the track leaves the search
+/// where it would have been without it.
+fn shazam(path: &std::path::Path) -> Option<TrackMatch> {
+    let sig = noceur_audio::shazam::signature(path)
+        .inspect_err(|e| eprintln!("Shazam signature {}: {e}", path.display()))
+        .ok()?;
+    noceur_online::shazam::identify(&sig.uri, sig.sample_ms)
+        .inspect_err(|e| eprintln!("Shazam: {e}"))
+        .ok()?
 }
 
 /// Candidates kept per source.
@@ -235,6 +268,7 @@ pub fn credentials() -> Credentials {
         discogs: !config.discogs_token.trim().is_empty(),
         tidal: !config.tidal_client_id.trim().is_empty()
             && !config.tidal_client_secret.trim().is_empty(),
+        shazam: config.shazam,
     }
 }
 
@@ -245,6 +279,9 @@ pub struct Credentials {
     pub discogs: bool,
     /// True when both halves of the Tidal credentials are stored.
     pub tidal: bool,
+    /// True when the user has turned Shazam lookups on. Not a credential, but
+    /// asked and answered in the same place as the sources that need one.
+    pub shazam: bool,
 }
 
 /// Stores or clears the Discogs token.
@@ -267,6 +304,16 @@ pub fn set_tidal(client_id: String, secret: String) -> Result<Credentials, Strin
     let mut config = crate::config::Config::load(&path);
     config.tidal_client_id = client_id.trim().to_string();
     config.tidal_client_secret = secret.trim().to_string();
+    config.save(&path)?;
+    Ok(credentials())
+}
+
+/// Turns Shazam lookups on or off.
+#[tauri::command]
+pub fn set_shazam(on: bool) -> Result<Credentials, String> {
+    let path = crate::config::Config::default_path();
+    let mut config = crate::config::Config::load(&path);
+    config.shazam = on;
     config.save(&path)?;
     Ok(credentials())
 }

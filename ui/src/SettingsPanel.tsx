@@ -8,6 +8,7 @@ import {
   preserveDates,
   setActions,
   setDiscogsToken,
+  setShazam,
   setTidal,
   setPreserveDates,
   ffmpegInfo,
@@ -349,12 +350,14 @@ export default function Settings(props: {
   const [tidalId, setTidalId] = createSignal("");
   const [tidalSecret, setTidalSecret] = createSignal("");
   const [hasTidal, setHasTidal] = createSignal(false);
+  const [shazamOn, setShazamOn] = createSignal(false);
 
   createEffect(() => {
     credentials()
       .then((c) => {
         setHasDiscogs(c.discogs);
         setHasTidal(c.tidal);
+        setShazamOn(c.shazam);
       })
       .catch(() => {});
   });
@@ -759,8 +762,33 @@ export default function Settings(props: {
           <Section
             tab="sources"
             title="Metadata sources"
-            info={<p>Discogs and Tidal need your own keys. Each is sent only to its service.</p>}
+            info={
+              <>
+                <p>Discogs and Tidal need your own keys. Each is sent only to its service.</p>
+                <p>
+                  Shazam hears twelve seconds of the track, for what AcoustID
+                  doesn't know. Unofficial: it can stop working without notice.
+                </p>
+              </>
+            }
           >
+            <div class="setrow">
+              <span class="setlabel">Shazam</span>
+              <label class="setcheck">
+                <input
+                  type="checkbox"
+                  checked={shazamOn()}
+                  onChange={(e) => {
+                    const want = e.currentTarget.checked;
+                    setShazamOn(want);
+                    setShazam(want)
+                      .then((c) => setShazamOn(c.shazam))
+                      .catch(() => setShazamOn(!want));
+                  }}
+                />
+                <span>Identify by sound when AcoustID can't</span>
+              </label>
+            </div>
             <div class="setrow">
               <span class="setlabel">Discogs</span>
               <input

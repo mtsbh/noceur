@@ -53,7 +53,7 @@ same track often exists in more than one place.
 - Star ratings (`Alt+0`–`Alt+5`), stored where DJ software reads them
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
 - Metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive, always picked by hand
-- Untagged files identified by sound (AcoustID fingerprint), then searched by what they turn out to be; the file name is the last resort
+- Untagged files identified by sound (AcoustID fingerprint, then Shazam for new and underground releases AcoustID doesn't know, when turned on in Settings), then searched by what they turn out to be; the file name is the last resort
 - Tags from file name (`%artist% - %title%` patterns, with preview)
 - Rename from templates; Clean up renames to `Artist - Title` in one click (Ctrl+Z undoes)
 - Actions, previewed old → new: clean tags, remove (Original Mix) or trailing brackets, tidy featuring, album artist from artist, artist into or out of the title, year only, cut N characters off the name, move into folders built from tags
@@ -182,7 +182,7 @@ crates/
   noceur-tags      tag reading and writing, key normalization, ratings
   noceur-art       cover art extraction, thumbnails, shell icons
   noceur-audio     playback, waveforms, spectrograms, meters, quality analysis, audio identity
-  noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Tidal, Cover Art Archive, AcoustID clients
+  noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Tidal, Cover Art Archive, AcoustID, Shazam clients
   noceur-index     SQLite index, scanner, queries, caches
   noceur-app       Tauri application: commands, state, formatting
   noceur-cli       headless debug CLI
