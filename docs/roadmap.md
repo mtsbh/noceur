@@ -154,28 +154,9 @@ downloads rather than CD rips.
       it. The record label is now read into the index (schema 13), so labels fill in as
       folders are re-read. The query takes about 140 ms on 991 tracks.
 
-## Maybe
-
-- [ ] **16. Maybe: processing markers.** Platinum Notes detection (its spectral fingerprint:
-      a boost near the cutoff, a flat top octave, a sharp wall), only if it can be validated on
-      files known to have been through it. Also an offline scan for AI-generator provenance
-      markers (tags, C2PA manifests), which only finds tracks that declare themselves; no audio is
-      uploaded anywhere.
-
-## Identification
-
-- [ ] **17. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
-      electronic music. The fingerprint is ported from SongRec (`marin-m/SongRec`, GPL-3.0,
-      pure Rust: a peak-picked spectrogram of about 12 seconds, encoded as Shazam's signature),
-      sent through `noceur-online`'s own HTTP client rather than SongRec's libsoup. The result
-      carries title, artists, label, release, ISRC and artwork, and goes into the same picker as
-      the other sources. It is Shazam's private app API, not a published one: it can change
-      without notice and rate-limits by IP, so it is off until enabled in Settings → Metadata
-      sources, runs one file at a time, and comes after the tags and AcoustID in Find metadata.
-
 ## Background analysis
 
-- [x] **18. BPM and key without asking.** Each track the player loads is measured by one
+- [x] **16. BPM and key without asking.** Each track the player loads is measured by one
       low-priority thread while it plays; only what is played, never the rest of its folder.
       The result is kept in the index (`analysis` table, carried across tag writes like the
       waveform), and Detect BPM & key stores what it measures there too. Settings → Files →
@@ -194,6 +175,27 @@ downloads rather than CD rips.
       renamed back if the original is gone. Dates are preserved as in
       any retag, creation date included.
 
+## Identification
+
+- [ ] **17. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
+      electronic music. The fingerprint is ported from SongRec (`marin-m/SongRec`, GPL-3.0,
+      pure Rust: a peak-picked spectrogram of about 12 seconds, encoded as Shazam's signature),
+      sent through `noceur-online`'s own HTTP client rather than SongRec's libsoup. The result
+      carries title, artists, label, release, ISRC and artwork, and goes into the same picker as
+      the other sources. It is Shazam's private app API, not a published one: it can change
+      without notice and rate-limits by IP, so it is off until enabled in Settings → Metadata
+      sources, runs one file at a time, and comes after the tags and AcoustID in Find metadata.
+
+## Telegram
+
+- [ ] **18. Send to Telegram.** A button (toolbar, right-click, and the sidebar once step 19 adds it) that hands the
+      selected files to Telegram Desktop, which comes to the front with its chat picker; the user
+      picks the chat and sends. Done the way Explorer's own "Send to → Telegram" does it
+      (`Telegram.exe -sendpath <file>`), so it goes from the user's own account: no bot, no
+      setup, and the usual 2 GB limit rather than a bot's 50 MB. Telegram is found where it is
+      installed (or through the Windows share sheet for the Store version); the button is hidden
+      when it is not.
+
 ## Sidebar
 
 - [ ] **19. Track sidebar.** A panel docked on the right, opened and closed by an arrow button
@@ -209,17 +211,10 @@ downloads rather than CD rips.
 
       While the sidebar is open, selecting a track starts playing it, so going down the list
       is listening through it; with the sidebar closed, selecting does not play, as now.
-- [ ] **20. Send to Telegram.** A button (toolbar, right-click, and the sidebar) that hands the
-      selected files to Telegram Desktop, which comes to the front with its chat picker; the user
-      picks the chat and sends. Done the way Explorer's own "Send to → Telegram" does it
-      (`Telegram.exe -sendpath <file>`), so it goes from the user's own account: no bot, no
-      setup, and the usual 2 GB limit rather than a bot's 50 MB. Telegram is found where it is
-      installed (or through the Windows share sheet for the Store version); the button is hidden
-      when it is not.
 
 ## rekordbox
 
-- [ ] **21. Playlists, sent to rekordbox.** Named playlists kept in the index, with tracks ticked
+- [ ] **20. Playlists, sent to rekordbox.** Named playlists kept in the index, with tracks ticked
       into them from a key or the right-click menu, so nothing is copied or duplicated to gather
       a set. Send to rekordbox merges the playlists and their tracks into the `rekordbox.xml`
       that rekordbox's Imported Library and Mixed In Key already share (set in Settings), so the
@@ -231,16 +226,16 @@ downloads rather than CD rips.
       In Key or a rekordbox export got there in between). New tracks get today's DateAdded.
       Playlists live in noceur's index, so a rekordbox export that overwrites the file loses
       nothing: the next send puts them back.
-- [ ] **22. Energy level.** A 1–10 energy rating per track, in the style of Mixed In Key's,
+- [ ] **21. Energy level.** A 1–10 energy rating per track, in the style of Mixed In Key's,
       measured with BPM and key and shown as a column. Written to the file's tags (where Mixed In
       Key puts its own) and to the XML's comment, and checked against the tracks Mixed In Key has
       already rated, so it can be trusted in its place.
-- [ ] **23. Cue points.** Up to eight cues per track on the beat grid, snapped to the 8- and
+- [ ] **22. Cue points.** Up to eight cues per track on the beat grid, snapped to the 8- and
       16-bar phrases where the music changes (intro, drops, breakdowns, outro), named like Mixed
-      In Key's and written to the XML through step 21 as both hot cues and memory cues, with the
+      In Key's and written to the XML through step 20 as both hot cues and memory cues, with the
       beat grid alongside. A track that already has cues is left alone. Tuned against the 36
       tracks Mixed In Key has cued and the library's existing cues; before it ships, checked on a
       test track whether rekordbox takes new cues for a track already in its collection. With
-      steps 21–23, Mixed In Key is no longer needed.
+      steps 20–22, Mixed In Key is no longer needed.
 
 When a step changes what the app can do, the README's feature list is updated with it.
