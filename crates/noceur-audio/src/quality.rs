@@ -61,17 +61,41 @@ const CLIP_LEVEL: f32 = 0.9985;
 /// reporting.
 const CLIP_RUN: u32 = 3;
 
-/// How much of a file is pinned to full scale.
+/// Identical samples in a row, in one channel, before a flat top below full
+/// scale counts.
+///
+/// Stricter than [`CLIP_RUN`]: below full scale nothing pins a sample, so equal
+/// neighbours also come from the slow crest of a deep bass note, which at 16-bit
+/// resolution repeats a value two or three times. Eight is a cut top.
+const PLATEAU_RUN: u32 = 8;
+
+/// How far under the file's own peak a flat top may sit and still be the one
+/// the gain moved down. A few stray samples above it, from an edit or a
+/// transient added later, should not hide it.
+const PLATEAU_RANGE_DB: f32 = 1.0;
+
+/// Resolution samples are compared at: 16-bit, so a top that went through a
+/// 24-bit gain stage still reads as flat.
+const STEPS: f32 = 32768.0;
+
+/// Flat tops lower than this (−12 dBFS) are not tracked. Nobody normalises a
+/// clipped master that far down, and it keeps the tally small.
+const PLATEAU_FLOOR: u32 = 8192;
+
+/// How much of a file is clipped.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Clipping {
     /// Portion of all samples inside a clipped run, as a percentage.
     pub percent: f32,
-    /// Longest unbroken run of full-scale samples, in samples.
+    /// Longest unbroken run of clipped samples, in samples.
     ///
     /// The more telling of the two: a track can clip on a thousand isolated
     /// transients and sound fine, while one run of two hundred samples is
     /// audible distortion.
     pub longest_run: u32,
+    /// Where the flat tops sit, in dBFS: 0 for full scale, below it for a track
+    /// that clipped and was then turned down.
+    pub level_db: f32,
 }
 
 /// What the spectrum of a file looks like.
@@ -95,17 +119,107 @@ pub struct Spectrum {
 /// Per channel and on the raw samples rather than the downmix: averaging two
 /// channels together pulls a clipped one back under full scale and hides exactly
 /// what this is looking for.
-#[derive(Default)]
 struct ClipCounter {
     total: u64,
     clipped: u64,
     run: u32,
     longest: u32,
+    plateaus: Plateaus,
+}
+
+/// Samples inside flat runs, and the longest, at one level.
+#[derive(Default, Clone, Copy)]
+struct Flat {
+    samples: u64,
+    longest: u32,
+}
+
+/// Runs of identical samples below full scale, by level.
+///
+/// A track that clipped and was then turned down keeps its flat tops, just
+/// lower; where they sit is only known once the file's peak is, so every level
+/// near the top is tallied and the one that matters picked at the end.
+struct Plateaus {
+    channels: usize,
+    channel: usize,
+    /// Per channel: the last sample, in steps, and how many times in a row.
+    last: Vec<(i32, u32)>,
+    peak: u32,
+    flats: std::collections::HashMap<u32, Flat>,
+}
+
+impl Plateaus {
+    fn new(channels: usize) -> Plateaus {
+        let channels = channels.max(1);
+        Plateaus {
+            channels,
+            channel: 0,
+            last: vec![(i32::MIN, 0); channels],
+            peak: 0,
+            flats: std::collections::HashMap::new(),
+        }
+    }
+
+    fn push(&mut self, sample: f32) {
+        let step = (sample * STEPS).round() as i32;
+        let (last, run) = &mut self.last[self.channel];
+        self.channel = (self.channel + 1) % self.channels;
+        if step == *last {
+            *run += 1;
+        } else {
+            *last = step;
+            *run = 1;
+        }
+
+        let level = step.unsigned_abs();
+        self.peak = self.peak.max(level);
+        if level < PLATEAU_FLOOR || *run < CLIP_RUN {
+            return;
+        }
+        let flat = self.flats.entry(level).or_default();
+        flat.samples += if *run == CLIP_RUN {
+            u64::from(CLIP_RUN)
+        } else {
+            1
+        };
+        flat.longest = flat.longest.max(*run);
+    }
+
+    /// The highest flat top near the file's peak and below full scale, as
+    /// (level in steps, samples in it, longest run).
+    fn finish(&self) -> Option<(u32, u64, u32)> {
+        let floor = self.peak as f32 * 10f32.powf(-PLATEAU_RANGE_DB / 20.0);
+        let top = self
+            .flats
+            .iter()
+            .filter(|(level, f)| f.longest >= PLATEAU_RUN && **level as f32 >= floor)
+            .map(|(level, _)| *level)
+            .max()?;
+        if top as f32 >= CLIP_LEVEL * STEPS {
+            return None;
+        }
+        // A step either side: dither or rounding can split one top in two.
+        let (samples, longest) = (top - 1..=top + 1)
+            .filter_map(|l| self.flats.get(&l))
+            .fold((0, 0), |(s, l), f| (s + f.samples, l.max(f.longest)));
+        Some((top, samples, longest))
+    }
 }
 
 impl ClipCounter {
+    fn new(channels: usize) -> ClipCounter {
+        ClipCounter {
+            total: 0,
+            clipped: 0,
+            run: 0,
+            longest: 0,
+            plateaus: Plateaus::new(channels),
+        }
+    }
+
     fn push(&mut self, sample: f32) {
         self.total += 1;
+        self.plateaus.push(sample);
         if sample.abs() < CLIP_LEVEL {
             self.run = 0;
             return;
@@ -123,13 +237,30 @@ impl ClipCounter {
     }
 
     fn finish(self) -> Clipping {
-        Clipping {
-            percent: if self.total == 0 {
+        let percent = |n: u64| {
+            if self.total == 0 {
                 0.0
             } else {
-                self.clipped as f32 / self.total as f32 * 100.0
-            },
+                n as f32 / self.total as f32 * 100.0
+            }
+        };
+        let full = Clipping {
+            percent: percent(self.clipped),
             longest_run: self.longest,
+            level_db: 0.0,
+        };
+        // Clipping at full scale is the answer whenever there is any to speak
+        // of; a turned-down top is looked for only when there is not.
+        if full.longest_run >= PLATEAU_RUN {
+            return full;
+        }
+        match self.plateaus.finish() {
+            Some((level, samples, longest)) => Clipping {
+                percent: percent(samples),
+                longest_run: longest,
+                level_db: 20.0 * (level as f32 / STEPS).log10(),
+            },
+            None => full,
         }
     }
 }
@@ -559,7 +690,7 @@ pub fn spectrum(mono: &[f32], sample_rate: u32) -> Spectrum {
         }
     }
 
-    let mut clips = ClipCounter::default();
+    let mut clips = ClipCounter::new(1);
     let mut meter = Meter::new(1, sample_rate);
     let mut damage = Inspector::new(1, sample_rate);
     for sample in mono {
@@ -611,7 +742,7 @@ impl Pass {
             at: 0,
             sum: 0.0,
             in_frame: 0,
-            clips: ClipCounter::default(),
+            clips: ClipCounter::new(channels),
             meter: Meter::new(channels, rate),
             damage: Inspector::new(channels, rate),
         }
@@ -1247,6 +1378,50 @@ mod tests {
         let mut samples = vec![0.2f32; 1000];
         samples[10..30].fill(0.999);
         assert_eq!(measured(&samples).clipping.longest_run, 20);
+    }
+
+    /// Clipped, then normalised to −0.3 dB: the same flat tops, lower down.
+    #[test]
+    fn a_clipped_track_turned_down_is_still_clipping() {
+        let gain = 10f32.powf(-0.3 / 20.0);
+        let mut samples: Vec<f32> = (0..10_000)
+            .map(|i| (i as f32 * 0.05).sin() * 1.4)
+            .map(|s| s.clamp(-1.0, 1.0) * gain)
+            .collect();
+        // A higher stray sample does not hide the tops under it.
+        samples[5] = 0.99;
+
+        let c = measured(&samples).clipping;
+        assert!((c.level_db + 0.3).abs() < 0.01, "got {}", c.level_db);
+        assert!(c.longest_run >= PLATEAU_RUN, "got {}", c.longest_run);
+        assert!(c.percent > 10.0, "got {}", c.percent);
+    }
+
+    /// The crest of a deep bass note repeats a 16-bit value a few times. That
+    /// is a round top, not a cut one.
+    #[test]
+    fn a_slow_round_peak_is_not_a_flat_top() {
+        let rate = 44_100.0;
+        let samples: Vec<f32> = (0..44_100)
+            .map(|i| (std::f32::consts::TAU * 30.0 * i as f32 / rate).sin() * 0.9)
+            .collect();
+        let c = measured(&samples).clipping;
+        assert_eq!(c.level_db, 0.0);
+        assert_eq!(c.percent, 0.0);
+    }
+
+    /// A flat top in one channel only is found in interleaved stereo too.
+    #[test]
+    fn a_flat_top_in_one_channel_is_found() {
+        let mut c = ClipCounter::new(2);
+        for i in 0..2000 {
+            let left = if (100..140).contains(&i) { 0.8 } else { 0.3 };
+            c.push(left);
+            c.push((i as f32 * 0.37).sin() * 0.5);
+        }
+        let c = c.finish();
+        assert_eq!(c.longest_run, 40);
+        assert!((c.level_db - 20.0 * 0.8f32.log10()).abs() < 0.01);
     }
 
     // ── Refusing to guess ─────────────────────────────────────────────────

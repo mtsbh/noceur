@@ -132,10 +132,16 @@ downloads rather than CD rips.
       not counted. The report gained a header row (Claimed bitrate, Actual bitrate, Cutoff,
       Clip, LUFS, Peak), an Actual bitrate column with the bitrate the spectrum implies, and shows any clipping, red once it
       is enough to hear.
-- [ ] **14. Clipping after gain.** The clipping check looks for samples at full scale. A track
-      that clipped and was then turned down (normalised to −0.3 dB, say) has the same flat tops
-      at a lower level; detect runs of identical peak samples at the file's own maximum, and
-      report how far below full scale they sit.
+- [x] **14. Clipping after gain.** A track that clipped and was then turned down (normalised
+      to −0.3 dB, say) keeps its flat tops at a lower level. Check quality now also counts runs
+      of identical samples, per channel at 16-bit resolution, at every level within 1 dB of the
+      file's own peak, and reports the highest one with a run of 8 or more. The Clip column
+      shows it with `↓`, and its tip says where the tops sit ("Clipped, then turned down to
+      −0.10 dB"). Clipping at full scale still wins when there is any. A deep bass crest repeats
+      a 16-bit value two or three times, not eight, so round peaks are left alone. On the 210
+      files in `slsk`: 13 clipped at full scale, 8 clipped and turned down (−0.02 to −0.5 dB,
+      runs of 23 to 237 identical samples). Lossy files rarely show it: the decoder does not
+      rebuild a flat top flat.
 - [ ] **15. Library overview.** One page of statistics from the index, no listening history
       needed: track count and total hours, BPM spread, keys on the Camelot wheel, formats and
       sample rates, quality verdicts, top labels, genres and artists, folders with the most

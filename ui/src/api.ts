@@ -699,10 +699,12 @@ export type QualityRow = {
   cutoffKhz: number;
   sampleRate: number;
   lossless: boolean;
-  /** Portion of samples pinned to full scale, as a percentage. */
+  /** Portion of samples in a flat top, as a percentage. */
   clipPercent: number;
-  /** Longest unbroken run of full-scale samples. */
+  /** Longest unbroken run of flat-topped samples. */
   clipRun: number;
+  /** Where the flat tops sit, dBFS: 0 at full scale, below when turned down after clipping. */
+  clipDb: number;
   /** Integrated loudness, LUFS. */
   lufs: number | null;
   /** True peak, dBTP. */

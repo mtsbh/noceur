@@ -177,6 +177,11 @@ export default function Quality(props: {
   /** Share of samples in a clipped run, `0.42%`, `<0.01%` for a trace. */
   const clipText = (r: QualityRow) =>
     r.clipPercent < 0.01 ? "<0.01%" : `${r.clipPercent.toFixed(2)}%`;
+  /** The run, and where the tops sit when the track was turned down after clipping. */
+  const clipTip = (r: QualityRow) =>
+    r.clipDb < 0
+      ? `Clipped, then turned down to ${r.clipDb.toFixed(2).replace("-", "−")} dB · longest run ${r.clipRun}`
+      : `Longest run ${r.clipRun} samples`;
 
   /**
    * What the spectrum says the file really is: the bitrate its cutoff is
@@ -260,7 +265,7 @@ export default function Quality(props: {
                 <span class="qualclaim" data-tip="What the file's header says">Claimed bitrate</span>
                 <span class="qualreal" data-tip="What the audio itself shows it was encoded at">Actual bitrate</span>
                 <span class="qualcut" data-tip="Highest frequency with real signal">Cutoff</span>
-                <span class="qualclip" data-tip="Samples pinned to full scale">Clip</span>
+                <span class="qualclip" data-tip="Samples in flat tops, at full scale or turned down">Clip</span>
                 <span class="quallufs" data-tip="Integrated loudness, LUFS">LUFS</span>
                 <span class="qualpeak" data-tip="True peak, dBTP">Peak</span>
                 <span class="qualwhy">Result</span>
@@ -285,9 +290,12 @@ export default function Quality(props: {
                         when there is none: a column of "0%" is noise. */}
                     <span
                       class={`qualclip mono ${clipped(r) ? "bad" : ""}`}
-                      data-tip={r.clipPercent > 0 ? `Longest run ${r.clipRun} samples` : undefined}
+                      data-tip={r.clipPercent > 0 ? clipTip(r) : undefined}
                     >
-                      <Show when={r.clipPercent > 0}>{clipText(r)}</Show>
+                      <Show when={r.clipPercent > 0}>
+                        {clipText(r)}
+                        <Show when={r.clipDb < 0}> ↓</Show>
+                      </Show>
                     </span>
                     <span class="quallufs mono" data-tip="Integrated loudness">
                       {r.lufs === null ? "—" : r.lufs.toFixed(1)}

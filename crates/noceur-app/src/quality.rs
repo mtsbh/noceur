@@ -31,10 +31,13 @@ pub struct QualityRow {
     pub cutoff_khz: f32,
     pub sample_rate: u32,
     pub lossless: bool,
-    /// Portion of samples pinned to full scale, as a percentage.
+    /// Portion of samples in a flat top, as a percentage.
     pub clip_percent: f32,
-    /// Longest unbroken run of full-scale samples.
+    /// Longest unbroken run of flat-topped samples.
     pub clip_run: u32,
+    /// Where the flat tops sit, dBFS: 0 at full scale, below it when the track
+    /// clipped and was then turned down.
+    pub clip_db: f32,
     /// Integrated loudness, LUFS.
     pub lufs: Option<f32>,
     /// True peak, dBTP.
@@ -137,6 +140,7 @@ pub async fn analyse_quality(
                         lossless,
                         clip_percent: report.clipping.percent,
                         clip_run: report.clipping.longest_run,
+                        clip_db: report.clipping.level_db,
                         lufs: loud.lufs,
                         true_peak: loud.true_peak_db,
                         peak_floor,
@@ -155,6 +159,7 @@ pub async fn analyse_quality(
                     lossless,
                     clip_percent: 0.0,
                     clip_run: 0,
+                    clip_db: 0.0,
                     lufs: None,
                     true_peak: None,
                     peak_floor: false,

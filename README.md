@@ -61,7 +61,7 @@ same track often exists in more than one place.
 - File modification dates are preserved when retagging (configurable)
 
 **Analysis**
-- Quality check: detects lossy sources in lossless containers, upscaled MP3s, upsampled files and clipping, with an estimate of the original bitrate
+- Quality check: detects lossy sources in lossless containers, upscaled MP3s, upsampled files and clipping (also when it was turned down afterwards), with an estimate of the original bitrate
 - Damage check: files cut short of their stated length, decode errors, dropouts, clicks and 16-bit audio padded to 24, in the same pass
 - Loudness: integrated LUFS and true peak (ITU-R BS.1770 / EBU R128) in the quality report, and optionally written as ReplayGain
 - Duplicate finder based on decoded audio, independent of tags and file names
