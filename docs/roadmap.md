@@ -193,11 +193,12 @@ downloads rather than CD rips.
 
       While the sidebar is open, selecting a track starts playing it, so going down the list
       is listening through it; with the sidebar closed, selecting does not play, as now.
-- [ ] **20. Send to Telegram.** A button (toolbar, right-click, and the sidebar) that sends the
-      selected files themselves to a Telegram chat, as audio with title, performer and cover so
-      Telegram shows them as tracks. Through the Bot API (`sendAudio`): the user's own bot
-      token and chat ID go in Settings → Telegram, and the button is hidden until both are set.
-      The Bot API takes files up to 50 MB, which most FLAC and MP3 fit and long WAVs do not;
-      those are named and skipped rather than failing the batch.
+- [ ] **20. Send to Telegram.** A button (toolbar, right-click, and the sidebar) that hands the
+      selected files to Telegram Desktop, which comes to the front with its chat picker; the user
+      picks the chat and sends. Done the way Explorer's own "Send to → Telegram" does it
+      (`Telegram.exe -sendpath <file>`), so it goes from the user's own account: no bot, no
+      setup, and the usual 2 GB limit rather than a bot's 50 MB. Telegram is found where it is
+      installed (or through the Windows share sheet for the Store version); the button is hidden
+      when it is not.
 
 When a step changes what the app can do, the README's feature list is updated with it.
