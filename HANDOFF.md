@@ -66,7 +66,7 @@
    user. Range presets 70–180 / 60–120 / 85–175 / 100–200 are open wording.
 3. The user wants to pick 3–5 of their tracks and compare Noceur, rekordbox and Mixed In Key on
    BPM and key. `cargo run --release -p noceur-audio --example bpm|key -- <files>` prints ours.
-4. Roadmap: step 10, converters on Shift+1–5. Steps 1–9 and 18 are done. Step 19 (track sidebar) is a maybe. The dialog and menu are called "Actions" (user's pick, 2026-10-01).
+4. Roadmap: step 16, playlists sent to rekordbox (then energy level, cue points). Steps 1–15 and 21 are done. Step 22 (track sidebar) is a maybe. The dialog and menu are called "Actions" (user's pick, 2026-10-01).
 5. Settings copy for sources is open: current "Discogs and Tidal need your own keys. Each is
    sent only to its service." (user not yet asked to pick).
 6. Known smaller issues:

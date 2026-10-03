@@ -153,7 +153,36 @@ downloads rather than CD rips.
       or cover art. Top lists ignore case and stray spaces. Clicking a problem folder opens
       it. The record label is now read into the index (schema 13), so labels fill in as
       folders are re-read. The query takes about 140 ms on 991 tracks.
-- [ ] **16. Maybe: processing markers.** Platinum Notes detection (its spectral fingerprint:
+
+## rekordbox
+
+- [ ] **16. Playlists, sent to rekordbox.** Named playlists kept in the index, with tracks ticked
+      into them from a key or the right-click menu, so nothing is copied or duplicated to gather
+      a set. Send to rekordbox merges the playlists and their tracks into the `rekordbox.xml`
+      that rekordbox's Imported Library and Mixed In Key already share (set in Settings), so the
+      usual routine stays: Reload in rekordbox, sort by Date Added, Import To Collection, export
+      to the stick. The file holds every cue point, so the write is add-only: existing tracks,
+      cues and playlists are never changed or removed, only new ones appended. Before each
+      write the file is backed up; the new one is written beside it, read back and checked, then
+      renamed into place; and it is re-read first if it changed since noceur last read it (Mixed
+      In Key or a rekordbox export got there in between). New tracks get today's DateAdded.
+      Playlists live in noceur's index, so a rekordbox export that overwrites the file loses
+      nothing: the next send puts them back.
+- [ ] **17. Energy level.** A 1–10 energy rating per track, in the style of Mixed In Key's,
+      measured with BPM and key and shown as a column. Written to the file's tags (where Mixed In
+      Key puts its own) and to the XML's comment, and checked against the tracks Mixed In Key has
+      already rated, so it can be trusted in its place.
+- [ ] **18. Cue points.** Up to eight cues per track on the beat grid, snapped to the 8- and
+      16-bar phrases where the music changes (intro, drops, breakdowns, outro), named like Mixed
+      In Key's and written to the XML through step 16 as both hot cues and memory cues, with the
+      beat grid alongside. A track that already has cues is left alone. Tuned against the 36
+      tracks Mixed In Key has cued and the library's existing cues; before it ships, checked on a
+      test track whether rekordbox takes new cues for a track already in its collection. With
+      steps 16–18, Mixed In Key is no longer needed.
+
+## Maybe
+
+- [ ] **19. Maybe: processing markers.** Platinum Notes detection (its spectral fingerprint:
       a boost near the cutoff, a flat top octave, a sharp wall), only if it can be validated on
       files known to have been through it. Also an offline scan for AI-generator provenance
       markers (tags, C2PA manifests), which only finds tracks that declare themselves; no audio is
@@ -161,7 +190,7 @@ downloads rather than CD rips.
 
 ## Identification
 
-- [ ] **17. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
+- [ ] **20. Shazam lookup.** For tracks AcoustID does not know, which is most new and underground
       electronic music. The fingerprint is ported from SongRec (`marin-m/SongRec`, GPL-3.0,
       pure Rust: a peak-picked spectrogram of about 12 seconds, encoded as Shazam's signature),
       sent through `noceur-online`'s own HTTP client rather than SongRec's libsoup. The result
@@ -172,7 +201,7 @@ downloads rather than CD rips.
 
 ## Background analysis
 
-- [x] **18. BPM and key without asking.** Each track the player loads is measured by one
+- [x] **21. BPM and key without asking.** Each track the player loads is measured by one
       low-priority thread while it plays; only what is played, never the rest of its folder.
       The result is kept in the index (`analysis` table, carried across tag writes like the
       waveform), and Detect BPM & key stores what it measures there too. Settings → Files →
@@ -193,7 +222,7 @@ downloads rather than CD rips.
 
 ## Sidebar
 
-- [ ] **19. Track sidebar.** A panel docked on the right, opened and closed by an arrow button
+- [ ] **22. Track sidebar.** A panel docked on the right, opened and closed by an arrow button
       on the window's right edge (and a shortcut); open or closed is remembered. Top to bottom:
       - **Album art**, square, the full width of the panel.
       - **Tag panel** for the selected track: file facts that cannot be edited (format, bitrate,
@@ -206,7 +235,7 @@ downloads rather than CD rips.
 
       While the sidebar is open, selecting a track starts playing it, so going down the list
       is listening through it; with the sidebar closed, selecting does not play, as now.
-- [ ] **20. Send to Telegram.** A button (toolbar, right-click, and the sidebar) that hands the
+- [ ] **23. Send to Telegram.** A button (toolbar, right-click, and the sidebar) that hands the
       selected files to Telegram Desktop, which comes to the front with its chat picker; the user
       picks the chat and sends. Done the way Explorer's own "Send to → Telegram" does it
       (`Telegram.exe -sendpath <file>`), so it goes from the user's own account: no bot, no
