@@ -6,6 +6,7 @@
 
 pub mod biquad;
 pub mod damage;
+pub mod fade;
 pub mod fft;
 pub mod fingerprint;
 pub mod identity;
@@ -220,6 +221,8 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::S
     };
 
     let mut player: Option<rodio::Player> = None;
+    // Ramps the current track down when it is let go; see `fade`.
+    let mut fade_out = fade::FadeOut::default();
     let mut volume: f32 = 1.0;
 
     loop {
@@ -248,12 +251,18 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::S
                     });
                     scope.clear();
 
+                    // The old track plays on while this one opens, then fades
+                    // out under the new one's fade in rather than being cut.
                     match open(&path, sink.mixer(), volume, &scope) {
-                        Ok((new_player, duration)) => {
+                        Ok((new_player, new_fade, duration)) => {
                             if !play {
                                 new_player.pause();
                             }
+                            if let Some(old) = player.take() {
+                                let_go(old, &fade_out);
+                            }
                             player = Some(new_player);
+                            fade_out = new_fade;
                             set(&state, |s| {
                                 s.path = Some(path.display().to_string());
                                 s.playing = play;
@@ -263,7 +272,9 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::S
                             });
                         }
                         Err(e) => {
-                            player = None;
+                            if let Some(old) = player.take() {
+                                let_go(old, &fade_out);
+                            }
                             set(&state, |s| {
                                 s.path = None;
                                 s.playing = false;
@@ -294,10 +305,9 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::S
                     }
                 }
                 Cmd::Stop => {
-                    if let Some(p) = &player {
-                        p.stop();
+                    if let Some(old) = player.take() {
+                        let_go(old, &fade_out);
                     }
-                    player = None;
                     scope.clear();
                     set(&state, |s| {
                         s.path = None;
@@ -341,13 +351,24 @@ fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::S
     }
 }
 
+/// Stops a track without a click: one still sounding ramps down and ends
+/// itself on the mixer; a paused one is silent already and simply goes.
+fn let_go(player: rodio::Player, fade_out: &fade::FadeOut) {
+    if player.is_paused() || player.empty() {
+        player.stop();
+    } else {
+        fade_out.start();
+        player.detach();
+    }
+}
+
 /// Opens a file and starts it on the mixer, reporting its duration if known.
 fn open(
     path: &Path,
     mixer: &rodio::mixer::Mixer,
     volume: f32,
     scope: &Arc<scope::Scope>,
-) -> Result<(rodio::Player, Option<u64>), AudioError> {
+) -> Result<(rodio::Player, fade::FadeOut, Option<u64>), AudioError> {
     let full = noceur_extended(path);
     let opened = source::open(&full).map_err(|source| AudioError::Open {
         path: path.display().to_string(),
@@ -379,9 +400,10 @@ fn open(
     // Decoded on its own thread, never inside the device callback; see
     // `prefetch` for the noise that caused on lossless files.
     let decoded = prefetch::Prefetch::new(decoder);
-    player.append(scope::Tap::new(decoded, Arc::clone(scope)));
+    let (faded, fade_out) = fade::Fade::new(scope::Tap::new(decoded, Arc::clone(scope)));
+    player.append(faded);
 
-    Ok((player, duration))
+    Ok((player, fade_out, duration))
 }
 
 /// Long-path form, so a deeply nested library still opens.
