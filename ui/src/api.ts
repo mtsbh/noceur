@@ -359,6 +359,19 @@ export function undoRename(): Promise<{ restored: number; failed: number }> {
   return invoke("undo_rename");
 }
 
+/** Whether Telegram Desktop is installed, so there is somewhere to send to. */
+export function telegramAvailable(): Promise<boolean> {
+  return invoke<boolean>("telegram_available");
+}
+
+/**
+ * Hands files to Telegram Desktop, which comes to the front with its chat
+ * picker. Nothing is sent until the user picks a chat there.
+ */
+export function sendToTelegram(fileIds: number[]): Promise<void> {
+  return invoke<void>("send_to_telegram", { fileIds });
+}
+
 /** Opens files in a program, all of them in one launch. */
 export function openWith(program: string, fileIds: number[]): Promise<void> {
   return invoke<void>("open_with", { program, fileIds });

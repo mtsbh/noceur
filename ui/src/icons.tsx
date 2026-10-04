@@ -528,6 +528,16 @@ export function ChartIcon() {
   );
 }
 
+/** A paper plane, for sending to Telegram. */
+export function SendIcon() {
+  return (
+    <Icon>
+      <path d="M13.8 2.2 2.2 7l4.6 1.8L8.6 13.4z" />
+      <path d="M13.8 2.2 6.8 8.8" />
+    </Icon>
+  );
+}
+
 /**
  * Every glyph a toolbar button can be given when the bar is customised.
  *

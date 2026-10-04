@@ -30,6 +30,7 @@ mod renamer;
 mod shellmenu;
 mod state;
 mod tagedit;
+mod telegram;
 mod timestamp;
 mod tools;
 mod undo;
@@ -163,6 +164,8 @@ fn main() {
             autotag::set_discogs_token,
             autotag::set_tidal,
             autotag::set_shazam,
+            telegram::telegram_available,
+            telegram::send_to_telegram,
             renamer::preview_rename,
             renamer::apply_rename,
             config::preserve_dates,

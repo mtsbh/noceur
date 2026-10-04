@@ -188,13 +188,14 @@ downloads rather than CD rips.
 
 ## Telegram
 
-- [ ] **18. Send to Telegram.** A button (toolbar, right-click, and the sidebar once step 19 adds it) that hands the
-      selected files to Telegram Desktop, which comes to the front with its chat picker; the user
-      picks the chat and sends. Done the way Explorer's own "Send to → Telegram" does it
-      (`Telegram.exe -sendpath <file>`), so it goes from the user's own account: no bot, no
-      setup, and the usual 2 GB limit rather than a bot's 50 MB. Telegram is found where it is
-      installed (or through the Windows share sheet for the Store version); the button is hidden
-      when it is not.
+- [x] **18. Send to Telegram.** A button (toolbar, right-click, and the sidebar once step 19 adds
+      it) that hands the selected files to Telegram Desktop, which comes to the front with its
+      chat picker; the user picks the chat and sends. Done the way Explorer's own "Send to →
+      Telegram" does it (`Telegram.exe -- <files>`; the old `-sendpath` switch is gone from
+      current Telegram), so it goes from the user's own account: no bot, no setup, and the usual
+      2 GB limit rather than a bot's 50 MB. Telegram is found in its default folder, then where
+      its installer says it put it, then as the Store edition's app alias; the button is hidden
+      when none is there. Folders in the selection are skipped.
 
 ## Sidebar
 

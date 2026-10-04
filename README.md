@@ -41,6 +41,7 @@ same track often exists in more than one place.
 - File operations go through the Windows shell (progress, conflict prompts, Explorer undo)
 - `Ctrl+Z` undoes the last rename job inside the app
 - "Open with" your own programs (e.g. Spek, Mp3tag, fre:ac), all selected files in one launch
+- Send to Telegram: the selected files open in Telegram Desktop's chat picker, sent from your own account (button hidden when Telegram isn't installed)
 
 **Playback**
 - Preview player with a seekable three-band waveform (four styles)

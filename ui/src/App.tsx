@@ -28,6 +28,8 @@ import {
   actionWrites,
   openUrl,
   openWith,
+  sendToTelegram,
+  telegramAvailable,
   undoRename,
   previewTool,
   applyCleanup,
@@ -100,6 +102,7 @@ import {
   NewFolderIcon,
   KeyboardIcon,
   ChartIcon,
+  SendIcon,
   OpenIcon,
   OpenWithIcon,
   PigIcon,
@@ -562,6 +565,9 @@ export default function App() {
   const [comparing, setComparing] = createSignal<number[] | null>(null);
   /** Whether the library overview is open. */
   const [surveying, setSurveying] = createSignal(false);
+  /** Whether Telegram Desktop is installed. Its button is hidden when not. */
+  const [hasTelegram, setHasTelegram] = createSignal(false);
+  telegramAvailable().then(setHasTelegram).catch(() => {});
   /** File ids the tag editor is open on, or null when it is closed. */
   const [editing, setEditing] = createSignal<number[] | null>(null);
   /** The row the cover search runs on, plus every file a pick applies to. */
@@ -1001,6 +1007,17 @@ export default function App() {
         onToggle: (on) => setInBar("searchIn", site.id, on),
         run: () => searchIn(site),
       })),
+      ...(hasTelegram()
+        ? [
+            {
+              id: "telegram",
+              label: "Send to Telegram",
+              icon: SendIcon,
+              off: () => (focusHandle()?.selection().length ?? 0) === 0,
+              run: () => toTelegram(),
+            } as BarItem,
+          ]
+        : []),
       {
         id: "newfolder",
         label: "New folder",
@@ -1083,6 +1100,12 @@ export default function App() {
   /* ── Open with, Search in ─────────────────────────────────────────────── */
 
   /** Opens the selection (or `ids`) in one of your programs. */
+  /** Hands the selected files to Telegram's chat picker. */
+  function toTelegram(ids: number[] = focusHandle()?.selection() ?? []) {
+    if (ids.length === 0) return;
+    sendToTelegram(ids).catch((e) => flash(String(e)));
+  }
+
   function launch(program: Launcher, ids: number[] = focusHandle()?.selection() ?? []) {
     if (ids.length === 0) return;
     openWith(program.target, ids).catch(() => {});
@@ -1515,6 +1538,17 @@ export default function App() {
           { kind: "item", label: "Add program…", run: () => settingsAt("actions") },
         ],
       },
+      ...(hasTelegram()
+        ? ([
+            {
+              kind: "item",
+              label: "Send to Telegram",
+              icon: SendIcon,
+              disabled: row.kind === 0,
+              run: () => toTelegram(ids),
+            },
+          ] as MenuItem[])
+        : []),
       {
         kind: "item",
         label: "Search in",
