@@ -44,6 +44,7 @@ same track often exists in more than one place.
 - "Open with" your own programs (e.g. Spek, Mp3tag, fre:ac), all selected files in one launch
 - Playlists (`Ctrl+P`): gather tracks from anywhere without copying them. `P` adds the selection to the current playlist (again takes it out), right-click → Playlists ticks it into any of them; play through in order, reorder by drag or `Alt+↑↓`. Entries follow files the app renames or moves
 - Send to rekordbox (Playlists window): every playlist goes into a `noceur` folder in the `rekordbox.xml` rekordbox's Imported Library reads, with tracks rekordbox doesn't have yet added to its collection. Nothing else in the file changes: the old file is backed up, and every existing track, cue and playlist is checked unchanged before the new one replaces it. Reload in rekordbox, then import as usual
+- Track sidebar (`Ctrl+B`, or the tab on the right edge): cover (drag it shorter to fit), file facts, tags edited in place with Apply / Cancel, Artist / Genre / Label as links to every track with that tag, and search icons for the sites ticked in Settings → Search in. While it is open, moving through the list plays each track
 - Send to Telegram: the selected files open in Telegram Desktop's chat picker, sent from your own account (button hidden when Telegram isn't installed)
 
 **Playback**
@@ -117,6 +118,7 @@ Noceur, on your `PATH`, or set its path in Settings → Files.
 | `Ctrl+F` | Search |
 | `Ctrl+I` | Library overview |
 | `Ctrl+P` | Playlists |
+| `Ctrl+B` | Track sidebar (selecting plays while open) |
 | `P` | Add to / remove from current playlist |
 | `Ctrl+T` / `Ctrl+W` | New tab / close tab |
 | `Ctrl+Tab`, `Ctrl+1`–`9` | Switch tabs |

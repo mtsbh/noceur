@@ -233,6 +233,14 @@ export function search(query: string, scopes: string[]): Promise<SearchHit[]> {
   return invoke<SearchHit[]>("search", { req: { query, scopes } });
 }
 
+/** A tag the library can be listed by. */
+export type TagLink = { field: "artist" | "genre" | "label"; value: string };
+
+/** Every track tagged with exactly this value, case aside. */
+export function searchTag(link: TagLink, scopes: string[]): Promise<SearchHit[]> {
+  return invoke<SearchHit[]>("search_tag", { field: link.field, value: link.value, scopes });
+}
+
 /** What the transport bar shows. */
 export type Transport = {
   path: string;
@@ -341,7 +349,6 @@ export function shellMenu(fileIds: number[]): Promise<void> {
   return invoke<void>("shell_menu", { fileIds });
 }
 
-/** Opens a link in the default browser. Only http and https are accepted. */
 /** Files on the Windows clipboard, shared with Explorer. */
 export type Clip = { paths: string[]; cut: boolean };
 
@@ -429,6 +436,7 @@ export function openWith(program: string, fileIds: number[]): Promise<void> {
   return invoke<void>("open_with", { program, fileIds });
 }
 
+/** Opens a link in the default browser. Only http and https are accepted. */
 export function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }
@@ -495,6 +503,19 @@ export type TagForm = {
   trackNo: string | null;
   bpm: string | null;
   key: string | null;
+  /** What the file is, for one file only. */
+  facts: FileFacts | null;
+};
+
+/** What a file is, as text. Read-only: none of it is a tag. Empty when unknown. */
+export type FileFacts = {
+  format: string;
+  bitrate: string;
+  length: string;
+  sampleRate: string;
+  bitDepth: string;
+  channels: string;
+  size: string;
 };
 
 /** The editable fields, in the order the editor lays them out. */

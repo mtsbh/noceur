@@ -6,7 +6,7 @@
 //! them Explorer's progress, its conflict prompts and its undo. Nothing here has
 //! any of that, so it is worth keeping where it can be read in one sitting.
 
-use crate::dto::{TagEdit, TagForm, WriteFailure, WriteReport};
+use crate::dto::{FileFacts, TagEdit, TagForm, WriteFailure, WriteReport};
 use crate::state::AppState;
 use std::path::PathBuf;
 use tauri::State;
@@ -39,12 +39,17 @@ pub async fn read_tags(state: State<'_, AppState>, file_ids: Vec<i64>) -> Result
         }
 
         let mut merge = Merge::default();
+        let mut facts = None;
         for row in &found {
             // A file that will not parse contributes nothing rather than failing
             // the form: one bad file in a selection of thirty should not stop the
             // other twenty-nine being retagged.
             if let Ok(meta) = noceur_tags::read(&row.path) {
                 merge.add(&meta);
+                if found.len() == 1 {
+                    let size = std::fs::metadata(&row.path).map(|m| m.len()).unwrap_or(0);
+                    facts = Some(file_facts(&meta, size));
+                }
             }
         }
 
@@ -58,10 +63,50 @@ pub async fn read_tags(state: State<'_, AppState>, file_ids: Vec<i64>) -> Result
             format!("{} files", found.len())
         };
 
-        Ok(merge.into_form(found.len() as i64, subject))
+        Ok(TagForm {
+            facts,
+            ..merge.into_form(found.len() as i64, subject)
+        })
     })
     .await
     .map_err(|e| format!("tag read task failed: {e}"))?
+}
+
+/// What one file is, in words.
+///
+/// Uncompressed PCM is worked out from its format rather than taken from the
+/// container, the way rekordbox is told it: a WAV's bitrate is exactly rate
+/// times depth times channels, and nothing else is worth showing for it.
+fn file_facts(meta: &noceur_tags::TrackMeta, size: u64) -> FileFacts {
+    use crate::format;
+    let pcm = meta.lossless && !matches!(meta.codec.as_deref(), Some("FLAC" | "WavPack" | "APE"));
+    let kbps = match (pcm, meta.sample_rate, meta.bit_depth) {
+        (true, Some(sr), Some(bits)) => {
+            Some(sr * u32::from(bits) * u32::from(meta.channels.unwrap_or(2)) / 1000)
+        }
+        _ => meta.bitrate_kbps,
+    };
+    FileFacts {
+        format: meta.codec.clone().unwrap_or_default(),
+        bitrate: kbps
+            .filter(|k| *k > 0)
+            .map(|k| format!("{k} kbps"))
+            .unwrap_or_default(),
+        length: format::duration(meta.duration_ms.map(|ms| ms as i64)),
+        sample_rate: format::rate(meta.sample_rate.map(i64::from)),
+        bit_depth: if meta.lossless {
+            format::depth(meta.bit_depth.map(i64::from))
+        } else {
+            String::new()
+        },
+        channels: match meta.channels {
+            Some(1) => "Mono".into(),
+            Some(2) => "Stereo".into(),
+            Some(n) if n > 0 => format!("{n} ch"),
+            _ => String::new(),
+        },
+        size: format::size(size as i64),
+    }
 }
 
 /// Writes tags to a selection and re-reads what changed.
@@ -82,6 +127,10 @@ pub async fn write_tags(
     // answer the same question.
     let keep_dates =
         crate::config::Config::load(&crate::config::Config::default_path()).preserve_dates;
+    // The track in the player is written beside itself and swapped in, so the
+    // decoder reading it is not disturbed - the sidebar edits what is playing.
+    let in_player = crate::background::playing(&state);
+    let background = state.background.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
         let change = noceur_tags::Edit {
@@ -134,7 +183,11 @@ pub async fn write_tags(
 
         for (file_id, path) in targets {
             match crate::timestamp::preserving(&path, keep_dates, || {
-                noceur_tags::edit::write(&path, &change)
+                if in_player == Some(file_id) {
+                    crate::background::write_beside(&background, &path, &change)
+                } else {
+                    noceur_tags::edit::write(&path, &change).map_err(|e| e.to_string())
+                }
             }) {
                 Ok(()) => {
                     report.written += 1;
@@ -244,6 +297,7 @@ impl Merge {
             track_no: self.track_no.value(),
             bpm: self.bpm.value(),
             key: self.key.value(),
+            facts: None,
         }
     }
 }
@@ -319,6 +373,38 @@ mod tests {
         m.add(&meta("Skee Mask", None));
         m.add(&noceur_tags::TrackMeta::default());
         assert_eq!(m.into_form(2, "2 files".into()).artist, None);
+    }
+
+    /// A WAV's bitrate is its format multiplied out; an MP3's is what it says.
+    #[test]
+    fn facts_name_the_format_in_words() {
+        let wav = noceur_tags::TrackMeta {
+            codec: Some("WAV".into()),
+            lossless: true,
+            sample_rate: Some(44_100),
+            bit_depth: Some(16),
+            channels: Some(2),
+            duration_ms: Some(372_000),
+            ..Default::default()
+        };
+        let f = file_facts(&wav, 65_640_000);
+        assert_eq!(f.bitrate, "1411 kbps");
+        assert_eq!(f.bit_depth, "16-bit");
+        assert_eq!(f.channels, "Stereo");
+        assert_eq!(f.length, "6:12");
+        assert_eq!(f.sample_rate, "44.1 kHz");
+
+        let mp3 = noceur_tags::TrackMeta {
+            codec: Some("MP3".into()),
+            bitrate_kbps: Some(320),
+            bit_depth: Some(16),
+            channels: Some(1),
+            ..Default::default()
+        };
+        let f = file_facts(&mp3, 0);
+        assert_eq!(f.bitrate, "320 kbps");
+        assert_eq!(f.bit_depth, "", "a lossy file has no bit depth");
+        assert_eq!(f.channels, "Mono");
     }
 
     #[test]

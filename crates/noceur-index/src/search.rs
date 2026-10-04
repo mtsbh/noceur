@@ -142,21 +142,96 @@ pub fn search(db: &Db, query: &str, scopes: &[String], limit: i64) -> Result<Vec
     }
 
     let mut stmt = db.conn().prepare(&sql)?;
-    let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), |r| {
-        Ok(Hit {
-            file_id: r.get(0)?,
-            name: r.get(1)?,
-            dir_path: r.get(2)?,
-            kind: r.get(3)?,
-            artist: r.get(4)?,
-            title: r.get(5)?,
-            bpm: r.get(6)?,
-            key_norm: r.get(7)?,
-            key_tag: r.get(8)?,
-            duration_ms: r.get(9)?,
-        })
-    })?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), hit)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+/// A tag the sidebar lists the library by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagColumn {
+    Artist,
+    Genre,
+    Label,
+}
+
+impl TagColumn {
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "artist" => Some(Self::Artist),
+            "genre" => Some(Self::Genre),
+            "label" => Some(Self::Label),
+            _ => None,
+        }
+    }
+
+    fn column(self) -> &'static str {
+        match self {
+            Self::Artist => "ct.artist",
+            Self::Genre => "ct.genre",
+            Self::Label => "ct.label",
+        }
+    }
+}
+
+/// Every track whose tag is exactly `value`, ignoring case and outer spaces.
+///
+/// Exact rather than full-text: "Techno" must not bring back "Hard Techno" or a
+/// track called "Techno Bunker". Scoped like [`search`], ordered by name.
+pub fn search_tag(
+    db: &Db,
+    column: TagColumn,
+    value: &str,
+    scopes: &[String],
+    limit: i64,
+) -> Result<Vec<Hit>, IndexError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    let scope_sql = if scopes.is_empty() {
+        String::new()
+    } else {
+        let clauses: Vec<String> = (0..scopes.len())
+            .map(|i| format!("d.path_lower LIKE ?{} ESCAPE '\\'", i + 3))
+            .collect();
+        format!(" AND ({})", clauses.join(" OR "))
+    };
+    let col = column.column();
+    let sql = format!(
+        "SELECT f.id, f.name, d.path_lower, f.kind,
+                ct.artist, ct.title, ct.bpm_tag, ct.key_norm, ct.key_tag,
+                c.duration_ms
+         FROM content_tag ct
+         JOIN file f ON f.content_id = ct.content_id
+         JOIN dir  d ON d.id = f.dir_id
+         LEFT JOIN content c ON c.id = f.content_id
+         WHERE f.kind = 1 AND TRIM({col}) = ?1 COLLATE NOCASE{scope_sql}
+         ORDER BY f.name COLLATE NOCASE
+         LIMIT ?2"
+    );
+    let mut values: Vec<Box<dyn rusqlite::ToSql>> =
+        vec![Box::new(value.to_string()), Box::new(limit)];
+    for scope in scopes {
+        values.push(Box::new(format!("{}%", like_prefix(scope))));
+    }
+    let mut stmt = db.conn().prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), hit)?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+fn hit(r: &rusqlite::Row<'_>) -> rusqlite::Result<Hit> {
+    Ok(Hit {
+        file_id: r.get(0)?,
+        name: r.get(1)?,
+        dir_path: r.get(2)?,
+        kind: r.get(3)?,
+        artist: r.get(4)?,
+        title: r.get(5)?,
+        bpm: r.get(6)?,
+        key_norm: r.get(7)?,
+        key_tag: r.get(8)?,
+        duration_ms: r.get(9)?,
+    })
 }
 
 /// Escapes the wildcards LIKE would otherwise read as pattern syntax.
@@ -211,6 +286,42 @@ mod tests {
     #[test]
     fn like_wildcards_in_a_scope_are_escaped() {
         assert_eq!(like_prefix("E:\\100%_mix\\"), "e:\\\\100\\%\\_mix");
+    }
+
+    /// A genre link lists that genre, whatever its case, and not the genres
+    /// that merely contain the word.
+    #[test]
+    fn a_tag_search_matches_the_whole_value_only() {
+        let db = Db::open_in_memory().unwrap();
+        db.conn()
+            .execute_batch(
+                "INSERT INTO volume (id, kind, fs_uuid, mount_path)
+                 VALUES (1, 'fixed', 'u1', 'E:\\');
+                 INSERT INTO dir (id, volume_id, name, path_lower)
+                 VALUES (1, 1, 'music', 'e:\\music'), (2, 1, 'other', 'f:\\other');
+                 INSERT INTO content (id, quick_key) VALUES (1, 'k1'), (2, 'k2'), (3, 'k3'), (4, 'k4');
+                 INSERT INTO content_tag (content_id, genre, label) VALUES
+                     (1, 'Techno', 'Ilian Tape'), (2, ' techno ', NULL),
+                     (3, 'Hard Techno', NULL), (4, 'Techno', NULL);
+                 INSERT INTO file (id, dir_id, name, kind, content_id) VALUES
+                     (1, 1, 'b.wav', 1, 1), (2, 1, 'a.wav', 1, 2),
+                     (3, 1, 'c.wav', 1, 3), (4, 2, 'd.wav', 1, 4);",
+            )
+            .unwrap();
+
+        let names = |hits: Vec<Hit>| hits.into_iter().map(|h| h.name).collect::<Vec<_>>();
+        let all = search_tag(&db, TagColumn::Genre, "TECHNO", &[], 50).unwrap();
+        assert_eq!(names(all), ["a.wav", "b.wav", "d.wav"]);
+
+        let scoped =
+            search_tag(&db, TagColumn::Genre, "Techno", &["E:\\music".into()], 50).unwrap();
+        assert_eq!(names(scoped), ["a.wav", "b.wav"]);
+
+        let label = search_tag(&db, TagColumn::Label, "ilian tape", &[], 50).unwrap();
+        assert_eq!(names(label), ["b.wav"]);
+        assert!(search_tag(&db, TagColumn::Artist, "  ", &[], 50)
+            .unwrap()
+            .is_empty());
     }
 }
 

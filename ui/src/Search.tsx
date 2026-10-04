@@ -1,5 +1,5 @@
 import { createSignal, createEffect, on, For, Show, onCleanup } from "solid-js";
-import { search, type SearchHit } from "./api";
+import { search, searchTag, type SearchHit, type TagLink } from "./api";
 
 /**
  * How long typing settles before a query is sent.
@@ -18,6 +18,8 @@ const DEBOUNCE_MS = 90;
  */
 export default function Search(props: {
   scopes: string[];
+  /** Opens on every track with this tag - a sidebar link - until typed over. */
+  tag?: TagLink;
   onClose: () => void;
   onOpen: (dirPath: string, fileId: number) => void;
 }) {
@@ -25,6 +27,8 @@ export default function Search(props: {
   const [hits, setHits] = createSignal<SearchHit[]>([]);
   const [cursor, setCursor] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
+  /** The tag being listed; gone once something is typed. */
+  const [tag, setTag] = createSignal(props.tag ?? null);
 
   let input: HTMLInputElement | undefined;
   let listEl: HTMLDivElement | undefined;
@@ -33,8 +37,24 @@ export default function Search(props: {
   // otherwise replace the answers to what the user is typing now.
   let generation = 0;
 
+  const listed = tag();
+  if (listed) {
+    const mine = ++generation;
+    setBusy(true);
+    searchTag(listed, props.scopes)
+      .then((found) => {
+        if (mine === generation) setHits(found);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mine === generation) setBusy(false);
+      });
+  }
+
   createEffect(
     on(query, (q) => {
+      if (q !== "") setTag(null);
+      if (tag()) return;
       window.clearTimeout(timer);
       const mine = ++generation;
 
@@ -123,7 +143,11 @@ export default function Search(props: {
           class="finput"
           type="text"
           spellcheck={false}
-          placeholder="Search pinned folders and this tree…"
+          placeholder={
+            tag()
+              ? `${tag()!.field[0].toUpperCase()}${tag()!.field.slice(1)}: ${tag()!.value} · type to search`
+              : "Search pinned folders and this tree…"
+          }
           value={query()}
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
@@ -133,7 +157,7 @@ export default function Search(props: {
             when={hits().length > 0}
             fallback={
               <div class="fempty">
-                {query().trim() === ""
+                {query().trim() === "" && !tag()
                   ? "Type to search."
                   : busy()
                     ? "Searching…"

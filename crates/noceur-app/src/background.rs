@@ -284,7 +284,7 @@ fn release_held(q: &mut Queue, state: &AppState) {
     }
 }
 
-fn playing(state: &AppState) -> Option<i64> {
+pub(crate) fn playing(state: &AppState) -> Option<i64> {
     state
         .now_playing
         .lock()
@@ -417,7 +417,7 @@ fn process(state: &AppState, file_id: i64) -> Result<bool, String> {
 /// deletion, as every `std::fs::File` does.
 ///
 /// Costs a copy of the file, on the background thread.
-fn write_beside(
+pub(crate) fn write_beside(
     bg: &Background,
     path: &std::path::Path,
     edit: &noceur_tags::Edit,

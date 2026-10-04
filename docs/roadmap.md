@@ -199,19 +199,25 @@ downloads rather than CD rips.
 
 ## Sidebar
 
-- [ ] **19. Track sidebar.** A panel docked on the right, opened and closed by an arrow button
-      on the window's right edge (and a shortcut); open or closed is remembered. Top to bottom:
-      - **Album art**, square, the full width of the panel.
-      - **Tag panel** for the selected track: file facts that cannot be edited (format, bitrate,
-        length, sample rate), then the music fields (album, artists, genre, title, track
-        number, year, album artist, BPM, key, label…), edited in place with Apply / Cancel.
-        Genres (and perhaps artist, label) as links that list the library's tracks with that
-        value.
-      - **Search buttons**: the track's `Artist - Title` on Google, YouTube, Discogs,
-        Beatport, Bandcamp, SoundCloud and others, each opening the browser.
+- [x] **19. Track sidebar.** A panel docked on the right, opened and closed by an arrow tab on
+      the window's right edge or `Ctrl+B`; open or closed is remembered. Top to bottom:
+      - **Album art**, square by default; a grip under it drags it shorter (remembered,
+        double-click for full size) so everything fits without scrolling. Clicking it opens the
+        tag editor, where the cover is changed.
+      - **File facts**, read-only: format, bitrate (PCM worked out from rate × depth ×
+        channels), length, sample rate, bit depth, size (`read_tags` returns them for one file).
+      - **Tags** edited in place: Apply or Enter writes, Cancel or Esc drops, selecting another
+        track drops too. The playing track is written into a copy that is swapped in, as the
+        background BPM writes are, so the player is not disturbed (the tag editor gets this too).
+        Artist, Genre and Label are links: the search popover opens on every track tagged
+        exactly that value, case aside (`search_tag`).
+      - **Search icons**: the Settings → Search in sites ticked "Sidebar" (Google, YouTube,
+        Discogs, Beatport, Bandcamp, SoundCloud and Juno by default, added once to lists
+        already stored), shown by their favicons; `+` opens that list.
 
-      While the sidebar is open, selecting a track starts playing it, so going down the list
-      is listening through it; with the sidebar closed, selecting does not play, as now.
+      While the sidebar is open, moving the selection within a pane plays the track, so going
+      down the list is listening through it. Opening the sidebar or switching panes plays
+      nothing; with the sidebar closed, selecting does not play, as before.
 
 ## rekordbox
 

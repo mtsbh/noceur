@@ -202,6 +202,16 @@ function LauncherList(props: {
               />
               <span>Toolbar</span>
             </label>
+            <Show when={props.kind === "search"}>
+              <label class="setcheck" data-tip="Show in the track sidebar" data-tip-at="end">
+                <input
+                  type="checkbox"
+                  checked={l.inSide}
+                  onChange={(e) => edit(l.id, { inSide: e.currentTarget.checked })}
+                />
+                <span>Sidebar</span>
+              </label>
+            </Show>
             <button
               class="setremove"
               onClick={() => props.onChange(props.items.filter((x) => x.id !== l.id))}
@@ -216,7 +226,13 @@ function LauncherList(props: {
         onClick={() =>
           props.onChange([
             ...props.items,
-            { id: newLauncherId(), name: "", target: props.kind === "search" ? "https://" : "", inBar: false },
+            {
+              id: newLauncherId(),
+              name: "",
+              target: props.kind === "search" ? "https://" : "",
+              inBar: false,
+              inSide: true,
+            },
           ])
         }
       >

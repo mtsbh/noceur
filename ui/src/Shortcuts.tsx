@@ -25,6 +25,7 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
       [["Ctrl", "F"], "Search"],
       [["Ctrl", "I"], "Library overview"],
       [["Ctrl", "P"], "Playlists"],
+      [["Ctrl", "B"], "Sidebar (selecting plays)"],
       [["Alt", "←"], "Back"],
       [["Alt", "→"], "Forward"],
       [["Ctrl", "Click"], "Add to selection"],

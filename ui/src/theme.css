@@ -4558,3 +4558,241 @@ body.resizing-v * {
 .btn.tagback {
   margin-right: auto;
 }
+
+/* ── Sidebar ───────────────────────────────────────────────────────────────
+   Docked on the right of the body, beside the panes. The toggle is a narrow
+   tab on the window's right edge, or on the sidebar's left edge when open. */
+.body {
+  position: relative;
+  --side-w: 300px;
+}
+.sidetoggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 5;
+  width: 14px;
+  height: 44px;
+  margin-top: -22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-right: none;
+  border-radius: 5px 0 0 5px;
+  color: var(--fg3);
+  cursor: pointer;
+}
+.sidetoggle:hover {
+  color: var(--fg);
+}
+.sidetoggle svg {
+  width: 12px;
+  height: 12px;
+}
+.sidetoggle.open {
+  right: var(--side-w);
+}
+.sidetoggle.open svg {
+  transform: scaleX(-1);
+}
+.sidebar {
+  flex: none;
+  width: var(--side-w);
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--hair2);
+}
+.sideempty {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--fg3);
+  text-align: center;
+}
+.sideart {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--hair);
+  background: var(--bg);
+  cursor: pointer;
+  overflow: hidden;
+}
+.sideart img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sideart.empty {
+  display: grid;
+  place-items: center;
+  color: var(--fg4);
+}
+.sidebody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+.sidefacts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 10px;
+}
+.sidefacts dt {
+  color: var(--fg3);
+  font-size: 0.9em;
+}
+.sidefacts dd {
+  margin: 1px 0 0;
+  color: var(--fg2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Labels beside the boxes rather than over them: half the height, so a cover
+   and every field fit without scrolling. */
+.sidetags {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+.sidetag {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sidetag.narrow {
+  grid-column: span 1;
+}
+.sidelabel {
+  flex: none;
+  width: 68px;
+  text-align: left;
+  color: var(--fg3);
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidetag.narrow .sidelabel {
+  width: 34px;
+}
+.sidetag input,
+.sidetag textarea {
+  flex: 1;
+}
+button.sidelabel {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.sidelink:hover {
+  color: var(--acc);
+  text-decoration: underline;
+}
+.sidetag input,
+.sidetag textarea {
+  min-width: 0;
+  padding: 3px 6px;
+  background: var(--bg);
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+  resize: vertical;
+}
+.sidetag input:focus,
+.sidetag textarea:focus {
+  border-color: var(--acc-line);
+}
+.sidetag input.edited,
+.sidetag textarea.edited {
+  border-color: var(--acc-line);
+  background: var(--acc-fill);
+}
+.sideapply {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* Under the cover: drag to make it shorter, so the tags fit without scrolling. */
+.sidegrip {
+  height: 7px;
+  margin-top: -4px;
+  position: relative;
+  cursor: row-resize;
+  touch-action: none;
+}
+.sidegrip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 28px;
+  height: 2px;
+  margin-left: -14px;
+  border-radius: 1px;
+  background: var(--fg4);
+}
+.sidegrip:hover::after {
+  background: var(--fg2);
+}
+.sideart {
+  flex: none;
+}
+.sidesearch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+.sitebtn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sitebtn:hover:not(:disabled) {
+  border-color: var(--acc-line);
+}
+.sitebtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.sitebtn img {
+  width: 16px;
+  height: 16px;
+}
+.siteletter {
+  color: var(--fg2);
+  font-weight: 600;
+}
+.sitebtn.siteedit {
+  background: none;
+  border-style: dashed;
+  color: var(--fg3);
+  font-size: 15px;
+}
+.sitebtn.siteedit:hover {
+  color: var(--fg);
+}

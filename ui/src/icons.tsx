@@ -95,6 +95,15 @@ export function ForwardIcon() {
   );
 }
 
+/** Points left; turned by CSS to point the other way. */
+export function ChevronIcon() {
+  return (
+    <Icon>
+      <path d="M10 3.5 5.5 8l4.5 4.5" />
+    </Icon>
+  );
+}
+
 export function VolumeIcon() {
   return (
     <Icon>

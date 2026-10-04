@@ -151,8 +151,10 @@ export type Settings = {
   bar: BarLayout | null;
   /** Programs offered under "Open with". */
   openWith: Launcher[];
-  /** Sites offered under "Search in". */
+  /** Sites offered under "Search in", and in the sidebar where ticked. */
   searchIn: Launcher[];
+  /** Which round of default sites `searchIn` has been given; see `SEARCH_ROUND`. */
+  searchRound: number;
 };
 
 /**
@@ -168,19 +170,38 @@ export type Launcher = {
   target: string;
   /** Whether it also has a button in the top bar. Off until asked for. */
   inBar: boolean;
+  /** Search sites only: whether the track sidebar offers it. On unless taken off. */
+  inSide: boolean;
 };
 
 export const newLauncherId = () => Math.random().toString(36).slice(2, 10);
 
+const site = (id: string, name: string, target: string): Launcher => ({
+  id,
+  name,
+  target,
+  inBar: false,
+  inSide: true,
+});
+
 export const DEFAULT_SEARCH: Launcher[] = [
-  { id: "google", name: "Google", target: "https://www.google.com/search?q={query}", inBar: false },
-  {
-    id: "youtube",
-    name: "YouTube",
-    target: "https://www.youtube.com/results?search_query={query}",
-    inBar: false,
-  },
+  site("google", "Google", "https://www.google.com/search?q={query}"),
+  site("youtube", "YouTube", "https://www.youtube.com/results?search_query={query}"),
+  site("discogs", "Discogs", "https://www.discogs.com/search/?q={query}&type=all"),
+  site("beatport", "Beatport", "https://www.beatport.com/search?q={query}"),
+  site("bandcamp", "Bandcamp", "https://bandcamp.com/search?q={query}"),
+  site("soundcloud", "SoundCloud", "https://soundcloud.com/search?q={query}"),
+  site("juno", "Juno", "https://www.junodownload.com/search/?q%5Ball%5D%5B%5D={query}"),
 ];
+
+/**
+ * Which round of default sites a stored list has been given.
+ *
+ * A stored list replaces the defaults, so sites added to them later would
+ * never reach anyone who already had one. Each round is offered once; a site
+ * removed after that stays removed.
+ */
+const SEARCH_ROUND = 2;
 
 /**
  * The top bar's arrangement.
@@ -268,6 +289,7 @@ export const DEFAULTS: Settings = {
   bar: null,
   openWith: [],
   searchIn: DEFAULT_SEARCH,
+  searchRound: SEARCH_ROUND,
 };
 
 const KEY = "noceur.settings";
@@ -310,7 +332,8 @@ export function loadSettings(): Settings {
       meter: parsed.meter && METERS.includes(parsed.meter) ? parsed.meter : DEFAULTS.meter,
       bar: readBar(parsed.bar),
       openWith: readLaunchers(parsed.openWith) ?? DEFAULTS.openWith,
-      searchIn: readLaunchers(parsed.searchIn) ?? DEFAULTS.searchIn,
+      searchIn: seedSearch(readLaunchers(parsed.searchIn), parsed.searchRound),
+      searchRound: SEARCH_ROUND,
     };
   } catch {
     return DEFAULTS;
@@ -327,7 +350,16 @@ function readLaunchers(raw: unknown): Launcher[] | undefined {
       name: l.name,
       target: l.target,
       inBar: l.inBar === true,
+      inSide: l.inSide !== false,
     }));
+}
+
+/** A stored search list, with any default sites from a newer round added once. */
+function seedSearch(stored: Launcher[] | undefined, round: unknown): Launcher[] {
+  if (!stored) return DEFAULT_SEARCH;
+  if (typeof round === "number" && round >= SEARCH_ROUND) return stored;
+  const have = new Set(stored.map((l) => l.id));
+  return [...stored, ...DEFAULT_SEARCH.filter((l) => !have.has(l.id))];
 }
 
 /**

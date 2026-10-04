@@ -130,6 +130,7 @@ fn main() {
             commands::list_rows,
             commands::probe,
             commands::search,
+            commands::search_tag,
             commands::play,
             commands::transport_cmd,
             commands::transport_state,

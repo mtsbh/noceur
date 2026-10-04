@@ -203,40 +203,59 @@ pub async fn search(
         let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
         let hits =
             noceur_index::search(&db, &req.query, &req.scopes, limit).map_err(|e| e.to_string())?;
-
-        Ok(hits
-            .into_iter()
-            .map(|h| {
-                let is_audio = h.kind == 1;
-                SearchHit {
-                    file_id: h.file_id,
-                    kind: h.kind,
-                    name: h.name,
-                    dir_path: simplify(Path::new(&h.dir_path))
-                        .to_string_lossy()
-                        .into_owned(),
-                    bpm: if is_audio {
-                        format::bpm(h.bpm, format::BpmSource::Tag)
-                    } else {
-                        String::new()
-                    },
-                    key: if is_audio {
-                        format::key(h.key_norm, h.key_tag.as_deref(), KeyNotation::Camelot)
-                    } else {
-                        String::new()
-                    },
-                    duration: if is_audio {
-                        format::duration(h.duration_ms)
-                    } else {
-                        String::new()
-                    },
-                    artist: h.artist.unwrap_or_default(),
-                }
-            })
-            .collect())
+        Ok(hits.into_iter().map(search_hit).collect())
     })
     .await
     .map_err(|e| format!("search task failed: {e}"))?
+}
+
+/// Every track tagged with exactly this artist, genre or label - the sidebar's
+/// links. `field` is `artist`, `genre` or `label`.
+#[tauri::command]
+pub async fn search_tag(
+    state: State<'_, AppState>,
+    field: String,
+    value: String,
+    scopes: Vec<String>,
+) -> Result<Vec<SearchHit>, String> {
+    let column = noceur_index::TagColumn::parse(&field).ok_or("not a field to list by")?;
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
+        let hits = noceur_index::search_tag(&db, column, &value, &scopes, MAX_LIMIT)
+            .map_err(|e| e.to_string())?;
+        Ok(hits.into_iter().map(search_hit).collect())
+    })
+    .await
+    .map_err(|e| format!("search task failed: {e}"))?
+}
+
+fn search_hit(h: noceur_index::Hit) -> SearchHit {
+    let is_audio = h.kind == 1;
+    SearchHit {
+        file_id: h.file_id,
+        kind: h.kind,
+        name: h.name,
+        dir_path: simplify(Path::new(&h.dir_path))
+            .to_string_lossy()
+            .into_owned(),
+        bpm: if is_audio {
+            format::bpm(h.bpm, format::BpmSource::Tag)
+        } else {
+            String::new()
+        },
+        key: if is_audio {
+            format::key(h.key_norm, h.key_tag.as_deref(), KeyNotation::Camelot)
+        } else {
+            String::new()
+        },
+        duration: if is_audio {
+            format::duration(h.duration_ms)
+        } else {
+            String::new()
+        },
+        artist: h.artist.unwrap_or_default(),
+    }
 }
 
 /// Lists the subdirectories of a path, for one level of the folder tree.

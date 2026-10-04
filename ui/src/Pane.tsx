@@ -83,6 +83,11 @@ export type PaneHandle = {
   refreshRows: () => void;
   /** Every selected file id. */
   selection: () => number[];
+  /**
+   * The one selected row things like the sidebar describe: the row last
+   * clicked or moved to, while it is selected. Null with nothing selected.
+   */
+  current: () => number | null;
   /** Selects every entry in the folder, fetching rows not loaded yet. */
   selectAll: () => void;
   /** Replaces the selection with these files. */
@@ -452,6 +457,12 @@ export default function Pane(props: {
         return undefined;
       },
       selection: () => [...selection()],
+      current: () => {
+        const all = selection();
+        const at = selected();
+        if (at !== null && all.has(at)) return at;
+        return all.size > 0 ? all.values().next().value! : null;
+      },
       selectAll,
       select: (fileIds) => {
         setSelection(new Set(fileIds));

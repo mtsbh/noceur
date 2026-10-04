@@ -2,6 +2,7 @@ import {
   createSignal,
   createEffect,
   createMemo,
+  on,
   onCleanup,
   untrack,
   For,
@@ -52,6 +53,7 @@ import {
   type ArtSize,
   type SortColumn,
   type RowDisplay,
+  type TagLink,
 } from "./api";
 import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
@@ -62,6 +64,7 @@ import TagEditor from "./TagEditor";
 import CoverPicker from "./CoverPicker";
 import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
+import Sidebar from "./Sidebar";
 import Renamer from "./Renamer";
 import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
 import Quality, { startQuality, type QualityRun } from "./Quality";
@@ -99,6 +102,7 @@ import {
 import {
   BoltIcon,
   BroomIcon,
+  ChevronIcon,
   ClipboardIcon,
   ConvertIcon,
   CopiesIcon,
@@ -333,9 +337,16 @@ export default function App() {
 
   const audioSelection = createMemo(() => focusHandle()?.audioSelection() ?? []);
 
+  /**
+   * Bumped by every re-read, so the sidebar knows the track it shows may have
+   * been written.
+   */
+  const [written, setWritten] = createSignal(0);
+
   /** Re-reads every visible pane. A write can land in a folder either one shows. */
   function refetchAll() {
     for (const handle of Object.values(handles())) handle.refetch();
+    setWritten((n) => n + 1);
   }
 
   /* ── Copy, cut, paste ──────────────────────────────────────────────────── */
@@ -685,6 +696,8 @@ export default function App() {
   const [artNonce, setArtNonce] = createSignal(0);
 
   const [finding, setFinding] = createSignal(false);
+  /** The tag a sidebar link asked search to list, until search closes. */
+  const [findTag, setFindTag] = createSignal<TagLink | null>(null);
   const [transport, setTransport] = createSignal<TransportState | null>(null);
   /**
    * The row the Time column counts up in: the loaded track, once it has
@@ -1290,6 +1303,60 @@ export default function App() {
     if (row) playRow(row, handle.tabId);
   }
 
+  /* ── Sidebar ───────────────────────────────────────────────────────────── */
+
+  const SIDE_KEY = "noceur.sidebar";
+  const [sideOpen, setSideOpen] = createSignal(
+    (() => {
+      try {
+        return localStorage.getItem(SIDE_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })(),
+  );
+  function toggleSide() {
+    const open = !sideOpen();
+    setSideOpen(open);
+    try {
+      localStorage.setItem(SIDE_KEY, open ? "1" : "0");
+    } catch {
+      /* remembered for this session only */
+    }
+  }
+
+  /** The focused pane's current row, with the tab it is in. */
+  const sideRow = createMemo(
+    () => {
+      const handle = focusHandle();
+      const id = handle?.current() ?? null;
+      if (!handle || id === null) return null;
+      return { tabId: handle.tabId, fileId: id };
+    },
+    null,
+    { equals: (a, b) => a?.tabId === b?.tabId && a?.fileId === b?.fileId },
+  );
+
+  /** The track the sidebar describes: the current row, when it is audio. */
+  const sideTrack = () => {
+    const at = sideRow();
+    if (!at) return null;
+    const row = handles()[at.tabId]?.rowOf(at.fileId);
+    return row && row.kind !== 1 ? null : at.fileId;
+  };
+
+  // With the sidebar open, selecting a track plays it, so going down the list
+  // is listening through it. Only a change of row within one pane counts:
+  // opening the sidebar, or moving focus to the other pane, plays nothing.
+  createEffect(
+    on(sideRow, (now, before) => {
+      if (!sideOpen() || !now || !before || now.tabId !== before.tabId) return;
+      if (now.fileId === before.fileId || transport()?.fileId === now.fileId) return;
+      const row = handles()[now.tabId]?.rowOf(now.fileId);
+      if (row) playRow(row, now.tabId);
+    }),
+  );
+
   /* ── Drag and drop ─────────────────────────────────────────────────────── */
 
   /** The drop target under a file drag, or null when nothing is being dragged. */
@@ -1784,6 +1851,12 @@ export default function App() {
         return;
       }
 
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSide();
+        return;
+      }
+
       // The tab and split shortcuts. Ctrl+T is the reason every bare-letter
       // shortcut below checks the modifier: without it, opening a tab would also
       // toggle quick tag.
@@ -2137,6 +2210,30 @@ export default function App() {
             )}
           </For>
         </div>
+
+        <button
+          class={`sidetoggle ${sideOpen() ? "open" : ""}`}
+          onClick={toggleSide}
+          data-tip={sideOpen() ? "Hide sidebar · ctrl+b" : "Sidebar · ctrl+b"}
+          data-tip-at="start"
+          aria-label="Sidebar"
+        >
+          <ChevronIcon />
+        </button>
+        <Show when={sideOpen()}>
+          <Sidebar
+            fileId={sideTrack()}
+            sites={settings().searchIn.filter((s) => s.inSide && s.target.trim())}
+            onSites={() => settingsAt("actions")}
+            version={written() + artNonce()}
+            onWritten={refetchAll}
+            onArt={(fileId) => setEditing([fileId])}
+            onList={(link) => {
+              setFindTag(link);
+              setFinding(true);
+            }}
+          />
+        </Show>
       </div>
 
       <Show when={columnMenu()}>
@@ -2441,7 +2538,11 @@ export default function App() {
       <Show when={finding()}>
         <Search
           scopes={searchScopes()}
-          onClose={() => setFinding(false)}
+          tag={findTag() ?? undefined}
+          onClose={() => {
+            setFinding(false);
+            setFindTag(null);
+          }}
           // Opened in the focused pane, with the row that matched selected
           // once the folder holding it has been read.
           onOpen={(dirPath, fileId) => navigateFocused(dirPath, fileId)}

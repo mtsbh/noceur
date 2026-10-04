@@ -195,6 +195,28 @@ pub struct TagForm {
     pub track_no: Option<String>,
     pub bpm: Option<String>,
     pub key: Option<String>,
+    /// What the file is, for one file only; a selection has no single answer.
+    pub facts: Option<FileFacts>,
+}
+
+/// What a file is, as text, for the sidebar. Read-only: none of it is a tag.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileFacts {
+    /// `FLAC`, `MP3`.
+    pub format: String,
+    /// `1411 kbps`, or empty when it cannot be told.
+    pub bitrate: String,
+    /// `6:12`.
+    pub length: String,
+    /// `44.1 kHz`.
+    pub sample_rate: String,
+    /// `24-bit`, or empty for lossy formats.
+    pub bit_depth: String,
+    /// `Stereo`, `Mono`, `6 ch`.
+    pub channels: String,
+    /// `62.3 MB`.
+    pub size: String,
 }
 
 /// What the editor asks to change.
