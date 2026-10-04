@@ -1,0 +1,10 @@
+[package]
+name = "noceur-rekordbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+# Already in the tree through Tauri's plist; the same version.
+quick-xml = "0.41"

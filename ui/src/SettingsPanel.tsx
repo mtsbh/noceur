@@ -13,11 +13,14 @@ import {
   setPreserveDates,
   ffmpegInfo,
   setFfmpegPath,
+  rekordboxTarget,
+  setRekordboxXml,
   analysisSettings,
   setAnalysisSettings,
   type AnalysisMode,
   type AnalysisSettings,
   type FfmpegInfo,
+  type RekordboxTarget,
   type Action,
   type ActionKind,
 } from "./api";
@@ -342,6 +345,11 @@ export default function Settings(props: {
   const [ffmpeg, setFfmpeg] = createSignal<FfmpegInfo | null>(null);
   createEffect(() => {
     ffmpegInfo().then(setFfmpeg).catch(() => {});
+  });
+
+  const [rekordbox, setRekordbox] = createSignal<RekordboxTarget | null>(null);
+  createEffect(() => {
+    rekordboxTarget().then(setRekordbox).catch(() => {});
   });
 
   const [token, setToken] = createSignal("");
@@ -1019,6 +1027,33 @@ export default function Settings(props: {
                 </p>
               )}
             </Show>
+          </Section>
+
+          <Section
+            tab="files"
+            title="rekordbox"
+            info={<p>Playlists → Send to rekordbox writes here, into a noceur folder. Backed up first.</p>}
+          >
+            <div class="setrow">
+              <span class="setlabel">rekordbox.xml</span>
+              <input
+                type="text"
+                value={rekordbox()?.set ?? ""}
+                placeholder={rekordbox()?.found ?? "Not set in rekordbox"}
+                spellcheck={false}
+                onChange={(e) =>
+                  setRekordboxXml(e.currentTarget.value).then(setRekordbox).catch(() => {})
+                }
+              />
+            </div>
+            <p class="acthint">
+              <Show
+                when={rekordbox()?.path}
+                fallback="Set Imported Library in rekordbox (Preferences → Advanced), or a path here."
+              >
+                {rekordbox()?.set ? "Your path" : "From rekordbox's Imported Library"}
+              </Show>
+            </p>
           </Section>
 
           <Section

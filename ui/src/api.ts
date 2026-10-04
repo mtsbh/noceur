@@ -1115,6 +1115,24 @@ export function setFfmpegPath(path: string): Promise<FfmpegInfo> {
   return invoke<FfmpegInfo>("set_ffmpeg_path", { path });
 }
 
+/** Where Send to rekordbox writes. `set` is the Settings path, empty to use `found`. */
+export type RekordboxTarget = { path: string | null; set: string; found: string | null };
+
+export type RekordboxSent = { playlists: number; added: number; missing: number; path: string };
+
+export function rekordboxTarget(): Promise<RekordboxTarget> {
+  return invoke<RekordboxTarget>("rekordbox_target");
+}
+
+export function setRekordboxXml(path: string): Promise<RekordboxTarget> {
+  return invoke<RekordboxTarget>("set_rekordbox_xml", { path });
+}
+
+/** Writes every playlist into rekordbox.xml's `noceur` folder. */
+export function sendToRekordbox(): Promise<RekordboxSent> {
+  return invoke<RekordboxSent>("send_to_rekordbox");
+}
+
 export function convertPlan(fileIds: number[], options: ConvertOptions): Promise<ConvertPlanned[]> {
   return invoke<ConvertPlanned[]>("convert_plan", { fileIds, options });
 }

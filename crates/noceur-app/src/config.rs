@@ -60,6 +60,10 @@ pub struct Config {
     /// Measuring BPM and key in the background, and what to do with the result.
     #[serde(default)]
     pub analysis: crate::background::Settings,
+    /// The `rekordbox.xml` playlists are sent to. Empty to use the one
+    /// rekordbox's Imported Library is set to.
+    #[serde(default)]
+    pub rekordbox_xml: String,
 }
 
 fn yes() -> bool {
@@ -78,6 +82,7 @@ impl Default for Config {
             actions: Vec::new(),
             ffmpeg_path: String::new(),
             analysis: Default::default(),
+            rekordbox_xml: String::new(),
         }
     }
 }

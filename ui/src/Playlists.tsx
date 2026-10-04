@@ -9,6 +9,7 @@ import {
   renamePlaylist,
   reorderPlaylist,
   reveal,
+  sendToRekordbox,
   type Playlist,
   type PlaylistTrack,
   type RowDisplay,
@@ -48,6 +49,8 @@ export default function Playlists(props: {
   const [deleting, setDeleting] = createSignal<number | null>(null);
   const [dragOver, setDragOver] = createSignal<number | null>(null);
   const [error, setError] = createSignal("");
+  const [sent, setSent] = createSignal("");
+  const [sending, setSending] = createSignal(false);
   let dragging: string[] = [];
   let listEl: HTMLDivElement | undefined;
 
@@ -127,6 +130,22 @@ export default function Playlists(props: {
     deletePlaylist(id)
       .then(changed)
       .catch((e) => setError(String(e)));
+  }
+
+  function send() {
+    if (sending()) return;
+    setSending(true);
+    setError("");
+    setSent("");
+    sendToRekordbox()
+      .then((s) => {
+        const parts = [`Sent ${s.playlists} ${s.playlists === 1 ? "playlist" : "playlists"}`];
+        if (s.added > 0) parts.push(`${s.added} new ${s.added === 1 ? "track" : "tracks"}`);
+        if (s.missing > 0) parts.push(`${s.missing} not found`);
+        setSent(`${parts.join(" · ")} · Reload in rekordbox`);
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setSending(false));
   }
 
   /* ── Tracks ─────────────────────────────────────────────────────────── */
@@ -454,10 +473,21 @@ export default function Playlists(props: {
 
         <footer class="tagfoot">
           <span class="sethint credit">
-            <Show when={error()} fallback="Enter plays · Del removes · Alt+↑↓ or drag to move">
+            <Show
+              when={error()}
+              fallback={sent() || "Enter plays · Del removes · Alt+↑↓ or drag to move"}
+            >
               <span class="tagerror">{error()}</span>
             </Show>
           </span>
+          <button
+            class="btn"
+            disabled={sending() || lists().length === 0}
+            onClick={send}
+            data-tip="Into rekordbox.xml's noceur folder"
+          >
+            {sending() ? "Sending…" : "Send to rekordbox"}
+          </button>
           <button
             class="btn"
             disabled={pickedInOrder().length !== 1 || !tracks().find((t) => t.path === pickedInOrder()[0])?.row}

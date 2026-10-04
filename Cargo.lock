@@ -2159,6 +2159,7 @@ dependencies = [
  "noceur-fsmodel",
  "noceur-index",
  "noceur-online",
+ "noceur-rekordbox",
  "noceur-tags",
  "serde",
  "serde_json",
@@ -2236,6 +2237,14 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.19",
  "ureq",
+]
+
+[[package]]
+name = "noceur-rekordbox"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

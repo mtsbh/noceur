@@ -215,17 +215,19 @@ downloads rather than CD rips.
 
 ## rekordbox
 
-- [ ] **20. Playlists, sent to rekordbox.** Named playlists kept in the index, with tracks ticked
+- [x] **20. Playlists, sent to rekordbox.** Named playlists kept in the index, with tracks ticked
       into them from a key or the right-click menu, so nothing is copied or duplicated to gather
-      a set. *The playlists themselves are done (`P`, right-click → Playlists, `Ctrl+P`); the send
-      below is next.* Send to rekordbox merges the playlists and their tracks into the `rekordbox.xml`
-      that rekordbox's Imported Library and Mixed In Key already share (set in Settings), so the
-      usual routine stays: Reload in rekordbox, sort by Date Added, Import To Collection, export
-      to the stick. The file holds every cue point, so the write is add-only: existing tracks,
-      cues and playlists are never changed or removed, only new ones appended. Before each
-      write the file is backed up; the new one is written beside it, read back and checked, then
-      renamed into place; and it is re-read first if it changed since noceur last read it (Mixed
-      In Key or a rekordbox export got there in between). New tracks get today's DateAdded.
+      a set (`P`, right-click → Playlists, `Ctrl+P`). Send to rekordbox (Playlists window) merges
+      them into the `rekordbox.xml` that rekordbox's Imported Library and Mixed In Key already
+      share (found in rekordbox's settings, or set in Settings → Files → rekordbox), so the usual
+      routine stays: Reload in rekordbox, sort by Date Added, Import To Collection, export to the
+      stick. The file holds every cue point, so it is edited, never rewritten
+      (`noceur-rekordbox`): new tracks are appended to the collection with today's DateAdded,
+      the playlists go into a `noceur` folder under ROOT that mirrors noceur's on each send, and
+      every other byte stays the old file's. Before the write the merge is checked against the
+      old file (every track byte for byte, every other playlist, the counts); the file is backed
+      up to `noceur-backups/` beside it (newest 10 kept); the new one is written beside it, read
+      back, then renamed into place; and the merge is redone if the file changed meanwhile.
       Playlists live in noceur's index, so a rekordbox export that overwrites the file loses
       nothing: the next send puts them back.
 - [ ] **21. Energy level.** A 1–10 energy rating per track, in the style of Mixed In Key's,

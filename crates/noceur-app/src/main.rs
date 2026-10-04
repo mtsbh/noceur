@@ -27,6 +27,7 @@ mod overview;
 mod placement;
 mod playlists;
 mod quality;
+mod rekordbox;
 mod renamer;
 mod shellmenu;
 mod state;
@@ -197,6 +198,9 @@ fn main() {
             playlists::playlist_remove,
             playlists::playlist_reorder,
             playlists::playlists_holding,
+            rekordbox::rekordbox_target,
+            rekordbox::set_rekordbox_xml,
+            rekordbox::send_to_rekordbox,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

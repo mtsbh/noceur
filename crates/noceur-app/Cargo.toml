@@ -25,6 +25,7 @@ noceur-art = { path = "../noceur-art" }
 noceur-audio = { path = "../noceur-audio" }
 noceur-index = { path = "../noceur-index" }
 noceur-online = { path = "../noceur-online" }
+noceur-rekordbox = { path = "../noceur-rekordbox" }
 serde_json = "1"
 # Copies tags and art into converted files; the same version noceur-tags uses.
 lofty = "0.22"

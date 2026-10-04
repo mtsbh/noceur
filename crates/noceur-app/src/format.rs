@@ -234,6 +234,19 @@ pub fn modified(unix_seconds: i64) -> String {
     modified_at(unix_seconds, now_seconds())
 }
 
+/// Today on this machine's clock, `2026-10-04`.
+pub fn today() -> String {
+    let (y, m, d, _, _) = local_civil(now_seconds());
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Now on this machine's clock, for a file name: `20261004-192501`.
+pub fn now_stamp() -> String {
+    let now = now_seconds();
+    let (y, m, d, h, mi) = local_civil(now);
+    format!("{y:04}{m:02}{d:02}-{h:02}{mi:02}{:02}", now.rem_euclid(60))
+}
+
 /// The clock, as seconds since the epoch. Zero if it is before 1970.
 fn now_seconds() -> i64 {
     std::time::SystemTime::now()
