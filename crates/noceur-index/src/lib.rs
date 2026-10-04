@@ -5,6 +5,7 @@ pub mod db;
 pub mod envelope;
 pub mod identity;
 pub mod overview;
+pub mod playlist;
 pub mod query;
 pub mod quickkey;
 pub mod scan;

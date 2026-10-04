@@ -15,7 +15,7 @@ use rusqlite::{params, OptionalExtension};
 /// row. Case is folded only on Windows, whose filesystems are case-insensitive;
 /// on Unix `/Music` and `/music` are genuinely different directories and must not
 /// collapse into one.
-fn path_key(path: &Path) -> String {
+pub(crate) fn path_key(path: &Path) -> String {
     let s = path.to_string_lossy();
     let trimmed = s.trim_end_matches(['/', '\\']);
     // A bare root such as `C:\` or `/` must not trim away to nothing.

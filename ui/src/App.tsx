@@ -30,6 +30,11 @@ import {
   openWith,
   sendToTelegram,
   telegramAvailable,
+  playlists as fetchPlaylists,
+  playlistsHolding,
+  togglePlaylist,
+  type Playlist,
+  type Matched,
   undoRename,
   previewTool,
   applyCleanup,
@@ -68,6 +73,8 @@ import Duplicates from "./Duplicates";
 import Overview from "./Overview";
 import Converter from "./Converter";
 import NewFolder from "./NewFolder";
+import Playlists from "./Playlists";
+import NewPlaylist from "./NewPlaylist";
 import Shortcuts from "./Shortcuts";
 import FromName from "./FromName";
 import Titlebar from "./Titlebar";
@@ -102,6 +109,7 @@ import {
   NewFolderIcon,
   KeyboardIcon,
   ChartIcon,
+  PlaylistIcon,
   SendIcon,
   OpenIcon,
   OpenWithIcon,
@@ -537,6 +545,27 @@ export default function App() {
     setTreeReload((r) => ({ path: parent, n: (r?.n ?? 0) + 1 }));
   }
 
+  /**
+   * Sends a tree folder to the Recycle Bin through the shell. A pane showing
+   * it, or anything inside it, goes up to the folder that held it.
+   */
+  function deleteFolder(path: string) {
+    // Asked before the delete: afterwards there is no folder to ask about.
+    parentOf(path)
+      .then(async (parent) => {
+        await fileOpPaths("delete", [path]);
+        const gone = (p: string) => {
+          const a = p.toLowerCase().replace(/[\\/]+$/, "");
+          const b = path.toLowerCase().replace(/[\\/]+$/, "");
+          return a === b || a.startsWith(b + "\\") || a.startsWith(b + "/");
+        };
+        if (parent && gone(focusPath())) navigateFocused(parent);
+        if (parent) setTreeReload((r) => ({ path: parent, n: (r?.n ?? 0) + 1 }));
+        refetchAll();
+      })
+      .catch((e) => flash(String(e)));
+  }
+
   /** Files being tagged from their names, or null when closed. */
   const [naming, setNaming] = createSignal<number[] | null>(null);
   /** Files the converter is open on, or null when it is closed. */
@@ -565,6 +594,66 @@ export default function App() {
   const [comparing, setComparing] = createSignal<number[] | null>(null);
   /** Whether the library overview is open. */
   const [surveying, setSurveying] = createSignal(false);
+  /** Whether the Playlists dialog is open. */
+  const [listing, setListing] = createSignal(false);
+  /** Every playlist, for the right-click menu. */
+  const [lists, setLists] = createSignal<Playlist[]>([]);
+  /** Bumped when the app changes a playlist, so an open dialog reloads. */
+  const [listsVersion, setListsVersion] = createSignal(0);
+  /** The playlist P adds to: the one last picked in the dialog or made. */
+  const [currentList, setCurrentListRaw] = createSignal<number | null>(
+    (() => {
+      try {
+        const v = Number(localStorage.getItem("noceur.playlist"));
+        return Number.isFinite(v) && v > 0 ? v : null;
+      } catch {
+        return null;
+      }
+    })(),
+  );
+  function setCurrentList(id: number | null) {
+    setCurrentListRaw(id);
+    try {
+      if (id === null) localStorage.removeItem("noceur.playlist");
+      else localStorage.setItem("noceur.playlist", String(id));
+    } catch {
+      /* remembered for this session only */
+    }
+  }
+  /** Tracks a new playlist is being named for, or null when the prompt is closed. */
+  const [newList, setNewList] = createSignal<number[] | null>(null);
+  /** Playlists holding the whole right-clicked selection, for the menu's ticks. */
+  const [held, setHeld] = createSignal<number[]>([]);
+  /** The playlist being played through, when play started from one; next and previous walk it. */
+  const [queue, setQueue] = createSignal<RowDisplay[] | null>(null);
+  function refreshLists() {
+    fetchPlaylists().then(setLists).catch(() => {});
+  }
+  refreshLists();
+  function listsChanged() {
+    refreshLists();
+    setListsVersion((v) => v + 1);
+  }
+  /** Adds the tracks to a playlist, or takes them out when all are already in. */
+  function toggleInto(id: number, ids: number[]) {
+    if (ids.length === 0) return;
+    const name = lists().find((l) => l.id === id)?.name ?? "playlist";
+    togglePlaylist(id, ids)
+      .then((done) => {
+        setCurrentList(id);
+        listsChanged();
+        if (done.removed > 0) flash(`Removed ${done.removed} from ${name}`);
+        else flash(`Added ${done.added} to ${name}`);
+      })
+      .catch((e) => flash(String(e)));
+  }
+  /** P: into the current playlist, or name a first one. */
+  function addToCurrent(ids: number[] = audioSelection()) {
+    if (ids.length === 0) return;
+    const id = currentList();
+    if (id !== null && lists().some((l) => l.id === id)) toggleInto(id, ids);
+    else setNewList(ids);
+  }
   /** Whether Telegram Desktop is installed. Its button is hidden when not. */
   const [hasTelegram, setHasTelegram] = createSignal(false);
   telegramAvailable().then(setHasTelegram).catch(() => {});
@@ -578,6 +667,10 @@ export default function App() {
   const [matching, setMatching] = createSignal<{ fileId: number; fileIds: number[] } | null>(
     null,
   );
+  /** The match the editor was filled from, for its Back button. */
+  const [backTo, setBackTo] = createSignal<{ fileId: number; fileIds: number[] } | null>(null);
+  /** What the last search found, so going back does not search again. */
+  const [found, setFound] = createSignal<{ fileId: number; result: Matched } | null>(null);
   /** Fields a match pre-filled the editor with, cleared when it closes. */
   const [prefill, setPrefill] = createSignal<Partial<Record<TagField, string>>>({});
   /** Cover art the chosen match came with, offered in the editor alongside it. */
@@ -1026,6 +1119,12 @@ export default function App() {
         run: () => setNewFolderIn(focusPath()),
       },
       {
+        id: "playlists",
+        label: "Playlists",
+        icon: PlaylistIcon,
+        run: () => setListing(true),
+      },
+      {
         id: "overview",
         label: "Library overview",
         icon: ChartIcon,
@@ -1161,6 +1260,7 @@ export default function App() {
   /** Loads a row into the player, and remembers which tab it is walking. */
   function playRow(row: RowDisplay, tabId: number) {
     if (row.kind !== 1) return;
+    setQueue(null);
     setPlayingTab(tabId);
     play(row.fileId).then(setTransport).catch(() => {});
   }
@@ -1176,6 +1276,13 @@ export default function App() {
   function step(by: number) {
     const from = transport()?.fileId;
     if (from == null) return;
+    const list = queue();
+    const at = list?.findIndex((r) => r.fileId === from) ?? -1;
+    if (list && at >= 0) {
+      const next = list[at + by];
+      if (next) play(next.fileId).then(setTransport).catch(() => {});
+      return;
+    }
     const tabId = playingTab();
     const handle = (tabId !== null ? handles()[tabId] : undefined) ?? focusHandle();
     if (!handle) return;
@@ -1296,6 +1403,8 @@ export default function App() {
     }
     // The menu measures itself after mount and nudges back inside the window,
     // so the raw pointer position is the right starting point.
+    setHeld([]);
+    playlistsHolding(ids).then(setHeld).catch(() => {});
     setMenu({ row, ids, x: e.clientX, y: e.clientY });
   }
 
@@ -1345,6 +1454,25 @@ export default function App() {
         icon: PlayIcon,
         disabled: audio,
         run: () => playRow(row, playingTab() ?? (activeTab(focusGroup())?.id ?? 0)),
+      },
+      {
+        kind: "item",
+        label: "Playlists",
+        icon: PlaylistIcon,
+        disabled: audio,
+        run: () => {},
+        children: [
+          ...lists().map<MenuItem>((list) => ({
+            kind: "item",
+            label: list.name,
+            checked: held().includes(list.id),
+            hint: list.id === currentList() ? "p" : undefined,
+            run: () => toggleInto(list.id, ids),
+          })),
+          ...(lists().length ? [{ kind: "separator" } as MenuItem] : []),
+          { kind: "item", label: "New playlist…", run: () => setNewList(ids) },
+          { kind: "item", label: "Open playlists", hint: "ctrl+p", run: () => setListing(true) },
+        ],
       },
       { kind: "separator" },
       {
@@ -1643,6 +1771,13 @@ export default function App() {
         return;
       }
 
+      // Ctrl+P opens the playlists; the web view would otherwise print.
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setListing((open) => !open);
+        return;
+      }
+
       if (mod && !e.shiftKey && e.key.toLowerCase() === "i") {
         e.preventDefault();
         setSurveying((open) => !open);
@@ -1785,6 +1920,14 @@ export default function App() {
         return;
       }
 
+      // P puts the selection in the current playlist, or takes it out again.
+      // Free in quick tag too, whose letter row stops at O.
+      if (e.key.toLowerCase() === "p" && !document.querySelector(".scrim")) {
+        e.preventDefault();
+        addToCurrent();
+        return;
+      }
+
       // T toggles quick tag. A single letter because the whole point is that a
       // hand stays on the keyboard.
       if (e.key.toLowerCase() === "t") {
@@ -1888,6 +2031,7 @@ export default function App() {
           dropKey={dropOver()?.key ?? null}
           onNewFolder={setNewFolderIn}
           onOpenTab={(path) => openTab(focusGroup().id, path)}
+          onDelete={deleteFolder}
           reload={treeReload()}
         />
         <div
@@ -2134,6 +2278,35 @@ export default function App() {
         )}
       </Show>
 
+      <Show when={listing()}>
+        <Playlists
+          current={currentList()}
+          onCurrent={setCurrentList}
+          playing={transport()?.fileId ?? null}
+          version={listsVersion()}
+          onChanged={refreshLists}
+          onPlay={(row, list) => {
+            setQueue(list);
+            play(row.fileId).then(setTransport).catch(() => {});
+          }}
+          onClose={() => setListing(false)}
+        />
+      </Show>
+
+      <Show when={newList()}>
+        {(ids) => (
+          <NewPlaylist
+            fileIds={ids()}
+            onClose={() => setNewList(null)}
+            onCreated={(id, name, added) => {
+              setCurrentList(id);
+              listsChanged();
+              flash(added > 0 ? `Added ${added} to ${name}` : `Made ${name}`);
+            }}
+          />
+        )}
+      </Show>
+
       <Show when={surveying()}>
         <Overview
           folder={focusPath()}
@@ -2149,8 +2322,14 @@ export default function App() {
         {(target) => (
           <MatchPicker
             fileId={target().fileId}
-            onClose={() => setMatching(null)}
+            cached={found()?.fileId === target().fileId ? found()!.result : undefined}
+            onLoaded={(result) => setFound({ fileId: target().fileId, result })}
+            onClose={() => {
+              setMatching(null);
+              setFound(null);
+            }}
             onChoose={(fields, art) => {
+              setBackTo(target());
               // Straight into the editor, pre-filled: the fields are visible as
               // proposed edits before anything is written, and the release's
               // cover comes with them rather than needing a second search.
@@ -2171,10 +2350,24 @@ export default function App() {
             initialArt={prefillArt()}
             artNonce={artNonce()}
             onFindArt={() => setCovering({ fileId: ids()[0], fileIds: ids() })}
+            onBack={
+              backTo()
+                ? () => {
+                    const target = backTo();
+                    setEditing(null);
+                    setPrefill({});
+                    setPrefillArt(undefined);
+                    setBackTo(null);
+                    setMatching(target);
+                  }
+                : undefined
+            }
             onClose={() => {
               setEditing(null);
               setPrefill({});
               setPrefillArt(undefined);
+              setBackTo(null);
+              setFound(null);
             }}
             onWritten={refetchAll}
           />

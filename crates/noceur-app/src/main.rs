@@ -25,6 +25,7 @@ mod identity;
 mod newfolder;
 mod overview;
 mod placement;
+mod playlists;
 mod quality;
 mod renamer;
 mod shellmenu;
@@ -81,6 +82,7 @@ fn main() {
     };
 
     let art_state = app_state.clone();
+    playlists::init(&app_state);
 
     if let Err(e) = tauri::Builder::default()
         .manage(app_state)
@@ -141,6 +143,7 @@ fn main() {
             commands::reveal,
             commands::path_of,
             commands::start_drag,
+            commands::start_drag_paths,
             commands::file_op,
             commands::file_op_paths,
             commands::drop_effect,
@@ -185,6 +188,15 @@ fn main() {
             actions::run_action,
             cleanup::apply_cleanup,
             tools::preview_tool,
+            playlists::playlists,
+            playlists::playlist_create,
+            playlists::playlist_rename,
+            playlists::playlist_delete,
+            playlists::playlist_tracks,
+            playlists::playlist_toggle,
+            playlists::playlist_remove,
+            playlists::playlist_reorder,
+            playlists::playlists_holding,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

@@ -302,6 +302,11 @@ export function startDrag(fileIds: number[]): Promise<void> {
   return invoke<void>("start_drag", { fileIds });
 }
 
+/** A native drag of paths the index has no rows for: folders in the tree. */
+export function startDragPaths(paths: string[]): Promise<void> {
+  return invoke<void>("start_drag_paths", { paths });
+}
+
 /** Copy, move or delete rows through the shell's own file operation. */
 export function fileOp(
   action: "copy" | "move" | "delete",
@@ -370,6 +375,53 @@ export function telegramAvailable(): Promise<boolean> {
  */
 export function sendToTelegram(fileIds: number[]): Promise<void> {
   return invoke<void>("send_to_telegram", { fileIds });
+}
+
+export type Playlist = { id: number; name: string; tracks: number; durationMs: number };
+
+/** One track of a playlist. `row` is null when the index has no file at `path`. */
+export type PlaylistTrack = { path: string; row: RowDisplay | null };
+
+export function playlists(): Promise<Playlist[]> {
+  return invoke<Playlist[]>("playlists");
+}
+
+export function createPlaylist(name: string): Promise<number> {
+  return invoke<number>("playlist_create", { name });
+}
+
+export function renamePlaylist(id: number, name: string): Promise<void> {
+  return invoke<void>("playlist_rename", { id, name });
+}
+
+export function deletePlaylist(id: number): Promise<void> {
+  return invoke<void>("playlist_delete", { id });
+}
+
+export function playlistTracks(id: number): Promise<PlaylistTrack[]> {
+  return invoke<PlaylistTrack[]>("playlist_tracks", { id });
+}
+
+/** Adds the files, or takes them out when every one is already in. */
+export function togglePlaylist(
+  id: number,
+  fileIds: number[],
+): Promise<{ added: number; removed: number }> {
+  return invoke("playlist_toggle", { id, fileIds });
+}
+
+export function removeFromPlaylist(id: number, paths: string[]): Promise<number> {
+  return invoke<number>("playlist_remove", { id, paths });
+}
+
+/** Moves `paths` so the first lands at `to`, counted without them. */
+export function reorderPlaylist(id: number, paths: string[], to: number): Promise<void> {
+  return invoke<void>("playlist_reorder", { id, paths, to });
+}
+
+/** Playlists that hold every one of the files. */
+export function playlistsHolding(fileIds: number[]): Promise<number[]> {
+  return invoke<number[]>("playlists_holding", { fileIds });
 }
 
 /** Opens files in a program, all of them in one launch. */

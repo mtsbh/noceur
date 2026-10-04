@@ -198,6 +198,7 @@ pub(crate) fn rename_in_shell(from: &Path, to: &Path) -> Result<(), String> {
     let done = std::fs::rename(from, to).map_err(|e| e.to_string());
     if done.is_ok() {
         crate::undo::record(from.to_path_buf(), to.to_path_buf());
+        crate::playlists::follow(from.to_path_buf(), to.to_path_buf());
     }
     done
 }

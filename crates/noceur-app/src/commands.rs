@@ -684,6 +684,16 @@ pub async fn start_drag(
     drag_on_main_thread(app, paths)
 }
 
+/// The same drag for paths with no row to look up: folders in the tree.
+#[tauri::command]
+pub async fn start_drag_paths(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    if paths.is_empty() {
+        return Ok(());
+    }
+    drag_on_main_thread(app, paths)
+}
+
 #[cfg(windows)]
 fn drag_on_main_thread(app: tauri::AppHandle, paths: Vec<PathBuf>) -> Result<(), String> {
     use tauri::{Emitter, Manager};

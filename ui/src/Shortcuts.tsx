@@ -24,6 +24,7 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
     items: [
       [["Ctrl", "F"], "Search"],
       [["Ctrl", "I"], "Library overview"],
+      [["Ctrl", "P"], "Playlists"],
       [["Alt", "←"], "Back"],
       [["Alt", "→"], "Forward"],
       [["Ctrl", "Click"], "Add to selection"],
@@ -76,6 +77,16 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
       [["Enter"], "Save cell"],
       [["Esc"], "Cancel edit"],
       [["Ctrl", "Enter"], "Save in tag editor"],
+    ],
+  },
+  {
+    title: "Playlists",
+    items: [
+      [["P"], "Add to / remove from current playlist"],
+      [["Enter"], "Play (in Playlists)"],
+      [["Del"], "Remove from playlist"],
+      [["Alt", "↑ ↓"], "Move in playlist"],
+      [["F2"], "Rename playlist"],
     ],
   },
   {

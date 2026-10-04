@@ -1,9 +1,9 @@
 import { createSignal, createMemo, createEffect, on, onCleanup, For, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import { createVirtualizer } from "@tanstack/solid-virtual";
-import { folderIconUrl, roots, subdirs, type Segment } from "./api";
+import { folderIconUrl, roots, startDragPaths, subdirs, type Segment } from "./api";
 import Menu, { type MenuItem } from "./Menu";
-import { NewFolderIcon, StarIcon, TabIcon } from "./icons";
+import { NewFolderIcon, StarIcon, TabIcon, TrashIcon } from "./icons";
 
 const PIN_KEY = "noceur.pinned";
 const DRIVES_KEY = "noceur.showDrives";
@@ -60,6 +60,8 @@ export default function Tree(props: {
   onNewFolder: (parent: string) => void;
   /** Opens this folder in a new tab of the focused pane. */
   onOpenTab: (path: string) => void;
+  /** Sends this folder to the Recycle Bin. */
+  onDelete: (path: string) => void;
   /**
    * Re-reads one branch, after something was made inside it. `n` changes on
    * every request, so asking twice for the same folder still reloads it.
@@ -106,6 +108,28 @@ export default function Tree(props: {
       .then((kids) => setChildren(path, kids))
       .catch(() => setChildren(path, []))
       .finally(() => loading.delete(path));
+  }
+
+  /**
+   * Drags a folder out of the tree once the pointer has moved, as the list
+   * drags its rows: a native file drag, so it drops on a pane, a tab, another
+   * folder here, Explorer or rekordbox alike.
+   */
+  function startFolderDrag(e: PointerEvent, path: string) {
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const move = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) < 5 && Math.abs(ev.clientY - startY) < 5) return;
+      stop();
+      startDragPaths([path]).catch(() => {});
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
   }
 
   function toggle(path: string) {
@@ -218,6 +242,14 @@ export default function Tree(props: {
       icon: StarIcon,
       run: () => togglePin(path),
     },
+    { kind: "separator" },
+    {
+      kind: "item",
+      label: "Delete",
+      icon: TrashIcon,
+      danger: true,
+      run: () => props.onDelete(path),
+    },
   ];
 
   const isCurrent = (path: string) => norm(path) === norm(props.current);
@@ -309,6 +341,7 @@ export default function Tree(props: {
                         }`}
                         style={{ "padding-left": `${8 + l.depth * 13}px` }}
                         onClick={() => props.onNavigate(l.path)}
+                        onPointerDown={(e) => startFolderDrag(e, l.path)}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();

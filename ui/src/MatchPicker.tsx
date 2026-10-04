@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { CloseIcon } from "./icons";
-import { matchTrack, type Query, type TagField, type TrackMatch } from "./api";
+import { matchTrack, type Matched, type Query, type TagField, type TrackMatch } from "./api";
 
 /**
  * Shows what the sources think a track is, and hands the chosen one to the
@@ -23,6 +23,10 @@ const PER_SOURCE = 3;
 export default function MatchPicker(props: {
   fileId: number;
   onClose: () => void;
+  /** What an earlier search of this track found, so coming back is instant. */
+  cached?: Matched;
+  /** Told what the search found, so the app can hand it back via `cached`. */
+  onLoaded?: (found: Matched) => void;
   /**
    * Called with the fields to pre-fill the editor with, and the cover art the
    * release came with when it has one.
@@ -63,10 +67,12 @@ export default function MatchPicker(props: {
 
   createEffect(() => {
     const id = props.fileId;
-    matchTrack(id)
+    const cached = props.cached;
+    (cached ? Promise.resolve(cached) : matchTrack(id))
       .then((r) => {
         setQuery(r.query);
         setMatches(r.matches);
+        if (!cached) props.onLoaded?.(r);
       })
       .catch((e) => {
         setMatches([]);

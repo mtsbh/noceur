@@ -136,6 +136,9 @@ pub fn run(
             .map_err(|e| format!("the file operation failed: {e}"))?;
     }
 
+    if let (Operation::Move, Some(into)) = (op, destination) {
+        crate::playlists::follow_moved(paths, into);
+    }
     Ok(())
 }
 
@@ -196,6 +199,14 @@ pub fn run_each(
             .map_err(|e| format!("the file operation failed: {e}"))?;
     }
 
+    if op == Operation::Move {
+        for (source, folder, name) in items {
+            let landed = folder.join(name);
+            if !source.exists() && landed.exists() {
+                crate::playlists::follow(source.clone(), landed);
+            }
+        }
+    }
     Ok(())
 }
 

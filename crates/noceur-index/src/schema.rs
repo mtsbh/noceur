@@ -1,10 +1,10 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 13;
+pub const SCHEMA_VERSION: i32 = 14;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -284,4 +284,29 @@ CREATE TABLE damage (
 const V13: &str = r#"
 ALTER TABLE content_tag ADD COLUMN label TEXT;
 UPDATE content_tag SET read_at = 0;
+"#;
+
+/// Named playlists, and the tracks ticked into them.
+///
+/// A track is held by its path, not its `file` row: a rescan deletes the row of a
+/// file it no longer sees, and a playlist must not lose a track because its
+/// folder was looked at while a drive was unplugged. `path_key` is the path as
+/// [`crate::scan`] folds it, so the same file is in a playlist once.
+const V14: &str = r#"
+CREATE TABLE playlist (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    created_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE playlist_track (
+    playlist_id INTEGER NOT NULL REFERENCES playlist(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL,
+    path        TEXT    NOT NULL,
+    path_key    TEXT    NOT NULL,
+    added_at    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (playlist_id, path_key)
+);
+
+CREATE INDEX idx_playlist_track_key ON playlist_track(path_key);
 "#;

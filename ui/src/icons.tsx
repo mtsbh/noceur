@@ -538,6 +538,17 @@ export function SendIcon() {
   );
 }
 
+/** Three lines of a list and a note: playlists. */
+export function PlaylistIcon() {
+  return (
+    <Icon>
+      <path d="M2.4 4h7.2M2.4 7.4h7.2M2.4 10.8h4.4" />
+      <path d="M12.2 12.2V5.4l2 .8" />
+      <circle cx="10.9" cy="12.2" r="1.3" />
+    </Icon>
+  );
+}
+
 /**
  * Every glyph a toolbar button can be given when the bar is customised.
  *
@@ -562,6 +573,7 @@ export const BAR_ICONS: { name: string; label: string; icon: () => JSX.Element }
   { name: "video", label: "Video", icon: VideoIcon },
   { name: "keyboard", label: "Keyboard", icon: KeyboardIcon },
   { name: "chart", label: "Chart", icon: ChartIcon },
+  { name: "playlist", label: "Playlist", icon: PlaylistIcon },
 ];
 
 export function barIcon(name?: string) {

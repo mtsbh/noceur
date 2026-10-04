@@ -38,9 +38,11 @@ same track often exists in more than one place.
 - Copy, cut and paste (`Ctrl+C` / `Ctrl+X` / `Ctrl+V`), shared with the Windows clipboard, so files copied in Explorer paste in Noceur and vice versa
 - `Ctrl` or `Shift` at the drop forces copy or move, as in Explorer
 - Copy or move to the other pane; new folder; delete to the Recycle Bin
+- Folders drag out of the tree (onto a pane, a tab, another folder, Explorer or rekordbox) and delete from its right-click menu
 - File operations go through the Windows shell (progress, conflict prompts, Explorer undo)
 - `Ctrl+Z` undoes the last rename job inside the app
 - "Open with" your own programs (e.g. Spek, Mp3tag, fre:ac), all selected files in one launch
+- Playlists (`Ctrl+P`): gather tracks from anywhere without copying them. `P` adds the selection to the current playlist (again takes it out), right-click → Playlists ticks it into any of them; play through in order, reorder by drag or `Alt+↑↓`. Entries follow files the app renames or moves
 - Send to Telegram: the selected files open in Telegram Desktop's chat picker, sent from your own account (button hidden when Telegram isn't installed)
 
 **Playback**
@@ -113,6 +115,8 @@ Noceur, on your `PATH`, or set its path in Settings → Files.
 | `Ctrl+Shift+N` | New folder |
 | `Ctrl+F` | Search |
 | `Ctrl+I` | Library overview |
+| `Ctrl+P` | Playlists |
+| `P` | Add to / remove from current playlist |
 | `Ctrl+T` / `Ctrl+W` | New tab / close tab |
 | `Ctrl+Tab`, `Ctrl+1`–`9` | Switch tabs |
 | `Ctrl+\` | Toggle dual pane |

@@ -289,7 +289,10 @@ mod tests {
         let o = overview(&db(), Some("E:\\Music\\")).unwrap();
         assert_eq!(o.tracks, 4);
         assert_eq!(o.folders, 2);
-        assert_eq!(overview(&db(), Some("e:\\music\\techno")).unwrap().tracks, 2);
+        assert_eq!(
+            overview(&db(), Some("e:\\music\\techno")).unwrap().tracks,
+            2
+        );
     }
 
     #[test]
@@ -316,11 +319,21 @@ mod tests {
     #[test]
     fn formats_and_rates_are_counted() {
         let o = overview(&db(), None).unwrap();
-        let mut formats: Vec<_> = o.formats.iter().map(|t| (t.value.as_str(), t.count)).collect();
+        let mut formats: Vec<_> = o
+            .formats
+            .iter()
+            .map(|t| (t.value.as_str(), t.count))
+            .collect();
         formats.sort();
         assert_eq!(formats, vec![("?", 1), ("FLAC", 2), ("MP3", 2)]);
-        assert!(o.sample_rates.iter().any(|t| t.value == "44100/16" && t.count == 1));
-        assert!(o.sample_rates.iter().any(|t| t.value == "44100/" && t.count == 2));
+        assert!(o
+            .sample_rates
+            .iter()
+            .any(|t| t.value == "44100/16" && t.count == 1));
+        assert!(o
+            .sample_rates
+            .iter()
+            .any(|t| t.value == "44100/" && t.count == 2));
     }
 
     #[test]

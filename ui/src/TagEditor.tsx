@@ -56,6 +56,8 @@ export default function TagEditor(props: {
    * arguing about the same files.
    */
   onFindArt?: () => void;
+  /** Back to the matches this editor was filled from, to try another. */
+  onBack?: () => void;
   /** Bumped by the app when artwork is written from somewhere else. */
   artNonce?: number;
 }) {
@@ -349,6 +351,11 @@ export default function TagEditor(props: {
         </div>
 
         <footer class="tagfoot">
+          <Show when={props.onBack}>
+            <button class="btn tagback" onClick={() => props.onBack!()}>
+              ← Other matches
+            </button>
+          </Show>
           <button class="btn" onClick={props.onClose}>
             Cancel
           </button>

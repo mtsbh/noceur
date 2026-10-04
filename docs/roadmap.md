@@ -217,7 +217,8 @@ downloads rather than CD rips.
 
 - [ ] **20. Playlists, sent to rekordbox.** Named playlists kept in the index, with tracks ticked
       into them from a key or the right-click menu, so nothing is copied or duplicated to gather
-      a set. Send to rekordbox merges the playlists and their tracks into the `rekordbox.xml`
+      a set. *The playlists themselves are done (`P`, right-click → Playlists, `Ctrl+P`); the send
+      below is next.* Send to rekordbox merges the playlists and their tracks into the `rekordbox.xml`
       that rekordbox's Imported Library and Mixed In Key already share (set in Settings), so the
       usual routine stays: Reload in rekordbox, sort by Date Added, Import To Collection, export
       to the stick. The file holds every cue point, so the write is add-only: existing tracks,

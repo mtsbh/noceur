@@ -213,7 +213,9 @@ pub const WRITING: &str = ".noceur-writing";
 
 const HIDE_WRITING: &str = " AND instr(f.name, '.noceur-writing') = 0";
 
-const SELECT: &str = "
+macro_rules! row_columns {
+    () => {
+        "
 SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        ct.artist, ct.title, ct.album, ct.bpm_tag, ct.key_tag, ct.key_norm,
        c.duration_ms, COALESCE(ct.has_artwork, 0),
@@ -222,8 +224,19 @@ SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
 FROM file f
 LEFT JOIN content     c  ON c.id  = f.content_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
-LEFT JOIN analysis    a  ON a.content_id  = f.content_id AND a.miss = 0
-WHERE f.dir_id = ?1";
+LEFT JOIN analysis    a  ON a.content_id  = f.content_id AND a.miss = 0"
+    };
+}
+
+/// The columns of a [`ListRow`] and the joins that supply them, for whatever
+/// `WHERE` the caller puts after them. Read back with [`read_row`].
+pub(crate) const ROW_COLUMNS: &str = row_columns!();
+
+const SELECT: &str = concat!(
+    row_columns!(),
+    "
+WHERE f.dir_id = ?1"
+);
 
 /// Reads a window of a sorted, filtered directory listing.
 ///
@@ -240,38 +253,41 @@ pub fn list(db: &Db, dir_id: i64, opts: ListOptions) -> Result<Vec<ListRow>, Ind
     );
 
     let mut stmt = db.conn().prepare(&sql)?;
-    let rows = stmt.query_map(rusqlite::params![dir_id, opts.limit, opts.offset], |r| {
-        Ok(ListRow {
-            file_id: r.get(0)?,
-            name: r.get(1)?,
-            ext: r.get(2)?,
-            size: r.get(3)?,
-            mtime: r.get(4)?,
-            kind: r.get(5)?,
-            state: r.get(6)?,
-            artist: r.get(7)?,
-            title: r.get(8)?,
-            album: r.get(9)?,
-            bpm: r.get(10)?,
-            key_tag: r.get(11)?,
-            key_norm: r.get(12)?,
-            duration_ms: r.get(13)?,
-            has_artwork: r.get::<_, i64>(14)? != 0,
-            album_artist: r.get(15)?,
-            genre: r.get(16)?,
-            year: r.get(17)?,
-            track_no: r.get(18)?,
-            comment: r.get(19)?,
-            isrc: r.get(20)?,
-            sample_rate: r.get(21)?,
-            bit_depth: r.get(22)?,
-            codec: r.get(23)?,
-            rating: r.get(24)?,
-            detected_bpm: r.get(25)?,
-            detected_key: r.get(26)?,
-        })
-    })?;
+    let rows = stmt.query_map(rusqlite::params![dir_id, opts.limit, opts.offset], read_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+/// One row selected with [`ROW_COLUMNS`].
+pub(crate) fn read_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ListRow> {
+    Ok(ListRow {
+        file_id: r.get(0)?,
+        name: r.get(1)?,
+        ext: r.get(2)?,
+        size: r.get(3)?,
+        mtime: r.get(4)?,
+        kind: r.get(5)?,
+        state: r.get(6)?,
+        artist: r.get(7)?,
+        title: r.get(8)?,
+        album: r.get(9)?,
+        bpm: r.get(10)?,
+        key_tag: r.get(11)?,
+        key_norm: r.get(12)?,
+        duration_ms: r.get(13)?,
+        has_artwork: r.get::<_, i64>(14)? != 0,
+        album_artist: r.get(15)?,
+        genre: r.get(16)?,
+        year: r.get(17)?,
+        track_no: r.get(18)?,
+        comment: r.get(19)?,
+        isrc: r.get(20)?,
+        sample_rate: r.get(21)?,
+        bit_depth: r.get(22)?,
+        codec: r.get(23)?,
+        rating: r.get(24)?,
+        detected_bpm: r.get(25)?,
+        detected_key: r.get(26)?,
+    })
 }
 
 /// Names of the files directly in a folder that contain `needle`.

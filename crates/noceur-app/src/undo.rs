@@ -90,7 +90,9 @@ pub async fn undo_rename() -> Result<Undone, String> {
 /// Renames without recording: undoing must not itself become the next undo.
 #[cfg(windows)]
 fn rename_back(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
-    crate::fileops::rename(from, to)
+    crate::fileops::rename(from, to)?;
+    crate::playlists::follow(from.to_path_buf(), to.to_path_buf());
+    Ok(())
 }
 
 #[cfg(not(windows))]

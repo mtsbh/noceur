@@ -4392,3 +4392,169 @@ body.resizing-v * {
   flex: 1;
   min-height: 0;
 }
+
+/* ── Playlists ─────────────────────────────────────────────────────────── */
+.renamer.playlists {
+  width: 920px;
+  height: min(680px, calc(100vh - 80px));
+}
+.plbody {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+.pllists {
+  overflow-y: auto;
+  padding: 8px;
+  border-right: 1px solid var(--hair);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.plitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border-radius: 5px;
+  color: var(--fg2);
+  cursor: pointer;
+}
+.plitem:hover {
+  background: var(--hover, rgba(var(--fg-rgb), 0.03));
+  color: var(--fg);
+}
+.plitem.on {
+  background: var(--acc-fill);
+  color: var(--fg);
+}
+.plitemname {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plcount {
+  color: var(--fg3);
+}
+.pldel {
+  display: none;
+  align-items: center;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pldel svg {
+  width: 12px;
+  height: 12px;
+}
+.plitem:hover .pldel,
+.pldel.armed {
+  display: inline-flex;
+}
+.plitem:hover .plcount:has(+ .pldel),
+.plitem:has(.pldel.armed) .plcount {
+  display: none;
+}
+.pldel:hover,
+.pldel.armed {
+  color: var(--qual-bad);
+}
+.plnew {
+  margin-top: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px dashed var(--hair2);
+  border-radius: 5px;
+  background: none;
+  color: var(--fg3);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plnew:hover {
+  color: var(--acc);
+  border-color: var(--acc-line);
+}
+.renameinput.plname {
+  height: 28px;
+  padding: 0 9px;
+}
+.pltracks {
+  overflow-y: auto;
+  padding: 6px 0;
+  user-select: none;
+}
+.plempty {
+  padding: 18px 16px;
+}
+.plrow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 54px 40px 52px;
+  gap: 10px;
+  align-items: center;
+  height: var(--row-h);
+  padding: 0 16px 0 6px;
+  color: var(--fg2);
+  box-shadow: inset 2px 0 0 transparent;
+  cursor: default;
+}
+.plrow:hover {
+  background: rgba(var(--fg-rgb), 0.02);
+}
+.plrow.sel {
+  background: rgba(var(--fg-rgb), 0.045);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+.plrow.playing .pltitle {
+  color: var(--acc);
+}
+.plrow.missing {
+  color: var(--fg3);
+}
+.plrow.dropabove,
+.pltail.dropabove {
+  box-shadow: inset 0 2px 0 var(--acc);
+}
+.pltail {
+  height: 24px;
+}
+.plno {
+  text-align: right;
+  color: var(--fg3);
+}
+.pltitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.plrow.missing .pltitle {
+  color: var(--fg3);
+}
+.plartist {
+  color: var(--fg2);
+}
+.plgone {
+  color: var(--qual-bad);
+}
+.plbpm,
+.plkey,
+.pltime {
+  text-align: right;
+  color: var(--fg2);
+}
+
+/* Back to the matches, on the left away from Cancel / Save. */
+.btn.tagback {
+  margin-right: auto;
+}
