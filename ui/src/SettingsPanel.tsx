@@ -89,6 +89,22 @@ const KIND_LABELS: Record<ActionKind, string> = {
  */
 const POPOVER = 150;
 
+/** Where a quick-tag row can write, beyond a field typed by hand. */
+const QUICK_TARGETS = [
+  { id: "comment", label: "Comment", field: HASHTAG_FIELD, tip: "#tags after the comment" },
+  { id: "composer", label: "Composer", field: "COMPOSER", tip: "Own column in rekordbox" },
+  { id: "lyricist", label: "Lyricist", field: "LYRICIST", tip: "Own column in rekordbox" },
+  { id: "custom", label: "Custom", field: "", tip: "A field only noceur shows" },
+] as const;
+
+function targetOf(field: string): (typeof QUICK_TARGETS)[number]["id"] {
+  if (field === HASHTAG_FIELD) return "comment";
+  const upper = field.trim().toUpperCase();
+  if (upper === "COMPOSER") return "composer";
+  if (upper === "LYRICIST") return "lyricist";
+  return "custom";
+}
+
 /**
  * One settings section, with its explanation behind a question mark.
  *
@@ -535,9 +551,10 @@ export default function Settings(props: {
             title="Quick tag"
             info={
               <p>
-                Keys tag the playing track. Tick "in comment" to see a row in rekordbox: its
-                values go to the end of the comment as #tags, which every DJ app reads from
-                every format, and smart playlists can filter on.
+                Keys tag the playing track. Comment, Composer and Lyricist are read by
+                rekordbox from AIFF and MP3, so smart playlists can filter on them. Comment
+                adds #tags after what is there and takes several per track; Composer suits
+                one value, like when a track is played.
               </p>
             }
           >
@@ -566,7 +583,44 @@ export default function Settings(props: {
                         editGroup(row(), { label: e.currentTarget.value })
                       }
                     />
-                    <Show when={g.field !== HASHTAG_FIELD}>
+                    <label class="setcheck">
+                      <input
+                        type="checkbox"
+                        checked={g.multi}
+                        onChange={(e) =>
+                          editGroup(row(), { multi: e.currentTarget.checked })
+                        }
+                      />
+                      <span>multiple</span>
+                    </label>
+                  </div>
+                  {/* Where the row's values are written. The three named ones
+                      are fields rekordbox reads from an AIFF; Custom is any
+                      other name, for notes only noceur will show. */}
+                  <div class="setrow">
+                    <div class="setseg wrap" role="group" aria-label="Written to">
+                      <For each={QUICK_TARGETS}>
+                        {(t) => (
+                          <button
+                            class={`segbtn ${targetOf(g.field) === t.id ? "on" : ""}`}
+                            data-tip={t.tip}
+                            onClick={() =>
+                              editGroup(row(), {
+                                field:
+                                  t.id === "custom"
+                                    ? targetOf(g.field) === "custom"
+                                      ? g.field
+                                      : g.label.trim().toUpperCase().replace(/\s+/g, "_")
+                                    : t.field,
+                              })
+                            }
+                          >
+                            {t.label}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                    <Show when={targetOf(g.field) === "custom"}>
                       <input
                         type="text"
                         class="setquickfield mono"
@@ -578,31 +632,6 @@ export default function Settings(props: {
                         }
                       />
                     </Show>
-                    <label class="setcheck">
-                      <input
-                        type="checkbox"
-                        checked={g.field === HASHTAG_FIELD}
-                        onChange={(e) =>
-                          editGroup(row(), {
-                            field: e.currentTarget.checked
-                              ? HASHTAG_FIELD
-                              : g.label.trim().toUpperCase().replace(/\s+/g, "_"),
-                          })
-                        }
-                      />
-                      <span>in comment</span>
-                    </label>
-                    <label class="setcheck">
-                      <input
-                        type="checkbox"
-                        checked={g.multi}
-                        onChange={(e) =>
-                          editGroup(row(), { multi: e.currentTarget.checked })
-                        }
-                      />
-                      <span>multiple</span>
-                    </label>
-
                   </div>
                   {/* The whole list at once, because typing five values is far
                       quicker than adding them one at a time. Colours survive an

@@ -862,7 +862,8 @@ mod tests {
         }
         let tagged = noceur_tags::Edit {
             rating: noceur_tags::Change::Set("4".into()),
-            comment: noceur_tags::Change::Set("7A - 5 #peak".into()),
+            comment: noceur_tags::Change::Set("7A - 5 #dark".into()),
+            custom: vec![("COMPOSER".into(), noceur_tags::Change::Set("peak".into()))],
             ..Default::default()
         };
         noceur_tags::edit::write(&src, &tagged).unwrap();
@@ -871,7 +872,13 @@ mod tests {
         let carried = |path: &Path, what: &str| {
             let m = noceur_tags::read(path).unwrap();
             assert_eq!(m.rating, Some(4), "{what} stars");
-            assert_eq!(m.comment.as_deref(), Some("7A - 5 #peak"), "{what} comment");
+            assert_eq!(m.comment.as_deref(), Some("7A - 5 #dark"), "{what} comment");
+            let situation = noceur_tags::read_fields(path, &["COMPOSER".into()]).unwrap();
+            assert_eq!(
+                situation.values,
+                vec![("COMPOSER".to_string(), "peak".to_string())],
+                "{what} composer"
+            );
         };
 
         for format in [Format::Wav, Format::Aiff, Format::Alac] {

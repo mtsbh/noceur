@@ -940,6 +940,46 @@ mod tests {
         }
     }
 
+    /// A quick-tag row pointed at Composer or Lyricist fills the real field -
+    /// `TCOM` and `TEXT` in ID3, `COMPOSER` and `LYRICIST` in Vorbis - which is
+    /// what rekordbox reads from an AIFF, not a user-defined one it ignores.
+    #[test]
+    fn composer_and_lyricist_go_to_their_own_fields() {
+        for kind in [TagType::Id3v2, TagType::VorbisComments] {
+            let mut t = Tag::new(kind);
+            round_trip(
+                &mut t,
+                &Edit {
+                    custom: vec![
+                        ("COMPOSER".into(), Change::Set("peak".into())),
+                        ("LYRICIST".into(), Change::Set("vocal".into())),
+                    ],
+                    ..Default::default()
+                },
+            );
+            assert_eq!(t.get_string(&ItemKey::Composer), Some("peak"), "{kind:?}");
+            assert_eq!(t.get_string(&ItemKey::Lyricist), Some("vocal"), "{kind:?}");
+        }
+    }
+
+    /// And on a real file, read back the way quick tag reads it.
+    #[test]
+    fn composer_survives_a_real_wav() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.wav");
+        write_wav(&path);
+        write(
+            &path,
+            &Edit {
+                custom: vec![("COMPOSER".into(), Change::Set("peak".into()))],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let f = crate::meta::read_fields(&path, &["COMPOSER".into()]).unwrap();
+        assert_eq!(f.values, vec![("COMPOSER".to_string(), "peak".to_string())]);
+    }
+
     /// The label goes where DJ software looks for it — `TPUB` in ID3, `LABEL`
     /// in Vorbis comments — and is read back as the label, not as a comment.
     #[test]
