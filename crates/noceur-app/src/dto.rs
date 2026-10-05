@@ -231,6 +231,9 @@ pub struct TagEdit {
     /// quick-tag group is pointed at. An empty value clears the field, matching
     /// what an emptied box means everywhere else.
     pub custom: std::collections::HashMap<String, String>,
+    /// `#tags` to add to and remove from the end of the comment, leaving the
+    /// rest of it - Mixed In Key's `7A - 5`, anything typed - as it was.
+    pub hashtags: Option<Hashtags>,
     /// Stars, `"0"` to `"5"`. Zero removes the rating.
     pub rating: Option<String>,
     pub artist: Option<String>,
@@ -245,6 +248,17 @@ pub struct TagEdit {
     pub track_no: Option<String>,
     pub bpm: Option<String>,
     pub key: Option<String>,
+}
+
+/// Quick-tag values kept as `#tags` in the comment, so every DJ app can filter
+/// on them - rekordbox reads no other free text field from a file.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Hashtags {
+    /// Values to be there, without the `#`.
+    pub set: Vec<String>,
+    /// Values to be gone.
+    pub clear: Vec<String>,
 }
 
 /// What happened to each file a write touched.

@@ -153,11 +153,13 @@ pub async fn write_tags(
             custom: edit
                 .custom
                 .into_iter()
+                .filter(|(name, _)| name != HASHTAG_FIELD)
                 .map(|(name, value)| (name, noceur_tags::Change::from_input(Some(value))))
                 .collect(),
             date_to_year: false,
         };
-        if change.is_empty() {
+        let hashtags = edit.hashtags.filter(|h| !h.set.is_empty() || !h.clear.is_empty());
+        if change.is_empty() && hashtags.is_none() {
             return Ok(WriteReport::default());
         }
 
@@ -182,6 +184,21 @@ pub async fn write_tags(
         let mut written = Vec::new();
 
         for (file_id, path) in targets {
+            // Tags go into each file's own comment, so the change is per file.
+            let mut change = change.clone();
+            if let Some(h) = &hashtags {
+                let comment = noceur_tags::read(&path)
+                    .ok()
+                    .and_then(|m| m.comment)
+                    .unwrap_or_default();
+                let next = retag(&comment, &h.set, &h.clear);
+                if next != comment {
+                    change.comment = noceur_tags::Change::from_input(Some(next));
+                }
+            }
+            if change.is_empty() {
+                continue;
+            }
             match crate::timestamp::preserving(&path, keep_dates, || {
                 if in_player == Some(file_id) {
                     crate::background::write_beside(&background, &path, &change)
@@ -316,6 +333,40 @@ fn format_bpm(v: f32) -> String {
 mod tests {
     use super::*;
 
+    fn v(s: &[&str]) -> Vec<String> {
+        s.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Mixed In Key's key and energy stay in front; tags go at the end.
+    #[test]
+    fn tags_go_after_what_the_comment_already_says() {
+        assert_eq!(retag("7A - 5", &v(&["peak", "dark"]), &[]), "7A - 5 #peak #dark");
+        assert_eq!(retag("", &v(&["warmup"]), &[]), "#warmup");
+    }
+
+    /// Choosing another situation takes the old one out and leaves the rest.
+    #[test]
+    fn a_cleared_tag_leaves_and_nothing_else_moves() {
+        assert_eq!(
+            retag("7A - 5 #warmup #dark", &v(&["peak"]), &v(&["warmup", "build"])),
+            "7A - 5 #dark #peak"
+        );
+        assert_eq!(retag("#peak", &[], &v(&["peak"])), "");
+    }
+
+    #[test]
+    fn a_tag_already_there_is_not_added_twice_whatever_its_case() {
+        assert_eq!(retag("7A - 5 #Peak", &v(&["peak"]), &[]), "7A - 5 #Peak");
+        assert_eq!(retag("#PEAK", &[], &v(&["peak"])), "");
+    }
+
+    /// One word, so a DJ app's "contains #peak-time" finds it.
+    #[test]
+    fn spaces_in_a_value_become_dashes() {
+        assert_eq!(retag("", &v(&["peak time"]), &[]), "#peak-time");
+        assert_eq!(hashtags_of("7A - 5 #peak-time #dark"), v(&["peak-time", "dark"]));
+    }
+
     fn meta(artist: &str, bpm: Option<f32>) -> noceur_tags::TrackMeta {
         noceur_tags::TrackMeta {
             artist: Some(artist.to_string()),
@@ -421,6 +472,47 @@ mod tests {
 /// from colliding with any field somebody names.
 pub const RATING_FIELD: &str = "noceur:rating";
 
+/// The quick-tag name for values kept as `#tags` in the comment. Not a tag
+/// name; the colon keeps it from colliding with one, as with [`RATING_FIELD`].
+pub const HASHTAG_FIELD: &str = "noceur:hashtags";
+
+/// How a value is written as a tag: `#` and the value, spaces as `-`, so
+/// "peak time" is one word to a DJ app's "contains" filter.
+fn hashtag(value: &str) -> String {
+    format!("#{}", value.trim().split_whitespace().collect::<Vec<_>>().join("-"))
+}
+
+/// The `#tags` in a comment, without their `#`, in order.
+pub fn hashtags_of(comment: &str) -> Vec<String> {
+    comment
+        .split_whitespace()
+        .filter_map(|w| w.strip_prefix('#'))
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The comment with `clear` removed and `set` added at its end.
+///
+/// Everything else stays where it was: Mixed In Key's `7A - 5` in front, any
+/// words typed by hand. Tags already there keep their place; matching ignores
+/// case, so `#Peak` is not added again beside `#peak`.
+pub fn retag(comment: &str, set: &[String], clear: &[String]) -> String {
+    let gone: Vec<String> = clear.iter().map(|v| hashtag(v).to_lowercase()).collect();
+    let mut words: Vec<String> = comment
+        .split_whitespace()
+        .filter(|w| !gone.contains(&w.to_lowercase()))
+        .map(str::to_string)
+        .collect();
+    for v in set {
+        let tag = hashtag(v);
+        if tag.len() > 1 && !words.iter().any(|w| w.eq_ignore_ascii_case(&tag)) {
+            words.push(tag);
+        }
+    }
+    words.join(" ")
+}
+
 /// Reads the named fields a quick-tag panel shows for one track.
 ///
 /// Reads the file rather than the index for the same reason the editor does:
@@ -452,6 +544,13 @@ pub async fn quick_fields(
         // panel reads one reply rather than two.
         if let Some(stars) = fields.rating {
             out.insert(RATING_FIELD.to_string(), stars.to_string());
+        }
+        if names.iter().any(|n| n == HASHTAG_FIELD) {
+            let comment = noceur_tags::read(&found.path)
+                .ok()
+                .and_then(|m| m.comment)
+                .unwrap_or_default();
+            out.insert(HASHTAG_FIELD.to_string(), hashtags_of(&comment).join(", "));
         }
         Ok(out)
     })

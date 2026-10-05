@@ -1,5 +1,12 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import { RATING_FIELD, announceRating, onRating, quickFields, writeTags } from "./api";
+import {
+  HASHTAG_FIELD,
+  RATING_FIELD,
+  announceRating,
+  onRating,
+  quickFields,
+  writeTags,
+} from "./api";
 import { QUICK_KEYS, valueColour, type QuickGroup } from "./settings";
 
 /**
@@ -12,6 +19,15 @@ import { QUICK_KEYS, valueColour, type QuickGroup } from "./settings";
  * immediate even though the disk is not.
  */
 const FLUSH_MS = 900;
+
+/**
+ * Whether two values are the same tag. Case aside, and with spaces as dashes,
+ * since "peak time" comes back out of a comment as `#peak-time`.
+ */
+function same(a: string, b: string): boolean {
+  const norm = (s: string) => s.trim().toLowerCase().split(/\s+/).join("-");
+  return norm(a) === norm(b);
+}
 
 /**
  * Tagging by keyboard, while listening.
@@ -116,8 +132,7 @@ export default function QuickTag(props: {
       .map((v) => v.trim())
       .filter(Boolean);
 
-  const isOn = (g: QuickGroup, value: string) =>
-    valuesOf(g).some((v) => v.toLowerCase() === value.toLowerCase());
+  const isOn = (g: QuickGroup, value: string) => valuesOf(g).some((v) => same(v, value));
 
   /**
    * Turns one value on or off.
@@ -129,15 +144,19 @@ export default function QuickTag(props: {
   function toggle(g: QuickGroup, value: string) {
     if (props.fileId <= 0) return;
     const on = isOn(g, value);
+    // Comment tags are shared by every group kept there, so a group only
+    // swaps its own values and leaves the others' tags where they are.
+    const mine = (v: string) =>
+      g.field !== HASHTAG_FIELD || g.values.some((e) => same(e.value, v));
+    const own = valuesOf(g).filter(mine);
+    const others = valuesOf(g).filter((v) => !mine(v));
     let next: string[];
     if (g.multi) {
-      next = on
-        ? valuesOf(g).filter((v) => v.toLowerCase() !== value.toLowerCase())
-        : [...valuesOf(g), value];
+      next = on ? own.filter((v) => !same(v, value)) : [...own, value];
     } else {
       next = on ? [] : [value];
     }
-    setCurrent({ ...current(), [g.field]: next.join(", ") });
+    setCurrent({ ...current(), [g.field]: [...others, ...next].join(", ") });
     touched.add(g.field);
     schedule();
   }
@@ -171,15 +190,30 @@ export default function QuickTag(props: {
 
     const custom: Record<string, string> = {};
     for (const g of props.groups) {
-      if (g.field && touched.has(g.field)) custom[g.field] = current()[g.field] ?? "";
+      if (g.field && g.field !== HASHTAG_FIELD && touched.has(g.field)) {
+        custom[g.field] = current()[g.field] ?? "";
+      }
+    }
+    // Comment tags go as what should be there and what should not, so the
+    // rest of the comment is rebuilt from the file rather than from here.
+    let hashtags: { set: string[]; clear: string[] } | undefined;
+    if (touched.has(HASHTAG_FIELD)) {
+      const on = (current()[HASHTAG_FIELD] ?? "")
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      const offered = props.groups
+        .filter((g) => g.field === HASHTAG_FIELD)
+        .flatMap((g) => g.values.map((e) => e.value));
+      hashtags = { set: on, clear: offered.filter((v) => !on.some((o) => same(o, v))) };
     }
     const rating =
       props.rating && touched.has(RATING_FIELD) ? (current()[RATING_FIELD] ?? "0") : undefined;
     touched = new Set();
     setPending(false);
-    if (Object.keys(custom).length === 0 && rating === undefined) return;
+    if (Object.keys(custom).length === 0 && rating === undefined && !hashtags) return;
 
-    writeTags([owner], {}, custom, rating)
+    writeTags([owner], {}, custom, rating, hashtags)
       .then(() => props.onWritten())
       .catch(() => {});
   }

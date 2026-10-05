@@ -566,12 +566,20 @@ export function writeTags(
   edit: Partial<Record<TagField, string>>,
   custom: Record<string, string> = {},
   rating?: string,
+  hashtags?: { set: string[]; clear: string[] },
 ): Promise<WriteReport> {
   return invoke<WriteReport>("write_tags", {
     fileIds,
-    edit: { ...edit, custom, rating },
+    edit: { ...edit, custom, rating, hashtags },
   });
 }
+
+/**
+ * The quick-tag field for values kept as `#tags` at the end of the comment -
+ * the one free text field every DJ app reads from every format. Matches
+ * `HASHTAG_FIELD` on the other side.
+ */
+export const HASHTAG_FIELD = "noceur:hashtags";
 
 /**
  * The key a rating travels under in the quick-tag map.

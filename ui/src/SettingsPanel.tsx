@@ -23,6 +23,7 @@ import {
   type RekordboxTarget,
   type Action,
   type ActionKind,
+  HASHTAG_FIELD,
 } from "./api";
 import type { Column } from "./columns";
 import { CUSTOM, UI_FONTS, cleanFamily, head, installed } from "./fonts";
@@ -532,7 +533,13 @@ export default function Settings(props: {
           <Section
             tab="quick"
             title="Quick tag"
-            info={<p>Keys tag the playing track. Use COMMENT or GROUPING to see it in Rekordbox.</p>}
+            info={
+              <p>
+                Keys tag the playing track. Tick "in comment" to see a row in rekordbox: its
+                values go to the end of the comment as #tags, which every DJ app reads from
+                every format, and smart playlists can filter on.
+              </p>
+            }
           >
             <div class="setrow">
               <span class="setlabel">Stars</span>
@@ -559,16 +566,32 @@ export default function Settings(props: {
                         editGroup(row(), { label: e.currentTarget.value })
                       }
                     />
-                    <input
-                      type="text"
-                      class="setquickfield mono"
-                      value={g.field}
-                      placeholder="FIELD"
-                      spellcheck={false}
-                      onChange={(e) =>
-                        editGroup(row(), { field: e.currentTarget.value })
-                      }
-                    />
+                    <Show when={g.field !== HASHTAG_FIELD}>
+                      <input
+                        type="text"
+                        class="setquickfield mono"
+                        value={g.field}
+                        placeholder="FIELD"
+                        spellcheck={false}
+                        onChange={(e) =>
+                          editGroup(row(), { field: e.currentTarget.value })
+                        }
+                      />
+                    </Show>
+                    <label class="setcheck">
+                      <input
+                        type="checkbox"
+                        checked={g.field === HASHTAG_FIELD}
+                        onChange={(e) =>
+                          editGroup(row(), {
+                            field: e.currentTarget.checked
+                              ? HASHTAG_FIELD
+                              : g.label.trim().toUpperCase().replace(/\s+/g, "_"),
+                          })
+                        }
+                      />
+                      <span>in comment</span>
+                    </label>
                     <label class="setcheck">
                       <input
                         type="checkbox"
