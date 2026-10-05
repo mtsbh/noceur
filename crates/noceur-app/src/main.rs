@@ -131,6 +131,7 @@ fn main() {
             commands::probe,
             commands::search,
             commands::search_tag,
+            commands::index_folders,
             commands::play,
             commands::transport_cmd,
             commands::transport_state,

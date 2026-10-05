@@ -132,6 +132,9 @@ pub fn search(db: &Db, query: &str, scopes: &[String], limit: i64) -> Result<Vec
          LEFT JOIN content     c  ON c.id  = f.content_id
          LEFT JOIN content_tag ct ON ct.content_id = f.content_id
          WHERE file_fts MATCH ?1{scope_sql}
+           -- Tracks and folders only: every cover.jpg in an artist's folder
+           -- matches that artist through its path, and buries the tracks.
+           AND f.kind <> 2
          ORDER BY (f.kind = 0), bm25(file_fts), f.name COLLATE NOCASE
          LIMIT ?2"
     );

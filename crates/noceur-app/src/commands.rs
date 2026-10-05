@@ -209,6 +209,46 @@ pub async fn search(
     .map_err(|e| format!("search task failed: {e}"))?
 }
 
+/// Bumped by every [`index_folders`]; a walk that sees a newer number stops, so
+/// changing the pins mid-walk starts over rather than running two at once.
+static WALK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Lists every folder under `roots` into the index, so search finds files in
+/// folders that were never opened.
+///
+/// Names only, no tags: listing is what makes a file findable, and reading tags
+/// out of a whole library would take hours. Runs in the background and takes the
+/// index lock one folder at a time, so browsing never waits on it for long.
+#[tauri::command]
+pub fn index_folders(state: State<'_, AppState>, roots: Vec<String>) {
+    use std::sync::atomic::Ordering;
+    let db = state.db.clone();
+    let mine = WALK.fetch_add(1, Ordering::SeqCst) + 1;
+
+    std::thread::spawn(move || {
+        let mut stack: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).collect();
+        // A junction pointing back up the tree would otherwise walk forever.
+        let mut seen = std::collections::HashSet::new();
+        while let Some(path) = stack.pop() {
+            if WALK.load(Ordering::SeqCst) != mine {
+                return;
+            }
+            let real = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            if !seen.insert(real) {
+                continue;
+            }
+            let Ok(db) = db.lock() else { return };
+            let Ok(volume_id) = volume::for_path(&db, &path) else { continue };
+            // A folder that cannot be read - gone, or no permission - is skipped
+            // rather than ending the walk.
+            let Ok(dir_id) = noceur_index::scan_dir(&db, volume_id, &path) else { continue };
+            if let Ok(names) = noceur_index::subdirs(&db, dir_id) {
+                stack.extend(names.into_iter().map(|n| path.join(n)));
+            }
+        }
+    });
+}
+
 /// Every track tagged with exactly this artist, genre or label - the sidebar's
 /// links. `field` is `artist`, `genre` or `label`.
 #[tauri::command]

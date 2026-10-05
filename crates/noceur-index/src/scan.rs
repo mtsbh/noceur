@@ -123,6 +123,18 @@ pub fn scan_dir(db: &Db, volume_id: i64, path: &Path) -> Result<i64, IndexError>
     Ok(dir_id)
 }
 
+/// Names of the folders a scanned directory holds, read from the index rather
+/// than the disk — the scan that wrote them has just listed the folder.
+pub fn subdirs(db: &Db, dir_id: i64) -> Result<Vec<String>, IndexError> {
+    let mut stmt = db
+        .conn()
+        .prepare("SELECT name FROM file WHERE dir_id = ?1 AND kind = 0")?;
+    let names = stmt
+        .query_map([dir_id], |r| r.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(names)
+}
+
 /// Stage 2: probe tags for audio files in `dir_id` that have never been probed,
 /// or whose mtime is newer than the last probe.
 ///

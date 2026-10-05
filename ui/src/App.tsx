@@ -54,6 +54,7 @@ import {
   type SortColumn,
   type RowDisplay,
   type TagLink,
+  indexFolders,
 } from "./api";
 import Tree, { storedPins } from "./Tree";
 import Search from "./Search";
@@ -2036,6 +2037,21 @@ export default function App() {
     return pins.some((p) => within(here, p)) ? pins : [...pins, here];
   };
 
+  /**
+   * Walks the pinned folders in the background so search finds files in folders
+   * never opened. Once per set of folders: at launch, and again only when search
+   * opens over somewhere the last walk did not cover.
+   */
+  let walked = "";
+  createEffect(() => {
+    if (!finding() && walked !== "") return;
+    const roots = untrack(searchScopes);
+    const key = roots.join("|");
+    if (key === walked) return;
+    walked = key;
+    indexFolders(roots).catch(() => {});
+  });
+
   const metrics = () => ART[artSize()];
 
   return (
@@ -2070,12 +2086,12 @@ export default function App() {
             otherwise never show it. */}
         <button
           class={`searchbox ${finding() ? "on" : ""}`}
+          data-tip="Ctrl+F"
           aria-label="Search"
           onClick={() => setFinding(true)}
         >
           <SearchIcon />
-          <span class="grow">Search</span>
-          <kbd>Ctrl F</kbd>
+          Search
         </button>
         <button
           class={`toolbtn ${settingsOpen() ? "on" : ""}`}

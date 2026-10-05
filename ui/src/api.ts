@@ -233,6 +233,11 @@ export function search(query: string, scopes: string[]): Promise<SearchHit[]> {
   return invoke<SearchHit[]>("search", { req: { query, scopes } });
 }
 
+/** Lists every folder under `roots` in the background, so search reaches them. */
+export function indexFolders(roots: string[]): Promise<void> {
+  return invoke<void>("index_folders", { roots });
+}
+
 /** A tag the library can be listed by. */
 export type TagLink = { field: "artist" | "genre" | "label"; value: string };
 
