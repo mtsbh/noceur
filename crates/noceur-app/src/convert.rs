@@ -372,6 +372,13 @@ fn copy_tags(src: &Path, dst: &Path) -> Result<(), String> {
 
     let mut tag = Tag::new(kind);
     for item in source.items() {
+        // A rating is a number in Vorbis and MP4 but a binary frame in ID3, so
+        // copied as it is, a rated FLAC made an ID3 tag lofty refused to write -
+        // and every other tag was lost with it. Written in the new format's own
+        // form below instead.
+        if *item.key() == ItemKey::Popularimeter {
+            continue;
+        }
         let key = match item.key() {
             ItemKey::Unknown(name) => noceur_tags::edit::custom_key(kind, name),
             k => k.clone(),
@@ -389,7 +396,20 @@ fn copy_tags(src: &Path, dst: &Path) -> Result<(), String> {
 
     to.insert_tag(tag);
     to.save_to_path(dst, lofty::config::WriteOptions::default())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Stars are not in the generic tag when they sit in an ID3 `POPM` frame,
+    // so the copy above loses them from every WAV, AIFF and MP3 - and a WAV
+    // converted to AIFF for rekordbox would arrive unrated. Written again in
+    // whatever form the new format keeps them.
+    if let Some(stars) = noceur_tags::read(src).ok().and_then(|m| m.rating) {
+        let edit = noceur_tags::Edit {
+            rating: noceur_tags::Change::Set(stars.to_string()),
+            ..Default::default()
+        };
+        noceur_tags::edit::write(dst, &edit).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Where a converted file goes: the chosen folder, or beside the source.
@@ -840,6 +860,19 @@ mod tests {
             f.save_to_path(&src, lofty::config::WriteOptions::default())
                 .unwrap();
         }
+        let tagged = noceur_tags::Edit {
+            rating: noceur_tags::Change::Set("4".into()),
+            comment: noceur_tags::Change::Set("7A - 5 #peak".into()),
+            ..Default::default()
+        };
+        noceur_tags::edit::write(&src, &tagged).unwrap();
+
+        // What reaches rekordbox: stars and comment tags, whatever the format.
+        let carried = |path: &Path, what: &str| {
+            let m = noceur_tags::read(path).unwrap();
+            assert_eq!(m.rating, Some(4), "{what} stars");
+            assert_eq!(m.comment.as_deref(), Some("7A - 5 #peak"), "{what} comment");
+        };
 
         for format in [Format::Wav, Format::Aiff, Format::Alac] {
             let out = output_for(&src, format, "");
@@ -852,6 +885,7 @@ mod tests {
             };
             let done = convert_one(&ff, &src, 1, &opts);
             assert!(done.ok, "{format:?}: {}", done.message);
+            assert!(!done.message.contains("not copied"), "{format:?}: {}", done.message);
             assert_eq!(done.verified, Some(true), "{format:?}");
             assert_eq!(
                 probe(&ff, &out).unwrap().depth,
@@ -861,7 +895,9 @@ mod tests {
 
             use lofty::prelude::*;
             let f = lofty::read_from_path(&out).unwrap();
-            let t = f.primary_tag().expect("a tag");
+            let t = f
+                .primary_tag()
+                .unwrap_or_else(|| panic!("{format:?}: no {:?} tag", f.primary_tag_type()));
             assert_eq!(
                 t.artist().as_deref(),
                 Some("Artist A, Artist B"),
@@ -870,6 +906,23 @@ mod tests {
             assert_eq!(t.title().as_deref(), Some("Title"), "{format:?}");
             let energy = noceur_tags::edit::custom_key(t.tag_type(), "ENERGY");
             assert_eq!(t.get_string(&energy), Some("4"), "{format:?} ENERGY");
+            carried(&out, &format!("{format:?}"));
         }
+
+        // WAV to AIFF, the way a library goes onto a rekordbox stick: the
+        // stars sit in an ID3 POPM frame on both sides.
+        let wav = output_for(&src, Format::Wav, "");
+        let aiff_dir = dir.path().join("stick");
+        std::fs::create_dir(&aiff_dir).unwrap();
+        let opts = Options {
+            format: Format::Aiff,
+            depth: Want::Source,
+            folder: aiff_dir.to_string_lossy().into_owned(),
+            replace: true,
+            verify: false,
+        };
+        let done = convert_one(&ff, &wav, 2, &opts);
+        assert!(done.ok, "wav to aiff: {}", done.message);
+        carried(&output_for(&wav, Format::Aiff, &opts.folder), "WAV to AIFF");
     }
 }
