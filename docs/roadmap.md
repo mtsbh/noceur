@@ -236,13 +236,20 @@ downloads rather than CD rips.
       back, then renamed into place; and the merge is redone if the file changed meanwhile.
       Playlists live in noceur's index, so a rekordbox export that overwrites the file loses
       nothing: the next send puts them back.
-- [ ] **21. Cue points.** Up to eight cues per track on the beat grid, snapped to the 8- and
-      16-bar phrases where the music changes (intro, drops, breakdowns, outro), named like Mixed
-      In Key's and written to the XML through step 20 as both hot cues and memory cues, with the
-      beat grid alongside. A track that already has cues is left alone. Tuned against the 36
-      tracks Mixed In Key has cued and the library's existing cues; before it ships, checked on a
-      test track whether rekordbox takes new cues for a track already in its collection. With
-      steps 20–21, Mixed In Key is no longer needed. (An energy rating was dropped: this library
-      sits almost entirely at 4–6 on Mixed In Key's scale, so the column would say little.)
-
+- [x] **21. Cue points.** Send to rekordbox gives each track it adds a beat grid and up to
+      eight cues, written as hot cues and memory cues the way Mixed In Key writes them
+      (`noceur-audio::cues`). The grid is the tempo with its phase locked over the whole track
+      on the kick; the downbeat is where the music starts, or the beat before, whichever the
+      clap on two and four allows. Cues go on the bar lines where the sound changes most
+      (spectrum in eight bands, and how busy the kick, clap and hats are), phrase lines first,
+      at least eight bars apart, and are named Intro, Drop, Break (the kick or the whole
+      sound thins out) or Outro, coloured green, red, blue, orange. Found once per track and
+      kept in the index. A track already in the file keeps its cues. Tuned against the cues
+      Mixed In Key put on 2,800 of the library's tracks (`examples/cues.rs`); on 300 it was
+      not tuned on, the tempo matched on all, the grid within 20 ms on 84%, the downbeat on
+      68%, and a quarter of the cues on the same beat as Mixed In Key's — the two pick
+      different changes as often as the same ones. Still to check by hand: whether rekordbox
+      takes new cues for a track already in its collection. (An energy rating was dropped:
+      this library sits almost entirely at 4–6 on Mixed In Key's scale, so the column would
+      say little.)
 When a step changes what the app can do, the README's feature list is updated with it.

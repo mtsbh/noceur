@@ -1152,7 +1152,14 @@ export function setFfmpegPath(path: string): Promise<FfmpegInfo> {
 /** Where Send to rekordbox writes. `set` is the Settings path, empty to use `found`. */
 export type RekordboxTarget = { path: string | null; set: string; found: string | null };
 
-export type RekordboxSent = { playlists: number; added: number; missing: number; path: string };
+export type RekordboxSent = {
+  playlists: number;
+  added: number;
+  missing: number;
+  /** New tracks that went in with cue points. */
+  cued: number;
+  path: string;
+};
 
 export function rekordboxTarget(): Promise<RekordboxTarget> {
   return invoke<RekordboxTarget>("rekordbox_target");
@@ -1162,7 +1169,7 @@ export function setRekordboxXml(path: string): Promise<RekordboxTarget> {
   return invoke<RekordboxTarget>("set_rekordbox_xml", { path });
 }
 
-/** Writes every playlist into rekordbox.xml's `noceur` folder. */
+/** Writes every playlist into rekordbox.xml's `noceur` folder, new tracks with cue points. */
 export function sendToRekordbox(): Promise<RekordboxSent> {
   return invoke<RekordboxSent>("send_to_rekordbox");
 }

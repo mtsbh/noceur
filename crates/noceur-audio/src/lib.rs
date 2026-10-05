@@ -5,6 +5,7 @@
 //! browser sub-project because a seekable waveform needs a player underneath it.
 
 pub mod biquad;
+pub mod cues;
 pub mod damage;
 pub mod fade;
 pub mod fft;

@@ -12,6 +12,7 @@
 use crate::config::Config;
 use crate::format;
 use crate::state::AppState;
+use noceur_audio::cues;
 use noceur_index::playlist;
 use noceur_rekordbox::{self as rb, NewTrack};
 use noceur_tags::{KeyNotation, MusicalKey};
@@ -31,6 +32,8 @@ pub struct Sent {
     added: usize,
     /// Tracks left out: not on disk, or not readable.
     missing: usize,
+    /// Added tracks that went in with cue points.
+    cued: usize,
     path: String,
 }
 
@@ -112,14 +115,16 @@ pub async fn send_to_rekordbox(state: State<'_, AppState>) -> Result<Sent, Strin
     let db = state.db.clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Read under the lock, then let it go: the file work can take a while.
-        let (lists, stars) = {
+        let (lists, stars, contents) = {
             let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
             gather(&db).map_err(|e| e.to_string())?
         };
+        let cues = cues_for_new(&path, &lists, &contents, &db);
         send(
             &path,
             &lists,
             &stars,
+            &cues,
             &format::today(),
             &format::now_stamp(),
         )
@@ -128,17 +133,27 @@ pub async fn send_to_rekordbox(state: State<'_, AppState>) -> Result<Sent, Strin
     .map_err(|e| format!("send failed: {e}"))?
 }
 
-/// Every playlist with its paths, and the stars the index has for them.
+/// Every playlist with its paths, the stars the index has for them, and their
+/// content rows (where the found cues are kept).
+#[allow(clippy::type_complexity)]
 fn gather(
     db: &noceur_index::Db,
-) -> Result<(Vec<rb::Playlist>, HashMap<String, u8>), noceur_index::IndexError> {
+) -> Result<(Vec<rb::Playlist>, HashMap<String, u8>, HashMap<String, i64>), noceur_index::IndexError>
+{
     let mut stars = HashMap::new();
+    let mut contents = HashMap::new();
     let mut lists = Vec::new();
     for p in playlist::all(db)? {
         let entries = playlist::entries(db, p.id)?;
         for e in &entries {
-            if let Some(n) = e.row.as_ref().and_then(|r| r.rating) {
+            let Some(row) = e.row.as_ref() else { continue };
+            if let Some(n) = row.rating {
                 stars.insert(e.path.to_lowercase(), n.clamp(0, 5) as u8);
+            }
+            if let Some(c) =
+                noceur_index::thumb::locate(db, row.file_id)?.and_then(|f| f.content_id)
+            {
+                contents.insert(e.path.to_lowercase(), c);
             }
         }
         lists.push(rb::Playlist {
@@ -146,13 +161,115 @@ fn gather(
             paths: entries.into_iter().map(|e| e.path).collect(),
         });
     }
-    Ok((lists, stars))
+    Ok((lists, stars, contents))
+}
+
+/// Cue points for each track the file does not have yet, by lower-cased
+/// path: kept in the index when found before, else found now, a few tracks at
+/// a time (each is a whole decode). A track already in the file keeps the
+/// cues it has; a track with no steady beat gets none.
+fn cues_for_new(
+    xml: &Path,
+    lists: &[rb::Playlist],
+    contents: &HashMap<String, i64>,
+    db: &std::sync::Arc<std::sync::Mutex<noceur_index::Db>>,
+) -> HashMap<String, Option<cues::Cues>> {
+    let known = std::fs::read_to_string(xml)
+        .ok()
+        .and_then(|x| rb::known(&x).ok())
+        .unwrap_or_default();
+    let mut wanted: Vec<&String> = lists
+        .iter()
+        .flat_map(|l| &l.paths)
+        .filter(|p| !known.contains(&rb::key(p)))
+        .collect();
+    wanted.sort();
+    wanted.dedup();
+
+    let mut out = HashMap::new();
+    let mut todo = Vec::new();
+    if let Ok(db) = db.lock() {
+        for p in wanted {
+            let content = contents.get(&p.to_lowercase()).copied();
+            let stored = content
+                .and_then(|c| noceur_index::analysis::cues(&db, c).ok().flatten())
+                .filter(|(v, _)| *v == cues::VERSION);
+            match stored {
+                Some((_, text)) => {
+                    out.insert(p.to_lowercase(), cues::Cues::from_text(&text));
+                }
+                None => todo.push((p.clone(), content)),
+            }
+        }
+    }
+
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let found = std::sync::Mutex::new(Vec::new());
+    let threads = std::thread::available_parallelism()
+        .map_or(2, |n| n.get())
+        .clamp(1, 4);
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some((path, content)) = todo.get(i) else {
+                    break;
+                };
+                // A file that will not decode is left to describe(), which
+                // leaves it out.
+                let Ok(c) = cues::detect(Path::new(path)) else {
+                    continue;
+                };
+                if let Ok(mut f) = found.lock() {
+                    f.push((path.to_lowercase(), *content, c));
+                }
+            });
+        }
+    });
+    let found = found.into_inner().unwrap_or_default();
+    if let Ok(db) = db.lock() {
+        for (_, content, c) in &found {
+            if let Some(content) = content {
+                let text = c.as_ref().map(cues::Cues::to_text).unwrap_or_default();
+                let _ = noceur_index::analysis::set_cues(&db, *content, cues::VERSION, &text);
+            }
+        }
+    }
+    out.extend(found.into_iter().map(|(p, _, c)| (p, c)));
+    out
+}
+
+/// A section's hot cue colour: rekordbox's own green, red, blue and orange.
+fn colour(section: cues::Section) -> (u8, u8, u8) {
+    match section {
+        cues::Section::Intro => (40, 226, 20),
+        cues::Section::Drop => (230, 40, 40),
+        cues::Section::Break => (48, 90, 255),
+        cues::Section::Outro => (224, 100, 27),
+    }
+}
+
+fn marks(c: &cues::Cues) -> rb::Cues {
+    rb::Cues {
+        bpm: c.grid.bpm,
+        first: c.grid.first,
+        marks: c
+            .cues
+            .iter()
+            .map(|q| rb::Mark {
+                name: q.section.name().to_string(),
+                start: q.at,
+                rgb: colour(q.section),
+            })
+            .collect(),
+    }
 }
 
 fn send(
     path: &Path,
     lists: &[rb::Playlist],
     stars: &HashMap<String, u8>,
+    cues: &HashMap<String, Option<cues::Cues>>,
     today: &str,
     stamp: &str,
 ) -> Result<Sent, String> {
@@ -165,8 +282,8 @@ fn send(
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => rb::EMPTY.to_string(),
             Err(e) => return Err(format!("cannot read {shown}: {e}")),
         };
-        let merged =
-            rb::merge(&old, lists, |p| describe(p, stars), today).map_err(|e| e.to_string())?;
+        let merged = rb::merge(&old, lists, |p| describe(p, stars, cues), today)
+            .map_err(|e| e.to_string())?;
         rb::check(&old, &merged).map_err(|e| e.to_string())?;
 
         if stat(path) != before {
@@ -198,6 +315,7 @@ fn send(
             playlists: merged.playlists,
             added: merged.added,
             missing: merged.missing.len(),
+            cued: merged.cued,
             path: path.to_string_lossy().into_owned(),
         });
     }
@@ -251,9 +369,16 @@ fn backup(path: &Path, stamp: &str) -> std::io::Result<PathBuf> {
 
 /// What rekordbox is told about a track it does not have, read from the file
 /// itself so it is current.
-fn describe(path: &Path, stars: &HashMap<String, u8>) -> Option<NewTrack> {
+fn describe(
+    path: &Path,
+    stars: &HashMap<String, u8>,
+    cues: &HashMap<String, Option<cues::Cues>>,
+) -> Option<NewTrack> {
     let size = std::fs::metadata(path).ok()?.len();
     let meta = noceur_tags::read(path).ok()?;
+    let found = cues
+        .get(&path.to_string_lossy().to_lowercase())
+        .and_then(Option::as_ref);
     let ext = path
         .extension()
         .map(|e| e.to_string_lossy().to_uppercase())
@@ -300,7 +425,8 @@ fn describe(path: &Path, stars: &HashMap<String, u8>) -> Option<NewTrack> {
         total_time: seconds,
         track_number: meta.track_no.unwrap_or(0),
         year: meta.year.unwrap_or(0),
-        bpm: meta.bpm.map(f64::from),
+        // Untagged, the grid's tempo: rekordbox shows AverageBpm in its list.
+        bpm: meta.bpm.map(f64::from).or(found.map(|c| c.grid.bpm)),
         bit_rate,
         sample_rate: meta.sample_rate.unwrap_or(0),
         stars: stars
@@ -308,6 +434,7 @@ fn describe(path: &Path, stars: &HashMap<String, u8>) -> Option<NewTrack> {
             .copied()
             .unwrap_or(0),
         tonality,
+        cues: found.map(marks),
     })
 }
 
@@ -336,6 +463,7 @@ mod tests {
             &xml,
             &lists(&[&gone]),
             &HashMap::new(),
+            &HashMap::new(),
             "2026-10-04",
             "20261004-000000",
         )
@@ -350,6 +478,7 @@ mod tests {
             send(
                 &xml,
                 &lists(&[]),
+                &HashMap::new(),
                 &HashMap::new(),
                 "2026-10-04",
                 &format!("20261004-0000{i:02}"),
@@ -371,8 +500,48 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let xml = dir.path().join("rekordbox.xml");
         std::fs::write(&xml, "<html></html>").unwrap();
-        assert!(send(&xml, &lists(&[]), &HashMap::new(), "d", "s").is_err());
+        assert!(send(
+            &xml,
+            &lists(&[]),
+            &HashMap::new(),
+            &HashMap::new(),
+            "d",
+            "s"
+        )
+        .is_err());
         assert_eq!(std::fs::read_to_string(&xml).unwrap(), "<html></html>");
         assert!(!dir.path().join("noceur-backups").exists());
+    }
+
+    /// The real thing on a copy: the user's rekordbox.xml and two tracks it
+    /// does not have, cued and sent. Run by hand.
+    #[test]
+    #[ignore]
+    fn a_real_send_cues_new_tracks() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let xml = dir.path().join("rekordbox.xml");
+        std::fs::copy("D:/db/backups/rekordbox/rekordbox.xml", &xml).unwrap();
+        let paths = [
+            r"X:\ssd\Roustam - Fundamentally Wrong.wav",
+            r"X:\ssd\1\12 - Holchin - Recad.aif",
+        ];
+        let lists = vec![rb::Playlist {
+            name: "cue test".into(),
+            paths: paths.iter().map(|p| p.to_string()).collect(),
+        }];
+        let db = std::sync::Arc::new(std::sync::Mutex::new(
+            noceur_index::Db::open_in_memory().unwrap(),
+        ));
+        let cues = cues_for_new(&xml, &lists, &HashMap::new(), &db);
+        assert_eq!(cues.len(), 2);
+        let sent = send(&xml, &lists, &HashMap::new(), &cues, "2026-10-06", "s").unwrap();
+        assert_eq!((sent.added, sent.cued), (2, 2));
+        let out = std::fs::read_to_string(&xml).unwrap();
+        let at = out.find("Fundamentally%20Wrong.wav").unwrap();
+        let start = out[..at].rfind("<TRACK ").unwrap();
+        let track = &out[start..at + out[at..].find("</TRACK>").unwrap()];
+        println!("{track}");
+        assert!(track.contains("<TEMPO ") && track.contains("Num=\"0\""));
+        assert!(!track.contains("AverageBpm=\"0.00\""));
     }
 }

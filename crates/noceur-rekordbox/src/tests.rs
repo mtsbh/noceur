@@ -55,6 +55,7 @@ fn tampered(m: &Merged, from: &str, to: &str) -> Merged {
         added: m.added,
         playlists: m.playlists,
         missing: m.missing.clone(),
+        cued: m.cued,
         expect: m.expect.clone(),
     }
 }
@@ -237,4 +238,56 @@ fn merges_into_the_real_file() {
         s.root_children.len(),
         m.xml.len() - old.len()
     );
+}
+
+/// A new track goes in with its grid and its cues, each a hot cue and a
+/// memory cue, the way Mixed In Key writes them; and the file still reads.
+#[test]
+fn a_new_track_takes_its_grid_and_cues() {
+    let lists = [list("set", &[r"D:\new\One.wav", r"D:\new\Two.wav"])];
+    let m = merge(
+        SAMPLE,
+        &lists,
+        |p| {
+            let mut t = describe(p)?;
+            if p.to_string_lossy().ends_with("One.wav") {
+                t.cues = Some(Cues {
+                    bpm: 126.0,
+                    first: 0.21,
+                    marks: vec![
+                        Mark {
+                            name: "Intro".into(),
+                            start: 0.21,
+                            rgb: (40, 226, 20),
+                        },
+                        Mark {
+                            name: "Drop".into(),
+                            start: 61.1234,
+                            rgb: (230, 40, 40),
+                        },
+                    ],
+                });
+            }
+            Some(t)
+        },
+        "2026-10-06",
+    )
+    .unwrap();
+    check(SAMPLE, &m).unwrap();
+    assert_eq!((m.added, m.cued), (2, 1));
+    assert!(m
+        .xml
+        .contains("<TEMPO Inizio=\"0.210\" Bpm=\"126.00\" Metro=\"4/4\" Battito=\"1\" />"));
+    assert!(m.xml.contains(
+        "<POSITION_MARK Name=\"Drop\" Type=\"0\" Start=\"61.123\" Num=\"1\" Red=\"230\" Green=\"40\" Blue=\"40\" />"
+    ));
+    assert!(m
+        .xml
+        .contains("<POSITION_MARK Name=\"Drop\" Type=\"0\" Start=\"61.123\" Num=\"-1\" />"));
+    // The track without cues stays one self-closing element.
+    let two = m.xml.find("Two.wav").unwrap();
+    assert!(m.xml[two..].starts_with("Two.wav\" Remixer"));
+    assert!(m.xml[two..m.xml[two..].find('\n').unwrap() + two].ends_with("/>"));
+    // And the whole file is still one rekordbox reads back.
+    assert_eq!(known(&m.xml).unwrap().len(), 4);
 }

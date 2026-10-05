@@ -14,11 +14,11 @@ use std::path::Path;
 
 /// What the envelope is computed at, roughly: most files are 44.1 or 48 kHz and
 /// are averaged down by two. Onsets live well below this.
-const TARGET_RATE: u32 = 22_050;
+pub(crate) const TARGET_RATE: u32 = 22_050;
 /// Window and hop of the spectrogram, at the reduced rate: 46 ms and 11.6 ms.
-const N_FFT: usize = 1024;
-const HOP: usize = 256;
-const MEL_BANDS: usize = 40;
+pub(crate) const N_FFT: usize = 1024;
+pub(crate) const HOP: usize = 256;
+pub(crate) const MEL_BANDS: usize = 40;
 const MEL_MIN_HZ: f32 = 30.0;
 const MEL_MAX_HZ: f32 = 11_000.0;
 /// Quieter than this below the loudest bin is treated as silence, as librosa's
@@ -82,7 +82,7 @@ pub fn estimate(samples: &[f32], rate: u32, channels: usize, range: Range) -> Op
 /// A plain average of neighbouring samples is a poor low-pass, and the alias it
 /// lets through does not matter: what follows only asks when energy arrives,
 /// not at what pitch.
-fn downmix(samples: &[f32], rate: u32, channels: usize) -> (Vec<f32>, u32) {
+pub(crate) fn downmix(samples: &[f32], rate: u32, channels: usize) -> (Vec<f32>, u32) {
     let factor = ((rate as f32 / TARGET_RATE as f32).round() as usize).max(1);
     let step = channels * factor;
     let mono = samples
@@ -95,6 +95,14 @@ fn downmix(samples: &[f32], rate: u32, channels: usize) -> (Vec<f32>, u32) {
 /// Onset strength per frame: how much louder each mel band got since the frame
 /// before, averaged across bands, with its slow drift taken out.
 fn onset_envelope(mono: &[f32], rate: u32) -> Vec<f32> {
+    let spec = mel_spectrogram(mono, rate);
+    let flux = flux(&spec, 0..MEL_BANDS);
+    detrend(&flux, rate)
+}
+
+/// The mel spectrogram in dB, [`MEL_BANDS`] values a frame, floored
+/// [`TOP_DB`] below its loudest bin.
+pub(crate) fn mel_spectrogram(mono: &[f32], rate: u32) -> Vec<f32> {
     if mono.len() < N_FFT {
         return Vec::new();
     }
@@ -124,21 +132,33 @@ fn onset_envelope(mono: &[f32], rate: u32) -> Vec<f32> {
     for db in &mut spec {
         *db = db.max(loudest - TOP_DB);
     }
+    spec
+}
 
+/// Spectral flux over `bands` of a [`mel_spectrogram`]: how much louder they
+/// got since the frame before, averaged.
+pub(crate) fn flux(spec: &[f32], bands: std::ops::Range<usize>) -> Vec<f32> {
+    let frames = spec.len() / MEL_BANDS;
+    let width = bands.len().max(1) as f32;
     let mut flux = vec![0.0f32; frames];
     for f in 1..frames {
         let (now, before) = (
-            &spec[f * MEL_BANDS..][..MEL_BANDS],
-            &spec[(f - 1) * MEL_BANDS..][..MEL_BANDS],
+            &spec[f * MEL_BANDS..][bands.clone()],
+            &spec[(f - 1) * MEL_BANDS..][bands.clone()],
         );
         flux[f] = now
             .iter()
             .zip(before)
             .map(|(a, b)| (a - b).max(0.0))
             .sum::<f32>()
-            / MEL_BANDS as f32;
+            / width;
     }
+    flux
+}
 
+/// `flux` with its one-second moving average taken out.
+pub(crate) fn detrend(flux: &[f32], rate: u32) -> Vec<f32> {
+    let frames = flux.len();
     // A breakdown is quieter than a drop, and that difference is not a beat.
     // Taking out a one-second moving average leaves the onsets and removes the
     // swell, which would otherwise dominate the autocorrelation.
@@ -188,7 +208,7 @@ fn mel_bank(rate: u32) -> Vec<Vec<(usize, f32)>> {
 }
 
 /// The tempo an onset envelope beats at.
-fn tempo(env: &[f32], fps: f64, range: Range) -> Option<Estimate> {
+pub(crate) fn tempo(env: &[f32], fps: f64, range: Range) -> Option<Estimate> {
     let (min, max) = (range.min.max(1.0), range.max.max(range.min + 1.0));
     let lag_of = |bpm: f64| 60.0 * fps / bpm;
 

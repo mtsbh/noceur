@@ -202,9 +202,56 @@ pub fn carry_damage(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
     Ok(())
 }
 
+/// The cue points stored for one content: the finder's version and its text.
+pub fn cues(db: &Db, content_id: i64) -> Result<Option<(i64, String)>, IndexError> {
+    Ok(db
+        .conn()
+        .query_row(
+            "SELECT version, data FROM cues WHERE content_id = ?1",
+            params![content_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?)
+}
+
+/// Records the cue points found for one content.
+pub fn set_cues(db: &Db, content_id: i64, version: i64, data: &str) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO cues (content_id, version, data) VALUES (?1, ?2, ?3)
+         ON CONFLICT(content_id) DO UPDATE SET version = excluded.version, data = excluded.data",
+        params![content_id, version, data],
+    )?;
+    Ok(())
+}
+
+/// [`carry`], for cue points.
+pub fn carry_cues(db: &Db, from: i64, to: i64) -> Result<(), IndexError> {
+    db.conn().execute(
+        "INSERT INTO cues (content_id, version, data)
+         SELECT ?2, version, data FROM cues WHERE content_id = ?1
+         ON CONFLICT(content_id) DO NOTHING",
+        params![from, to],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cues_round_trip_and_follow_a_tag_write() {
+        let db = db();
+        assert_eq!(cues(&db, 1).unwrap(), None);
+        set_cues(&db, 1, 1, "128 0.2\n0.2 Intro").unwrap();
+        set_cues(&db, 1, 2, "128 0.2\n0.2 Intro\n60.2 Drop").unwrap();
+        assert_eq!(
+            cues(&db, 1).unwrap(),
+            Some((2, "128 0.2\n0.2 Intro\n60.2 Drop".to_string()))
+        );
+        carry_cues(&db, 1, 3).unwrap();
+        assert_eq!(cues(&db, 3).unwrap().unwrap().0, 2);
+    }
 
     const METHOD: Method = Method {
         version: 1,

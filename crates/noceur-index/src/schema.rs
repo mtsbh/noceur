@@ -1,10 +1,12 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 14;
+pub const SCHEMA_VERSION: i32 = 15;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14];
+pub const MIGRATIONS: &[&str] = &[
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
+];
 
 const V1: &str = r#"
 CREATE TABLE volume (
@@ -309,4 +311,16 @@ CREATE TABLE playlist_track (
 );
 
 CREATE INDEX idx_playlist_track_key ON playlist_track(path_key);
+"#;
+
+/// Cue points as found, for Send to rekordbox: the grid and the cues as text
+/// (`bpm first` then `seconds section` a line), empty when the track has no
+/// steady beat to put them on. Keyed by content and carried across tag writes
+/// like `analysis`; `version` is the finder's, so a better one finds again.
+const V15: &str = r#"
+CREATE TABLE cues (
+    content_id INTEGER PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE,
+    version    INTEGER NOT NULL,
+    data       TEXT    NOT NULL
+);
 "#;

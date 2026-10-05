@@ -141,6 +141,7 @@ export default function Playlists(props: {
       .then((s) => {
         const parts = [`Sent ${s.playlists} ${s.playlists === 1 ? "playlist" : "playlists"}`];
         if (s.added > 0) parts.push(`${s.added} new ${s.added === 1 ? "track" : "tracks"}`);
+        if (s.cued > 0) parts.push(`${s.cued} cued`);
         if (s.missing > 0) parts.push(`${s.missing} not found`);
         setSent(`${parts.join(" · ")} · Reload in rekordbox`);
       })
@@ -484,9 +485,9 @@ export default function Playlists(props: {
             class="btn"
             disabled={sending() || lists().length === 0}
             onClick={send}
-            data-tip="Into rekordbox.xml's noceur folder"
+            data-tip="Into rekordbox.xml's noceur folder; new tracks get cue points"
           >
-            {sending() ? "Sending…" : "Send to rekordbox"}
+            {sending() ? "Cueing and sending…" : "Send to rekordbox"}
           </button>
           <button
             class="btn"

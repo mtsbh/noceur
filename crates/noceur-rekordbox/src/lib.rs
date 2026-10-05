@@ -49,6 +49,29 @@ pub struct NewTrack {
     pub stars: u8,
     /// Camelot, as Mixed In Key writes it: `8A`.
     pub tonality: String,
+    /// A beat grid and cues to give the track; `None` leaves both to
+    /// rekordbox's own analysis.
+    pub cues: Option<Cues>,
+}
+
+/// A constant-tempo grid and the cues on it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Cues {
+    pub bpm: f64,
+    /// The first downbeat, in seconds.
+    pub first: f64,
+    /// In time order. Each is written twice, as Mixed In Key writes them: a
+    /// hot cue (the first eight) and a memory cue.
+    pub marks: Vec<Mark>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Mark {
+    pub name: String,
+    /// Seconds.
+    pub start: f64,
+    /// The hot cue's colour.
+    pub rgb: (u8, u8, u8),
 }
 
 /// The merged file and what went into it.
@@ -61,6 +84,8 @@ pub struct Merged {
     pub playlists: usize,
     /// Paths left out because `describe` could not describe them.
     pub missing: Vec<String>,
+    /// Added tracks that went in with cues.
+    pub cued: usize,
     /// What [`check`] holds the new file to.
     expect: Expect,
 }
@@ -116,6 +141,7 @@ pub fn merge(
     let mut next = scan.tracks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
     let mut new_tracks = String::new();
     let mut added = 0;
+    let mut cued = 0;
     let mut missing = Vec::new();
     let mut folder = Vec::new();
     for list in lists {
@@ -129,7 +155,8 @@ pub fn merge(
                         let id = next;
                         next += 1;
                         added += 1;
-                        new_tracks.push_str(&track_element(id, path, &t, today));
+                        cued += usize::from(t.cues.as_ref().is_some_and(|c| !c.marks.is_empty()));
+                        new_tracks.push_str(&track_element(id, path, &t, today, nl));
                         new_tracks.push_str(nl);
                         ids.insert(k, id);
                         id
@@ -218,8 +245,19 @@ pub fn merge(
         added,
         playlists: folder.len(),
         missing,
+        cued,
         expect: Expect { tracks, folder },
     })
+}
+
+/// The paths of every track the file's collection has, folded the way
+/// [`merge`] matches them, so a caller can tell which tracks a merge will add.
+pub fn known(xml: &str) -> Result<std::collections::HashSet<String>, Error> {
+    Ok(scan(xml)?
+        .tracks
+        .iter()
+        .map(|t| key(&location_path(&t.location)))
+        .collect())
 }
 
 /// Holds `merged` to the promise that nothing in `old` was changed or lost:
@@ -501,18 +539,18 @@ fn name_of(e: &Open) -> String {
 
 /* ── Writing ───────────────────────────────────────────────────────────── */
 
-fn track_element(id: u64, path: &str, t: &NewTrack, today: &str) -> String {
+fn track_element(id: u64, path: &str, t: &NewTrack, today: &str, nl: &str) -> String {
     let bpm = t
         .bpm
         .map(|b| format!("{b:.2}"))
         .unwrap_or_else(|| "0.00".into());
     let rating = u32::from(t.stars.min(5)) * 51;
-    format!(
+    let head = format!(
         "<TRACK TrackID=\"{id}\" Name=\"{}\" Artist=\"{}\" Composer=\"\" Album=\"{}\" Grouping=\"\" \
          Genre=\"{}\" Kind=\"{}\" Size=\"{}\" TotalTime=\"{}\" DiscNumber=\"0\" TrackNumber=\"{}\" \
          Year=\"{}\" AverageBpm=\"{bpm}\" DateAdded=\"{}\" BitRate=\"{}\" SampleRate=\"{}\" \
          Comments=\"{}\" PlayCount=\"0\" Rating=\"{rating}\" Location=\"{}\" Remixer=\"\" \
-         Tonality=\"{}\" Label=\"{}\" Mix=\"\" />",
+         Tonality=\"{}\" Label=\"{}\" Mix=\"\"",
         attr(&t.name),
         attr(&t.artist),
         attr(&t.album),
@@ -529,7 +567,33 @@ fn track_element(id: u64, path: &str, t: &NewTrack, today: &str) -> String {
         attr(&location(path)),
         attr(&t.tonality),
         attr(&t.label),
-    )
+    );
+    let Some(cues) = t.cues.as_ref().filter(|c| c.bpm > 0.0) else {
+        return format!("{head} />");
+    };
+    let mut out = format!("{head}>{nl}");
+    out.push_str(&format!(
+        "<TEMPO Inizio=\"{:.3}\" Bpm=\"{:.2}\" Metro=\"4/4\" Battito=\"1\" />{nl}",
+        cues.first.max(0.0),
+        cues.bpm
+    ));
+    for (num, m) in cues.marks.iter().take(8).enumerate() {
+        let (r, g, b) = m.rgb;
+        out.push_str(&format!(
+            "<POSITION_MARK Name=\"{}\" Type=\"0\" Start=\"{:.3}\" Num=\"{num}\" Red=\"{r}\" Green=\"{g}\" Blue=\"{b}\" />{nl}",
+            attr(&m.name),
+            m.start.max(0.0)
+        ));
+    }
+    for m in &cues.marks {
+        out.push_str(&format!(
+            "<POSITION_MARK Name=\"{}\" Type=\"0\" Start=\"{:.3}\" Num=\"-1\" />{nl}",
+            attr(&m.name),
+            m.start.max(0.0)
+        ));
+    }
+    out.push_str("</TRACK>");
+    out
 }
 
 fn folder_element(lists: &[(String, Vec<u64>)], nl: &str) -> String {
@@ -639,7 +703,7 @@ pub fn location_path(location: &str) -> String {
 }
 
 /// Paths compared the way Windows compares them.
-fn key(path: &str) -> String {
+pub fn key(path: &str) -> String {
     path.replace('/', "\\")
         .trim_end_matches('\\')
         .to_lowercase()
