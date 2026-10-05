@@ -2065,6 +2065,18 @@ export default function App() {
           onDone={() => setBarEditing(false)}
         />
         <span class="tsep fixed" />
+        {/* Fixed rather than a toolbar item, like Settings: search is how the
+            library is reached, and a layout saved before it existed would
+            otherwise never show it. */}
+        <button
+          class={`searchbox ${finding() ? "on" : ""}`}
+          aria-label="Search"
+          onClick={() => setFinding(true)}
+        >
+          <SearchIcon />
+          <span class="grow">Search</span>
+          <kbd>Ctrl F</kbd>
+        </button>
         <button
           class={`toolbtn ${settingsOpen() ? "on" : ""}`}
           data-tip="Settings"

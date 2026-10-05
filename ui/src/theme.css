@@ -2874,6 +2874,47 @@ body.resizing * {
 .bariconreset:hover {
   color: var(--fg);
 }
+/* Looks like a field so it reads as search at a glance; it opens the popover
+   rather than taking text itself, so the results have room to be a list. */
+.searchbox {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 190px;
+  height: 24px;
+  margin-right: 6px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 5px;
+  background: var(--raise);
+  color: var(--fg3);
+  font: inherit;
+  font-size: 11px;
+  cursor: text;
+}
+.searchbox svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+.searchbox .grow {
+  flex: 1;
+  text-align: left;
+}
+.searchbox kbd {
+  padding: 1px 4px;
+  border: 1px solid var(--hair2);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 9.5px;
+  color: var(--fg3);
+}
+.searchbox:hover,
+.searchbox.on {
+  border-color: var(--acc-line);
+  color: var(--fg2);
+}
+
 .toolbtn {
   position: relative;
   display: flex;
