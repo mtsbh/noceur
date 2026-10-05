@@ -236,16 +236,13 @@ downloads rather than CD rips.
       back, then renamed into place; and the merge is redone if the file changed meanwhile.
       Playlists live in noceur's index, so a rekordbox export that overwrites the file loses
       nothing: the next send puts them back.
-- [ ] **21. Energy level.** A 1–10 energy rating per track, in the style of Mixed In Key's,
-      measured with BPM and key and shown as a column. Written to the file's tags (where Mixed In
-      Key puts its own) and to the XML's comment, and checked against the tracks Mixed In Key has
-      already rated, so it can be trusted in its place.
-- [ ] **22. Cue points.** Up to eight cues per track on the beat grid, snapped to the 8- and
+- [ ] **21. Cue points.** Up to eight cues per track on the beat grid, snapped to the 8- and
       16-bar phrases where the music changes (intro, drops, breakdowns, outro), named like Mixed
       In Key's and written to the XML through step 20 as both hot cues and memory cues, with the
       beat grid alongside. A track that already has cues is left alone. Tuned against the 36
       tracks Mixed In Key has cued and the library's existing cues; before it ships, checked on a
       test track whether rekordbox takes new cues for a track already in its collection. With
-      steps 20–22, Mixed In Key is no longer needed.
+      steps 20–21, Mixed In Key is no longer needed. (An energy rating was dropped: this library
+      sits almost entirely at 4–6 on Mixed In Key's scale, so the column would say little.)
 
 When a step changes what the app can do, the README's feature list is updated with it.
