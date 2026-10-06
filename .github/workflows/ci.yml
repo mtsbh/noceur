@@ -53,5 +53,7 @@ jobs:
 
       # The ignored tests need a real music library or the network, and are run
       # by hand — see the README.
+      # One at a time, so a test that crashes the process is named in the log
+      # rather than lost among the ones running beside it.
       - name: Tests
-        run: cargo test --workspace
+        run: cargo test --workspace -- --test-threads=1
