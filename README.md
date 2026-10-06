@@ -196,11 +196,10 @@ crates/
   noceur-app       Tauri application: commands, state, formatting
   noceur-cli       headless debug CLI
 ui/                Solid + Vite frontend
-docs/              design notes, build notes, troubleshooting
+docs/              build notes, troubleshooting
 ```
 
 Only `noceur-app` depends on Tauri; the other crates build and test without a window.
-Design decisions are documented in [`docs/design.md`](docs/design.md).
 
 ## Status
 
@@ -208,9 +207,6 @@ Noceur is at version 0.1 and is developed against one large, real DJ library. It
 every day, but it has not had wide testing yet. It runs on Windows only: file operations,
 the clipboard, shell icons and drag and drop go through Windows APIs. Back up anything you
 can't afford to lose before you batch-retag or rename it.
-
-Every step in [`docs/roadmap.md`](docs/roadmap.md) is done; new work is listed there before it
-starts.
 
 ## Troubleshooting
 
@@ -220,7 +216,7 @@ See [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 Issues and pull requests are welcome. Before you open a pull request, make sure everything
 under [Tests](#tests) passes, and keep each change to one topic. For larger changes, open an
-issue first. Design decisions are in [`docs/design.md`](docs/design.md).
+issue first.
 
 ## Acknowledgements
 

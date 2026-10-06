@@ -34,3 +34,7 @@ Desktop.ini
 
 # Agent handoff notes, local only
 HANDOFF.md
+
+# Design notes and roadmap, local only
+docs/design.md
+docs/roadmap.md
