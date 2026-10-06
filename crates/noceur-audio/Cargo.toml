@@ -40,3 +40,7 @@ symphonia = { version = "0.5", default-features = false }
 # Chromaprint fingerprints for AcoustID lookups. Pure Rust, and its output
 # matches `fpcalc`, so there is no C library or bundled executable to ship.
 rusty-chromaprint = "0.3"
+
+# COM for the audio thread; see `com_for_life` in lib.rs.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Com"] }

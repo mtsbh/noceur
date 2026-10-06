@@ -206,8 +206,37 @@ impl Player {
     }
 }
 
+/// Puts this thread in COM's multithreaded apartment, and keeps that apartment
+/// up for the rest of the process.
+///
+/// cpal keeps its device enumerator in a process-wide static but creates it
+/// under the COM of whichever thread asks first, and uninitialises that COM when
+/// the thread ends. A second audio thread after the first has gone (every test
+/// that starts a `Player` makes one) then calls into a torn-down enumerator and
+/// faults. Joined to an apartment that never closes, cpal's own single-threaded
+/// init is refused and leaves nothing to tear down.
+#[cfg(windows)]
+fn com_for_life() {
+    use windows_sys::Win32::System::Com::{
+        CoIncrementMTAUsage, CoInitializeEx, COINIT_MULTITHREADED,
+    };
+    static MTA: std::sync::Once = std::sync::Once::new();
+    MTA.call_once(|| {
+        let mut cookie = std::ptr::null_mut();
+        // SAFETY: a valid out-pointer; the cookie is never released on purpose.
+        unsafe { CoIncrementMTAUsage(&mut cookie) };
+    });
+    // SAFETY: no reserved pointer; never uninitialised, so the thread can't
+    // take the apartment down on its way out.
+    unsafe { CoInitializeEx(std::ptr::null(), COINIT_MULTITHREADED as u32) };
+}
+
+#[cfg(not(windows))]
+fn com_for_life() {}
+
 /// The audio thread's whole life.
 fn run(rx: mpsc::Receiver<Cmd>, state: Arc<Mutex<Playback>>, scope: Arc<scope::Scope>) {
+    com_for_life();
     let sink = match rodio::stream::DeviceSinkBuilder::open_default_sink() {
         Ok(sink) => sink,
         Err(e) => {
