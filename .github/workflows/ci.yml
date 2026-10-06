@@ -53,6 +53,16 @@ jobs:
 
       # The ignored tests need a real music library or the network, and are run
       # by hand — see the README.
+      # Temporary: the stack at the access violation this test hits only here.
+      - name: Diagnose the analysis crash
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cargo test -p noceur-app --bin noceur-app --no-run
+          $exe = (Get-ChildItem target\debug\deps\noceur_app-*.exe | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+          $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          & $cdb -o -c "sxe -c `"!analyze -v; ~*kn 60; q`" av; g" $exe a_played_track_gets_its_empty_fields_filled --exact --test-threads=1 --nocapture
+
       # One at a time, so a test that crashes the process is named in the log
       # rather than lost among the ones running beside it.
       - name: Tests
