@@ -4,8 +4,8 @@
 
 # Noceur
 
-Explorer + audio player. Browse, play and tag your music right where it lives, no import
-needed. Useful for DJs and audiophiles.
+File explorer meets audio player. Your folders are the library: browse, play and tag in
+place, no import needed. Built for DJs and audiophiles.
 
 [![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-blue)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
