@@ -109,8 +109,9 @@ pub fn clean(text: &str, rules: &[Rule]) -> String {
 ///
 /// Every rule that is safe on a name without asking, plus what only a name
 /// collects: a track number at the end as well as the front, dashes doubled or
-/// typed as `–`, and symbols a download site wrapped round it. This is the
-/// Clean up button: one click, every safe rule, the name only.
+/// typed as `–`, and symbols a download site wrapped round it, and capitals on
+/// words typed all in lower case. This is the Clean up button: one click, every
+/// safe rule, the name only.
 pub fn clean_file_name(stem: &str) -> String {
     use regex::Regex;
     use std::sync::LazyLock;
@@ -135,7 +136,49 @@ pub fn clean_file_name(stem: &str) -> String {
     s = strip_original(&s);
     s = TRAILING_NUMBER.replace(s.trim_end(), "").into_owned();
     s = tidy_spacing(&s);
-    trim_symbols(&s).to_string()
+    capitalise(trim_symbols(&s))
+}
+
+/// Capitals on words typed all in lower case: `akiko kiyama - newmud` →
+/// `Akiko Kiyama - Newmud`.
+///
+/// A word with any capital already is left as it was, so `DJ Koze`, `iPhone`
+/// and `McFly` keep their spelling; only a word with none at
+/// all was clearly never cased. `feat.`, `vs` and `x` stay small, as the
+/// stores write them, and `dj` and `mc` become `DJ` and `MC`.
+pub fn capitalise(text: &str) -> String {
+    const SMALL: [&str; 6] = ["feat.", "ft.", "vs", "vs.", "x", "&"];
+    let word = |w: &str| -> String {
+        if w.chars().any(char::is_uppercase) || !w.chars().any(char::is_lowercase) {
+            return w.to_string();
+        }
+        let bare = w.trim_matches(|c: char| !c.is_alphanumeric() && c != '.');
+        if SMALL.contains(&bare) {
+            return w.to_string();
+        }
+        if bare == "dj" || bare == "mc" {
+            return w.replacen(bare, &bare.to_uppercase(), 1);
+        }
+        // Each part of `lo-fi` gets one, as `Lo-Fi`; within a part, only the
+        // first letter, so `nothing's` is `Nothing's`.
+        w.split('-')
+            .map(|part| {
+                let mut done = false;
+                part.chars()
+                    .map(|c| {
+                        if !done && c.is_alphabetic() {
+                            done = true;
+                            c.to_uppercase().collect::<String>()
+                        } else {
+                            c.to_string()
+                        }
+                    })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("-")
+    };
+    text.split(' ').map(word).collect::<Vec<_>>().join(" ")
 }
 
 /// Strips what is neither a word nor a closing mark from both ends: the `-`
@@ -617,6 +660,27 @@ mod tests {
             ),
             ("2 Bad Mice - Bombscare", "2 Bad Mice - Bombscare"),
             ("Lo-Fi Artist - Hi-Fi Title", "Lo-Fi Artist - Hi-Fi Title"),
+        ] {
+            assert_eq!(clean_file_name(from), to, "{from}");
+        }
+    }
+
+    #[test]
+    fn lower_case_words_get_capitals_and_cased_ones_are_kept() {
+        for (from, to) in [
+            ("akiko kiyama - newmud", "Akiko Kiyama - Newmud"),
+            (
+                "akiko kiyama - you are pinnochio (alex kid remix)",
+                "Akiko Kiyama - You Are Pinnochio (Alex Kid Remix)",
+            ),
+            (
+                "akiko kiyama feat. jon - nothing's left",
+                "Akiko Kiyama feat. Jon - Nothing's Left",
+            ),
+            ("dj koze vs mc x - lo-fi", "DJ Koze vs MC x - Lo-Fi"),
+            ("DJ Koze - iPhone McFly", "DJ Koze - iPhone McFly"),
+            ("Skee Mask - Rev8617", "Skee Mask - Rev8617"),
+            ("2 bad mice - 1992", "2 Bad Mice - 1992"),
         ] {
             assert_eq!(clean_file_name(from), to, "{from}");
         }
