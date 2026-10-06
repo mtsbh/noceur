@@ -2642,7 +2642,7 @@ body.resizing * {
 /* The sidebar's own: the picture alone, for a glance at the cutoff. */
 .spek.compact {
   height: 110px;
-  margin-top: 12px;
+  margin-top: 4px;
   padding: 0;
   border-top: 0;
   background: none;
@@ -4753,8 +4753,8 @@ body.resizing-v * {
 .sidebody {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px 12px;
+  gap: 8px;
+  padding: 8px 12px 10px;
 }
 .sidefacts {
   margin: 0;
@@ -4774,25 +4774,35 @@ body.resizing-v * {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Set like the facts above - a small label over its value, no boxes - so the
-   panel reads as one sheet. Every value is still a field: a faint line on
-   hover says so, the accent line under focus says where typing goes. */
+/* One line per field, the label beside its value, so the cover, the tags and
+   the spectrogram fit without scrolling. No boxes: every value is still a
+   field, a faint line on hover says so, the accent line under focus says
+   where typing goes. */
 .sidetags {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px 10px;
+  gap: 3px 10px;
 }
 .sidetag {
   grid-column: span 2;
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
 }
 .sidetag.narrow {
   grid-column: span 1;
 }
+.sidetag > input,
+.sidetag > textarea {
+  flex: 1;
+}
+.sidetag .sidelabel {
+  flex: none;
+  width: 72px;
+}
 .sidelabel {
-  align-self: flex-start;
+  align-self: baseline;
   max-width: 100%;
   text-align: left;
   color: var(--fg3);
@@ -4894,7 +4904,7 @@ button.sidelabel {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  padding-top: 12px;
+  padding-top: 8px;
   border-top: 1px solid var(--hair);
 }
 .sitebtn {

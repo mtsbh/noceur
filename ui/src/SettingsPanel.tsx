@@ -119,7 +119,7 @@ function targetOf(field: string): (typeof QUICK_TARGETS)[number]["id"] {
 const ANALYSIS_MODES: [AnalysisMode, string][] = [
   ["fill", "Empty fields"],
   ["show", "Show only"],
-  ["overwrite", "When different"],
+  ["overwrite", "Replace mine"],
 ];
 
 /** The tempo ranges the Detect dialog offers too. */
@@ -995,7 +995,8 @@ export default function Settings(props: {
               <p>
                 Measures each track you play, a second or two after it starts, and nothing
                 else. The list shows what was measured beside the tag; click the dot in a
-                cell to write it.
+                cell to write it. Empty fields writes only where there is no BPM or key;
+                Replace mine also writes over a tag that differs from what was measured.
               </p>
             }
           >
