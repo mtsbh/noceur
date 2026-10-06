@@ -30,7 +30,7 @@ same track often exists in more than one place.
 - Tabs and a dual-pane layout (side by side or stacked), each pane with its own sort and history
 - 19 columns, reorderable and resizable; sort by BPM, key, rating, date and more
 - Icon view for folders that contain no audio
-- Full-text search across the indexed library
+- Full-text search across the indexed library; results use the list's columns (add, remove, move, resize, sort), with the folder as a column of its own
 - Option to hide non-audio files (cover scans, `.nfo`, `.cue`)
 
 **Files**
@@ -192,6 +192,7 @@ crates/
   noceur-audio     playback, waveforms, spectrograms, meters, quality analysis, audio identity
   noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Tidal, Cover Art Archive, AcoustID, Shazam clients
   noceur-index     SQLite index, scanner, queries, caches
+  noceur-rekordbox rekordbox.xml export: playlists, beat grids, hot and memory cues
   noceur-app       Tauri application: commands, state, formatting
   noceur-cli       headless debug CLI
 ui/                Solid + Vite frontend
@@ -201,13 +202,44 @@ docs/              design notes, build notes, troubleshooting
 Only `noceur-app` depends on Tauri; the other crates build and test without a window.
 Design decisions are documented in [`docs/design.md`](docs/design.md).
 
-## Roadmap
+## Status
 
-One-click tag tools and Mp3tag-style converter shortcuts are next. See [`docs/roadmap.md`](docs/roadmap.md).
+Noceur is at version 0.1 and is developed against one large, real DJ library. It is used
+every day, but it has not had wide testing yet. It runs on Windows only: file operations,
+the clipboard, shell icons and drag and drop go through Windows APIs. Back up anything you
+can't afford to lose before you batch-retag or rename it.
+
+Every step in [`docs/roadmap.md`](docs/roadmap.md) is done; new work is listed there before it
+starts.
 
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md).
+
+## Contributing
+
+Issues and pull requests are welcome. Before you open a pull request, make sure everything
+under [Tests](#tests) passes, and keep each change to one topic. For larger changes, open an
+issue first. Design decisions are in [`docs/design.md`](docs/design.md).
+
+## Acknowledgements
+
+- Key detection runs [KeyNet](https://github.com/a1ex90/MusicalKeyCNN) (Korzeniowski & Widmer,
+  ISMIR 2018) with weights retrained by
+  [OpenKeyScan](https://github.com/rekordcloud/openkeyscan-analyzer). Both are MIT-licensed; see
+  [`crates/noceur-audio/models/README.md`](crates/noceur-audio/models/README.md).
+- Fingerprints come from [rusty-chromaprint](https://github.com/darksv/rusty-chromaprint), and
+  lookups use [AcoustID](https://acoustid.org).
+- Built with [Tauri](https://tauri.app), [Solid](https://www.solidjs.com),
+  [Symphonia](https://github.com/pdeljanov/Symphonia), [Lofty](https://github.com/Serial-ATA/lofty-rs)
+  and [SQLite](https://sqlite.org).
+
+## Disclaimer
+
+Noceur is not affiliated with AlphaTheta (rekordbox), Mixed In Key, Beatport, Bandcamp, Deezer,
+Apple, Discogs, Tidal, Shazam or MusicBrainz. Beatport, Bandcamp and Shazam are reached through
+their public websites rather than published APIs, so a change on their side can break a source
+until Noceur is updated. In that case the source returns no results; nothing breaks in the app.
 
 ## Licence
 

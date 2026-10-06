@@ -31,3 +31,6 @@ Desktop.ini
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Agent handoff notes, local only
+HANDOFF.md
