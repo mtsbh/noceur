@@ -122,20 +122,15 @@ pub struct SearchRequest {
     pub limit: Option<i64>,
 }
 
-/// One search result, formatted for display.
+/// One search result: the row as the list would show it, so the results can
+/// carry any of the list's columns, plus the folder it is in.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchHit {
-    pub file_id: i64,
-    /// 0 directory, 1 audio, 2 other.
-    pub kind: i64,
-    pub name: String,
+    #[serde(flatten)]
+    pub row: RowDisplay,
     /// Folder holding it, as a person should read it.
     pub dir_path: String,
-    pub bpm: String,
-    pub key: String,
-    pub duration: String,
-    pub artist: String,
 }
 
 /// What the transport bar shows.

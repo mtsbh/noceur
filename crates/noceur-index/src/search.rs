@@ -1,23 +1,16 @@
 //! Full-text search across the indexed library.
 
 use crate::db::{Db, IndexError};
+use crate::query::{read_row, ListRow, ROW_COLUMNS_WITH_DIR, ROW_WIDTH};
 use rusqlite::params;
 
-/// One search hit: the row that matched, and where it lives.
+/// One search hit: the whole row that matched, as a listing has it, and where
+/// it lives - so the results can show any column the list can.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hit {
-    pub file_id: i64,
-    pub name: String,
+    pub row: ListRow,
     /// Directory holding the file — where the list must navigate to reveal it.
     pub dir_path: String,
-    /// `EntryKind::group()`: 0 directory, 1 audio, 2 other.
-    pub kind: i64,
-    pub artist: Option<String>,
-    pub title: Option<String>,
-    pub bpm: Option<f64>,
-    pub key_norm: Option<i64>,
-    pub key_tag: Option<String>,
-    pub duration_ms: Option<i64>,
 }
 
 /// Turns what the user typed into an FTS5 query.
@@ -103,9 +96,9 @@ pub fn index_new_in_dir(db: &Db, dir_id: i64) -> Result<usize, IndexError> {
 /// `scopes` are lowercase path prefixes. An empty list searches everything, which
 /// is what a library with nothing pinned should do rather than nothing at all.
 ///
-/// Ordering is FTS5's own relevance (`bm25`), with directories after tracks: the
-/// spec groups results that way, and a folder is rarely what you meant when you
-/// typed an artist's name.
+/// Tracks only, in FTS5's own relevance (`bm25`): a folder is not what anyone
+/// typed an artist's name to find, and every one that matched through its path
+/// pushed a track off the list.
 pub fn search(db: &Db, query: &str, scopes: &[String], limit: i64) -> Result<Vec<Hit>, IndexError> {
     let Some(fts) = to_fts_query(query) else {
         return Ok(Vec::new());
@@ -123,19 +116,11 @@ pub fn search(db: &Db, query: &str, scopes: &[String], limit: i64) -> Result<Vec
     };
 
     let sql = format!(
-        "SELECT f.id, f.name, d.path_lower, f.kind,
-                ct.artist, ct.title, ct.bpm_tag, ct.key_norm, ct.key_tag,
-                c.duration_ms
-         FROM file_fts
-         JOIN file f ON f.id = file_fts.rowid
-         JOIN dir  d ON d.id = f.dir_id
-         LEFT JOIN content     c  ON c.id  = f.content_id
-         LEFT JOIN content_tag ct ON ct.content_id = f.content_id
+        "{ROW_COLUMNS_WITH_DIR}
+         JOIN file_fts ON file_fts.rowid = f.id
          WHERE file_fts MATCH ?1{scope_sql}
-           -- Tracks and folders only: every cover.jpg in an artist's folder
-           -- matches that artist through its path, and buries the tracks.
-           AND f.kind <> 2
-         ORDER BY (f.kind = 0), bm25(file_fts), f.name COLLATE NOCASE
+           AND f.kind = 1
+         ORDER BY bm25(file_fts), f.name COLLATE NOCASE
          LIMIT ?2"
     );
 
@@ -201,13 +186,7 @@ pub fn search_tag(
     };
     let col = column.column();
     let sql = format!(
-        "SELECT f.id, f.name, d.path_lower, f.kind,
-                ct.artist, ct.title, ct.bpm_tag, ct.key_norm, ct.key_tag,
-                c.duration_ms
-         FROM content_tag ct
-         JOIN file f ON f.content_id = ct.content_id
-         JOIN dir  d ON d.id = f.dir_id
-         LEFT JOIN content c ON c.id = f.content_id
+        "{ROW_COLUMNS_WITH_DIR}
          WHERE f.kind = 1 AND TRIM({col}) = ?1 COLLATE NOCASE{scope_sql}
          ORDER BY f.name COLLATE NOCASE
          LIMIT ?2"
@@ -224,16 +203,8 @@ pub fn search_tag(
 
 fn hit(r: &rusqlite::Row<'_>) -> rusqlite::Result<Hit> {
     Ok(Hit {
-        file_id: r.get(0)?,
-        name: r.get(1)?,
-        dir_path: r.get(2)?,
-        kind: r.get(3)?,
-        artist: r.get(4)?,
-        title: r.get(5)?,
-        bpm: r.get(6)?,
-        key_norm: r.get(7)?,
-        key_tag: r.get(8)?,
-        duration_ms: r.get(9)?,
+        row: read_row(r)?,
+        dir_path: r.get(ROW_WIDTH)?,
     })
 }
 
@@ -312,7 +283,7 @@ mod tests {
             )
             .unwrap();
 
-        let names = |hits: Vec<Hit>| hits.into_iter().map(|h| h.name).collect::<Vec<_>>();
+        let names = |hits: Vec<Hit>| hits.into_iter().map(|h| h.row.name).collect::<Vec<_>>();
         let all = search_tag(&db, TagColumn::Genre, "TECHNO", &[], 50).unwrap();
         assert_eq!(names(all), ["a.wav", "b.wav", "d.wav"]);
 

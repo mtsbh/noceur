@@ -7,8 +7,8 @@ import type { RowDisplay, SortColumn } from "./api";
  * should stay that width when the window resizes, which is what every file
  * manager does and what fractions cannot do.
  */
-export type Column = {
-  key: SortColumn;
+export type Column<K extends string = SortColumn> = {
+  key: K;
   label: string;
   width: number;
   /** Right-aligned, tabular — numbers and durations. */
@@ -225,8 +225,66 @@ export function keyColour(canonical: number | null): string | undefined {
     : `hsl(${hue} 64% var(--key-l, 66%))`;
 }
 
+/** A column of the search results: any of the list's, or the folder. */
+export type SearchKey = SortColumn | "path";
+
+/**
+ * The search results' own layout, kept apart from the list's: a search is read
+ * for which copy and where, so the folder is a column here and the list's
+ * file-system ones start hidden.
+ */
+export const SEARCH_COLUMNS: Column<SearchKey>[] = [
+  { key: "name", label: "Name", width: 320, visible: true },
+  { key: "bpm", label: "BPM", width: 56, num: true, visible: true },
+  { key: "key", label: "Key", width: 48, visible: true },
+  { key: "duration", label: "Time", width: 58, num: true, visible: true },
+  { key: "path", label: "Folder", width: 400, dim: true, visible: true },
+  ...DEFAULT_COLUMNS.filter(
+    (c) => !["name", "bpm", "key", "duration"].includes(c.key),
+  ).map((c): Column<SearchKey> => ({ ...c, visible: false })),
+];
+
+const SEARCH_KEY = "noceur.searchColumns";
+
+/** The saved search layout, reconciled the same way as the list's. */
+export function loadSearchColumns(): Column<SearchKey>[] {
+  let saved: Partial<Column<SearchKey>>[] = [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SEARCH_KEY) ?? "[]");
+    if (Array.isArray(parsed)) saved = parsed;
+  } catch {
+    // Defaults, then.
+  }
+  const known = new Map(SEARCH_COLUMNS.map((c) => [c.key, c]));
+  const out: Column<SearchKey>[] = [];
+  for (const entry of saved) {
+    const base = entry.key && known.get(entry.key);
+    if (!base || out.some((c) => c.key === base.key)) continue;
+    out.push({
+      ...base,
+      width: clampWidth(Number(entry.width) || base.width),
+      visible: entry.visible ?? base.visible,
+    });
+  }
+  for (const base of SEARCH_COLUMNS) {
+    if (!out.some((c) => c.key === base.key)) out.push({ ...base });
+  }
+  return out;
+}
+
+export function saveSearchColumns(columns: Column<SearchKey>[]): void {
+  try {
+    localStorage.setItem(
+      SEARCH_KEY,
+      JSON.stringify(columns.map((c) => ({ key: c.key, width: c.width, visible: c.visible }))),
+    );
+  } catch {
+    // Storage unavailable: the layout lasts until the window closes.
+  }
+}
+
 /** Moves a column to a new position, returning a new array. */
-export function reorder(columns: Column[], from: number, to: number): Column[] {
+export function reorder<C>(columns: C[], from: number, to: number): C[] {
   if (from === to || from < 0 || to < 0) return columns;
   const next = [...columns];
   const [moved] = next.splice(from, 1);

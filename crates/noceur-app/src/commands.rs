@@ -271,30 +271,11 @@ pub async fn search_tag(
 }
 
 fn search_hit(h: noceur_index::Hit) -> SearchHit {
-    let is_audio = h.kind == 1;
     SearchHit {
-        file_id: h.file_id,
-        kind: h.kind,
-        name: h.name,
+        row: format::display(&h.row, KeyNotation::Camelot),
         dir_path: simplify(Path::new(&h.dir_path))
             .to_string_lossy()
             .into_owned(),
-        bpm: if is_audio {
-            format::bpm(h.bpm, format::BpmSource::Tag)
-        } else {
-            String::new()
-        },
-        key: if is_audio {
-            format::key(h.key_norm, h.key_tag.as_deref(), KeyNotation::Camelot)
-        } else {
-            String::new()
-        },
-        duration: if is_audio {
-            format::duration(h.duration_ms)
-        } else {
-            String::new()
-        },
-        artist: h.artist.unwrap_or_default(),
     }
 }
 

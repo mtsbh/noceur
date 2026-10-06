@@ -2126,6 +2126,10 @@ export default function App() {
       </Show>
 
       <div class="body">
+        {/* The tree and the panes, with the spectrogram under them: it stops at
+            the sidebar, which keeps the window's full height for its fields. */}
+        <div class="main">
+        <div class="browse">
         <Tree
           current={focusPath()}
           onNavigate={(path) => navigateFocused(path)}
@@ -2237,6 +2241,23 @@ export default function App() {
               </>
             )}
           </For>
+        </div>
+        </div>
+
+        <Show when={spekOpen()}>
+          <Spectrogram
+            grid={spek()}
+            progress={
+              (transport()?.durationMs ?? 0) > 0
+                ? (transport()!.positionMs ?? 0) / transport()!.durationMs
+                : 0
+            }
+            sampleRate={transport()?.sampleRate ?? 0}
+            durationMs={transport()?.durationMs ?? 0}
+            name={transport()?.path ?? ""}
+            onSeek={(ms) => transportCmd("seek", ms).then(setTransport).catch(() => {})}
+          />
+        </Show>
         </div>
 
         <button
@@ -2524,21 +2545,6 @@ export default function App() {
           columns={columns()}
           onToggleColumn={(key: string) => toggleColumn(key as SortColumn)}
           onClose={() => setSettingsOpen(false)}
-        />
-      </Show>
-
-      <Show when={spekOpen()}>
-        <Spectrogram
-          grid={spek()}
-          progress={
-            (transport()?.durationMs ?? 0) > 0
-              ? (transport()!.positionMs ?? 0) / transport()!.durationMs
-              : 0
-          }
-          sampleRate={transport()?.sampleRate ?? 0}
-          durationMs={transport()?.durationMs ?? 0}
-          name={transport()?.path ?? ""}
-          onSeek={(ms) => transportCmd("seek", ms).then(setTransport).catch(() => {})}
         />
       </Show>
 

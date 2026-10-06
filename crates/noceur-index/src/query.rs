@@ -213,14 +213,20 @@ pub const WRITING: &str = ".noceur-writing";
 
 const HIDE_WRITING: &str = " AND instr(f.name, '.noceur-writing') = 0";
 
-macro_rules! row_columns {
+macro_rules! row_fields {
     () => {
         "
 SELECT f.id, f.name, f.ext, f.size, f.mtime, f.kind, f.state,
        ct.artist, ct.title, ct.album, ct.bpm_tag, ct.key_tag, ct.key_norm,
        c.duration_ms, COALESCE(ct.has_artwork, 0),
        ct.album_artist, ct.genre, ct.year, ct.track_no, ct.comment, ct.isrc,
-       c.sample_rate, c.bit_depth, c.codec, ct.rating, a.bpm, a.key_norm
+       c.sample_rate, c.bit_depth, c.codec, ct.rating, a.bpm, a.key_norm"
+    };
+}
+
+macro_rules! row_joins {
+    () => {
+        "
 FROM file f
 LEFT JOIN content     c  ON c.id  = f.content_id
 LEFT JOIN content_tag ct ON ct.content_id = f.content_id
@@ -228,9 +234,28 @@ LEFT JOIN analysis    a  ON a.content_id  = f.content_id AND a.miss = 0"
     };
 }
 
+macro_rules! row_columns {
+    () => {
+        concat!(row_fields!(), row_joins!())
+    };
+}
+
 /// The columns of a [`ListRow`] and the joins that supply them, for whatever
 /// `WHERE` the caller puts after them. Read back with [`read_row`].
 pub(crate) const ROW_COLUMNS: &str = row_columns!();
+
+/// [`ROW_COLUMNS`] with the folder's path as one more column, at
+/// [`ROW_WIDTH`], and `dir d` joined - for rows gathered from many folders.
+pub(crate) const ROW_COLUMNS_WITH_DIR: &str = concat!(
+    row_fields!(),
+    ", d.path_lower",
+    row_joins!(),
+    "
+JOIN dir d ON d.id = f.dir_id"
+);
+
+/// How many columns [`read_row`] reads; anything selected after them starts here.
+pub(crate) const ROW_WIDTH: usize = 27;
 
 const SELECT: &str = concat!(
     row_columns!(),

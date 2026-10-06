@@ -175,7 +175,7 @@ mod tests {
 
         let hits = crate::search::search(&db, "Kindness", &[], 10).unwrap();
         assert_eq!(hits.len(), 1, "the existing file must have been backfilled");
-        assert_eq!(hits[0].name, "Kindness.wav");
+        assert_eq!(hits[0].row.name, "Kindness.wav");
     }
 
     #[test]

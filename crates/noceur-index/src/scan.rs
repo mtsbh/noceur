@@ -480,7 +480,7 @@ mod tests {
     /// `…\AppData\Local\Temp\…`, so a term like `a*` matches every row through
     /// its path and proves nothing about names.
     fn names(hits: &[crate::search::Hit]) -> Vec<&str> {
-        hits.iter().map(|h| h.name.as_str()).collect()
+        hits.iter().map(|h| h.row.name.as_str()).collect()
     }
 
     /// A folder must be searchable by name the moment it is listed, without
@@ -518,7 +518,7 @@ mod tests {
 
         let hits = crate::search::search(&db, "Lizz", &[], 20).unwrap();
         assert_eq!(names(&hits), ["b.wav"]);
-        assert_eq!(hits[0].artist.as_deref(), Some("Lizz"));
+        assert_eq!(hits[0].row.artist.as_deref(), Some("Lizz"));
     }
 
     /// A file that disappears must stop turning up in search, not linger as a

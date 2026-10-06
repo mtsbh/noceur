@@ -209,17 +209,8 @@ export function roots(): Promise<Segment[]> {
   return invoke<Segment[]>("roots");
 }
 
-/** One search result, already formatted for display. */
-export type SearchHit = {
-  fileId: number;
-  kind: number;
-  name: string;
-  dirPath: string;
-  bpm: string;
-  key: string;
-  duration: string;
-  artist: string;
-};
+/** One search result: a track's row as the list shows it, and its folder. */
+export type SearchHit = RowDisplay & { dirPath: string };
 
 /**
  * Searches the indexed library.
