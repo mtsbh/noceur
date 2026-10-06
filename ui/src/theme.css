@@ -5424,7 +5424,8 @@ button.sidelabel {
   top: -9px;
   right: -5px;
 }
-.toolbar.editing .bargroupicon:hover .barx.one,
-.toolbar.editing .bargroup:hover .barx.one {
+/* The cell's children take no pointer while customising, so the hover is the
+   cell's own. */
+.toolbar.editing .baritem:hover .barx.one {
   display: flex;
 }

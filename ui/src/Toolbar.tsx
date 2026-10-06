@@ -165,11 +165,27 @@ export default function Toolbar(props: {
     return [...rest.slice(0, d.into), d.id, ...rest.slice(d.into)];
   };
 
+  /** A group's tools shown as icons, less any that stand on the bar alone. */
+  const leadsOf = (g: BarItem) => {
+    const chosen = g.lead?.() ?? [];
+    return (g.members?.() ?? []).filter(
+      (m) => !m.absent?.() && chosen.includes(m.id) && !props.layout.order.includes(m.id),
+    );
+  };
+
   /**
-   * What can be added: everything not already in the bar on its own. A
-   * group's tools are here too, so any one of them can stand alone.
+   * What can be added: everything not already showing in the bar, alone or as
+   * a group's icon. A group's other tools are here too, so any one of them can
+   * stand alone.
    */
-  const spare = () => props.items.filter((i) => !props.layout.order.includes(i.id));
+  const spare = () => {
+    const shownIds = new Set(props.layout.order);
+    for (const id of props.layout.order) {
+      const g = isGroup(id) ? byId(id) : undefined;
+      if (g) for (const m of leadsOf(g)) shownIds.add(m.id);
+    }
+    return props.items.filter((i) => !shownIds.has(i.id));
+  };
 
   /** Every group swapped for all of its tools, side by side: no groups at all. */
   function flatten() {
@@ -214,10 +230,7 @@ export default function Toolbar(props: {
 
   /** The group cell: its lead icons, then the arrow that opens the rest. */
   const Group = (p: { item: BarItem }) => {
-    const leads = () => {
-      const chosen = p.item.lead?.() ?? [];
-      return (p.item.members?.() ?? []).filter((m) => !m.absent?.() && chosen.includes(m.id));
-    };
+    const leads = () => leadsOf(p.item);
     const open = () => openGroup()?.id === p.item.id;
     const Glyph = () => {
       const I = iconOf(p.item);
