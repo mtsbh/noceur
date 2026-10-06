@@ -2249,15 +2249,34 @@ export default function App() {
                 const group = barItems().find((i) => i.id === m().group);
                 if (!group?.members) return [];
                 const lead = group.lead?.() ?? [];
+                const out = barLayout().out ?? [];
+                const tools = group.members().filter((t) => !t.absent?.());
+                const kept = tools.filter((t) => !out.includes(t.id));
+                const gone = tools.filter((t) => out.includes(t.id));
                 return [
-                  ...group.members()
-                    .filter((t) => !t.absent?.())
-                    .map<MenuItem>((t) => ({
-                      kind: "item",
-                      label: t.label,
-                      checked: lead.includes(t.id),
-                      run: () => group.onLead?.(t.id),
-                    })),
+                  ...kept.map<MenuItem>((t) => ({
+                    kind: "item",
+                    label: t.label,
+                    checked: lead.includes(t.id),
+                    run: () => group.onLead?.(t.id),
+                  })),
+                  // Taken out of the group; one click puts it back in the list.
+                  ...(gone.length
+                    ? [
+                        { kind: "header", label: "Removed" } as MenuItem,
+                        ...gone.map<MenuItem>((t) => ({
+                          kind: "item",
+                          label: `Bring back ${t.label}`,
+                          run: () => {
+                            const layout = barLayout();
+                            commitSettings({
+                              ...settings(),
+                              bar: { ...layout, out: (layout.out ?? []).filter((x) => x !== t.id) },
+                            });
+                          },
+                        })),
+                      ]
+                    : []),
                   { kind: "separator" } as MenuItem,
                 ];
               })(),

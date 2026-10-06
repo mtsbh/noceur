@@ -220,6 +220,9 @@ export type BarLayout = {
   v?: number;
   /** Per group, the tools shown as icons beside its arrow. Absent = default. */
   lead?: Record<string, string[]>;
+  /** Tools taken out of their group: no icon, not in its list. The right-click
+   * menu on the files still has them. */
+  out?: string[];
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -410,6 +413,7 @@ function readBar(raw: unknown): BarLayout | null {
     icons,
     v: typeof b.v === "number" ? b.v : undefined,
     lead,
+    out: Array.isArray(b.out) ? strings(b.out) : undefined,
   };
 }
 

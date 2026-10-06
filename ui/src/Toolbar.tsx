@@ -72,6 +72,9 @@ export const DEFAULT_LEAD: Record<GroupId, string[]> = {
   send: [],
 };
 
+/** Tools that start in the tray: they belong in the right-click menu. */
+export const DEFAULT_OUT = ["paste", "newfolder"];
+
 /** Bumped when the default arrangement changes enough that old ones are dropped. */
 export const BAR_VERSION = 2;
 export const isGroup = (id: string) => id.startsWith("group:");
@@ -119,6 +122,7 @@ export function resolveBar(
     hidden,
     icons: stored?.icons ?? {},
     lead: current?.lead ?? {},
+    out: current?.out ?? DEFAULT_OUT,
   };
 }
 
@@ -168,23 +172,29 @@ export default function Toolbar(props: {
   /** A group's tools shown as icons, less any that stand on the bar alone. */
   const leadsOf = (g: BarItem) => {
     const chosen = g.lead?.() ?? [];
+    return inGroup(g).filter((m) => chosen.includes(m.id) && !props.layout.order.includes(m.id));
+  };
+
+  /**
+   * A group's tools, less those taken out to the tray or standing on the bar
+   * alone: every tool is in one place at a time, as in Firefox's customising.
+   */
+  const inGroup = (g: BarItem) => {
+    const out = props.layout.out ?? [];
     return (g.members?.() ?? []).filter(
-      (m) => !m.absent?.() && chosen.includes(m.id) && !props.layout.order.includes(m.id),
+      (m) => !m.absent?.() && !out.includes(m.id) && !props.layout.order.includes(m.id),
     );
   };
 
   /**
-   * What can be added: everything not already showing in the bar, alone or as
-   * a group's icon. A group's other tools are here too, so any one of them can
-   * stand alone.
+   * The tray: what is in neither the bar nor a group. A tool still in its group
+   * lives there, not here.
    */
   const spare = () => {
-    const shownIds = new Set(props.layout.order);
-    for (const id of props.layout.order) {
-      const g = isGroup(id) ? byId(id) : undefined;
-      if (g) for (const m of leadsOf(g)) shownIds.add(m.id);
-    }
-    return props.items.filter((i) => !shownIds.has(i.id));
+    const out = props.layout.out ?? [];
+    return props.items.filter(
+      (i) => !props.layout.order.includes(i.id) && (!i.group || out.includes(i.id)),
+    );
   };
 
   /** Every group swapped for all of its tools, side by side: no groups at all. */
@@ -192,10 +202,7 @@ export default function Toolbar(props: {
     const order = props.layout.order.flatMap((id) => {
       const g = isGroup(id) ? byId(id) : undefined;
       if (!g?.members) return [id];
-      return g
-        .members()
-        .map((m) => m.id)
-        .filter((m) => !props.layout.order.includes(m));
+      return inGroup(g).map((m) => m.id);
     });
     props.onLayout({ ...props.layout, order });
   }
@@ -242,7 +249,14 @@ export default function Toolbar(props: {
           {(m) => {
             const I = iconOf(m);
             return (
-              <span class="bargroupicon">
+              <span
+                class="bargroupicon"
+                onPointerDown={(e) => {
+                  if (!props.editing) return;
+                  e.stopPropagation();
+                  begin(e, m.id, true);
+                }}
+              >
                 <button
                   class={`toolbtn ${m.off?.() ? "off" : ""} ${m.on?.() ? "on" : ""}`}
                   data-tip={m.label}
@@ -262,7 +276,7 @@ export default function Toolbar(props: {
                     class="barx one"
                     aria-label={`Remove ${m.label} icon`}
                     onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => p.item.onLead?.(m.id)}
+                    onClick={() => remove(m.id)}
                   >
                     <CloseIcon />
                   </button>
@@ -311,7 +325,7 @@ export default function Toolbar(props: {
         onPointerLeave={closeSoon}
       >
         <div class="bardrophead">{group()?.label}</div>
-        <For each={(group()?.members?.() ?? []).filter((m) => !m.absent?.())}>
+        <For each={group() ? inGroup(group()!) : []}>
           {(m) => {
             const I = iconOf(m);
             return (
@@ -346,10 +360,25 @@ export default function Toolbar(props: {
                 >
                   ✓
                 </button>
+                <button
+                  class="bardroppin bardropout"
+                  data-tip="Remove from this list"
+                  data-tip-at="end"
+                  aria-label={`Remove ${m.label} from this list`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(m.id);
+                  }}
+                >
+                  <CloseIcon />
+                </button>
               </div>
             );
           }}
         </For>
+        <Show when={group() && !inGroup(group()!).length}>
+          <div class="bardropempty">Empty. Customize the toolbar to drag tools back in.</div>
+        </Show>
       </div>
     );
   };
@@ -372,6 +401,28 @@ export default function Toolbar(props: {
     return into;
   }
 
+  /** The group cell under the pointer, when it is the dragged tool's own. */
+  function groupAt(x: number, y: number, id: string): BarItem | undefined {
+    const tool = byId(id);
+    if (!tool?.group) return undefined;
+    const g = byId(`group:${tool.group}`);
+    const el = g && cells.get(g.id);
+    if (!el?.isConnected || !props.layout.order.includes(g!.id)) return undefined;
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top - 6 && y <= r.bottom + 6 ? g : undefined;
+  }
+
+  /** Puts a tool back in its group, as one of its icons. */
+  function backInto(g: BarItem, id: string) {
+    props.onLayout({
+      ...props.layout,
+      order: props.layout.order.filter((o) => o !== id),
+      hidden: props.layout.hidden.filter((h) => h !== id),
+      out: (props.layout.out ?? []).filter((o) => o !== id),
+    });
+    if (!(g.lead?.() ?? []).includes(id)) g.onLead?.(id);
+  }
+
   function begin(e: PointerEvent, id: string, fromBar: boolean) {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -392,8 +443,11 @@ export default function Toolbar(props: {
       const d = drag();
       setDrag(null);
       if (!d) return;
-      if (!d.moved) return click(id, fromBar, ev);
+      // A press on a group's icon is not a click on a bar cell.
+      if (!d.moved) return fromBar && !props.layout.order.includes(id) ? undefined : click(id, fromBar, ev);
       const hidden = props.layout.hidden.filter((h) => h !== id);
+      const home = groupAt(ev.clientX, ev.clientY, id);
+      if (home) return backInto(home, id);
       if (d.into !== null) {
         const rest = props.layout.order.filter((o) => o !== id);
         const order = [...rest.slice(0, d.into), id, ...rest.slice(d.into)];
@@ -428,8 +482,11 @@ export default function Toolbar(props: {
   }
 
   function remove(id: string) {
+    const out = props.layout.out ?? [];
     props.onLayout({
       ...props.layout,
+      // A grouped tool taken off goes to the tray, not back into its group.
+      out: byId(id)?.group && !out.includes(id) ? [...out, id] : out,
       order: props.layout.order.filter((o) => o !== id),
       hidden: isSpacer(id) || props.layout.hidden.includes(id)
         ? props.layout.hidden
@@ -600,7 +657,7 @@ export default function Toolbar(props: {
             </For>
           </div>
           <div class="bartrayfoot">
-            <span class="barhint">Drag to arrange · click to change icon · × removes one</span>
+            <span class="barhint">Drag anything to or from the tray · drop a tool on its group to put it back · click to change icon</span>
             <button
               class="btn"
               onClick={flatten}

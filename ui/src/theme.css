@@ -5312,6 +5312,18 @@ button.sidelabel {
   color: var(--fg) !important;
   background: var(--panel);
 }
+.bardropout svg {
+  width: 9px;
+  height: 9px;
+}
+.bardropout:hover {
+  color: var(--bad, #e5484d) !important;
+}
+.bardropempty {
+  padding: 8px 10px;
+  color: var(--fg4);
+  font-size: 11px;
+}
 .bardroppin.on,
 .bardropitem:hover .bardroppin.on {
   color: var(--acc);
@@ -5418,6 +5430,14 @@ button.sidelabel {
 .bargroupicon {
   position: relative;
   display: flex;
+}
+/* Each group icon drags on its own while customising. */
+.toolbar.editing .bargroupicon {
+  pointer-events: auto;
+  cursor: grab;
+}
+.toolbar.editing .bargroupicon > .toolbtn {
+  pointer-events: none;
 }
 .toolbar.editing .bargroupicon .barx.one {
   pointer-events: auto;
