@@ -892,7 +892,11 @@ mod tests {
             };
             let done = convert_one(&ff, &src, 1, &opts);
             assert!(done.ok, "{format:?}: {}", done.message);
-            assert!(!done.message.contains("not copied"), "{format:?}: {}", done.message);
+            assert!(
+                !done.message.contains("not copied"),
+                "{format:?}: {}",
+                done.message
+            );
             assert_eq!(done.verified, Some(true), "{format:?}");
             assert_eq!(
                 probe(&ff, &out).unwrap().depth,

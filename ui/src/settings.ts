@@ -216,6 +216,10 @@ export type BarLayout = {
   hidden: string[];
   /** Icon chosen per item, by name from `BAR_ICONS`. */
   icons: Record<string, string>;
+  /** Which arrangement this is; one from before the groups is replaced. */
+  v?: number;
+  /** Per group, the tools shown as icons beside its arrow. Absent = default. */
+  lead?: Record<string, string[]>;
 };
 
 /** A group added by the "add" button, before it is named. */
@@ -294,7 +298,7 @@ export const DEFAULTS: Settings = {
 
 const KEY = "noceur.settings";
 
-const SHAPES: WaveShape[] = ["filled", "bars"];
+const SHAPES: WaveShape[] = ["filled", "bars", "slider"];
 const COLOURS: WaveColour[] = ["rgb", "threeband", "blue", "accent"];
 const METERS: MeterMode[] = ["off", "vu", "needle", "scope", "vector", "spectrum"];
 
@@ -396,7 +400,17 @@ function readBar(raw: unknown): BarLayout | null {
   if (b.icons && typeof b.icons === "object") {
     for (const [k, v] of Object.entries(b.icons)) if (typeof v === "string") icons[k] = v;
   }
-  return { order: strings(b.order), hidden: strings(b.hidden), icons };
+  const lead: Record<string, string[]> = {};
+  if (b.lead && typeof b.lead === "object") {
+    for (const [k, v] of Object.entries(b.lead)) lead[k] = strings(v);
+  }
+  return {
+    order: strings(b.order),
+    hidden: strings(b.hidden),
+    icons,
+    v: typeof b.v === "number" ? b.v : undefined,
+    lead,
+  };
 }
 
 /** Whether a stored font name is one this build offers. */

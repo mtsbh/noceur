@@ -3,6 +3,8 @@ import { createEffect, createSignal, onCleanup, For, Show, type JSX } from "soli
 /** One line of a menu: an action, or a rule between groups. */
 export type MenuItem =
   | { kind: "separator" }
+  /** A rule with a small name on it, for a menu sorted into the bar's groups. */
+  | { kind: "header"; label: string }
   | {
       kind: "item";
       label: string;
@@ -108,7 +110,13 @@ function Items(props: { items: MenuItem[]; iconned: boolean; onClose: () => void
         {(item) => (
           <Show
             when={item.kind === "item" ? item : null}
-            fallback={<div class="ctxsep" />}
+            fallback={
+              item.kind === "header" ? (
+                <div class="ctxhead">{item.label}</div>
+              ) : (
+                <div class="ctxsep" />
+              )
+            }
           >
             {(entry) => (
               <div

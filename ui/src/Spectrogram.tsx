@@ -165,6 +165,9 @@ export default function Spectrogram(props: {
 
     const marks: number[] = [];
     for (let at = 0; at < total; at += step) marks.push(at);
+    // The end is labelled too, but a round mark close to it gives way: 8:00
+    // and 8:08 side by side are one unreadable smudge.
+    if (marks.length > 1 && total - marks[marks.length - 1] < step * 0.35) marks.pop();
     marks.push(total);
     return marks;
   };
@@ -281,8 +284,10 @@ export default function Spectrogram(props: {
   return (
     <div class={`spek ${props.compact ? "compact" : ""}`}>
       <Show when={!props.compact}>
+        {/* Without the drive letter: it says which disk, which the tree
+            already shows, and the path reads cleaner from the first folder. */}
         <div class="spekhead" title={props.name}>
-          {props.name}
+          {props.name.replace(/^[a-z]:(?=[\\/])/i, "")}
         </div>
       </Show>
 

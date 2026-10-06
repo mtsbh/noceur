@@ -87,18 +87,69 @@
   --meter-hi: #f0607a;
 }
 
-/* Phosphor: a green CRT, for the booth. */
-:root[data-theme="phosphor"] {
-  --bg: #040705;
-  --panel: #060a07;
-  --raise: #0b120d;
-  --fg-rgb: 196, 242, 206;
-  --acc-rgb: 64, 240, 124;
-  --qual-good: #40f07c;
-  --qual-meh: #7fa88a;
-  --meter-lo: #40f07c;
-  --meter-mid: #d8f040;
-  --meter-hi: #f0643e;
+/* Obsidian: near-true black, warm white type, a champagne-gold light. The
+   quietest of the dark themes; the gold is kept low in saturation so it reads
+   as metal rather than as yellow. */
+:root[data-theme="obsidian"] {
+  --bg: #070708;
+  --panel: #0b0b0d;
+  --raise: #121214;
+  --fg-rgb: 236, 232, 224;
+  --acc-rgb: 212, 180, 131;
+  --hair: rgba(var(--fg-rgb), 0.06);
+  --hair2: rgba(var(--fg-rgb), 0.105);
+  --acc-fill: rgba(var(--acc-rgb), 0.13);
+  --acc-line: rgba(var(--acc-rgb), 0.4);
+  --qual-good: #9cc48a;
+  --qual-bad: #d9766a;
+  --meter-lo: #9cc48a;
+  --meter-mid: #d4b483;
+  --meter-hi: #d9766a;
+}
+
+/* Ember: warm charcoal and a vermilion light, like a valve amp's glow. */
+:root[data-theme="ember"] {
+  --bg: #0d0a09;
+  --panel: #120e0c;
+  --raise: #1a1411;
+  --fg-rgb: 240, 230, 222;
+  --acc-rgb: 255, 106, 61;
+  --acc-fill: rgba(var(--acc-rgb), 0.14);
+  --acc-line: rgba(var(--acc-rgb), 0.4);
+  --qual-good: #9fc77e;
+  --qual-bad: #f0524f;
+  --meter-lo: #9fc77e;
+  --meter-mid: #f2b45a;
+  --meter-hi: #ff5a4a;
+}
+
+/* Iris: ink-indigo black and a soft violet light. */
+:root[data-theme="iris"] {
+  --bg: #0b0a12;
+  --panel: #0f0e19;
+  --raise: #161423;
+  --fg-rgb: 232, 230, 246;
+  --acc-rgb: 157, 140, 255;
+  --hair: rgba(var(--fg-rgb), 0.06);
+  --hair2: rgba(var(--fg-rgb), 0.11);
+  --meter-lo: #6fd3b0;
+  --meter-mid: #e8c66a;
+  --meter-hi: #f06a8a;
+}
+
+/* Abyss: deep-water teal black and an aqua light. */
+:root[data-theme="abyss"] {
+  --bg: #050b0c;
+  --panel: #081012;
+  --raise: #0d181b;
+  --fg-rgb: 220, 236, 236;
+  --acc-rgb: 70, 214, 196;
+  --acc-fill: rgba(var(--acc-rgb), 0.13);
+  --acc-line: rgba(var(--acc-rgb), 0.38);
+  --qual-good: #6fd39a;
+  --meter-lo: #46d6c4;
+  --meter-mid: #e6c86a;
+  --meter-hi: #ef6a6a;
 }
 
 /* Graphite: neutral greys, no colour at all but the accent. */
@@ -134,6 +185,29 @@
   --qual-bad: #c0392b;
   --qual-meh: #6b7075;
   --meter-lo: #3f9a3a;
+  --meter-mid: #c8961c;
+  --meter-hi: #c8412f;
+  --key-l: 40%;
+}
+
+/* Porcelain: the cool light theme - blue-white, slate ink, an indigo light. */
+:root[data-theme="porcelain"] {
+  --bg: #f6f7f9;
+  --panel: #eef0f4;
+  --raise: #e4e7ed;
+  --fg-rgb: 20, 24, 33;
+  --fg2: rgba(var(--fg-rgb), 0.62);
+  --fg3: rgba(var(--fg-rgb), 0.4);
+  --fg4: rgba(var(--fg-rgb), 0.18);
+  --hair: rgba(var(--fg-rgb), 0.08);
+  --hair2: rgba(var(--fg-rgb), 0.14);
+  --acc-rgb: 59, 91, 219;
+  --acc-fill: rgba(var(--acc-rgb), 0.11);
+  --acc-line: rgba(var(--acc-rgb), 0.45);
+  --qual-good: #2f8a4a;
+  --qual-bad: #c8352f;
+  --qual-meh: #687080;
+  --meter-lo: #2f9a5a;
   --meter-mid: #c8961c;
   --meter-hi: #c8412f;
   --key-l: 40%;
@@ -1200,6 +1274,90 @@ body.resizing * {
   width: 100%;
   height: 100%;
 }
+
+/* The slider. A hairline at rest that thickens under the pointer, an accent
+   fill with a soft glow at its leading edge, and a thumb that only rises when
+   it can be used — at rest the line alone says where the track is. */
+.tslider {
+  position: absolute;
+  inset: 0;
+  --rail: 4px;
+}
+.tbar.slider:hover .tslider,
+.tslider.drag {
+  --rail: 6px;
+}
+.tsrail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--rail);
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--fg4);
+  overflow: hidden;
+  transition: height 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tsghost,
+.tsfill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+}
+.tsghost {
+  background: var(--fg4);
+}
+.tsfill {
+  background: linear-gradient(90deg, rgba(var(--acc-rgb), 0.55), var(--acc));
+  box-shadow: 0 0 10px rgba(var(--acc-rgb), 0.45);
+}
+.tsthumb {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin-left: -6.5px;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow:
+    0 0 0 3px rgba(var(--acc-rgb), 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+  transform: translateY(-50%) scale(0);
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.tbar.slider:hover .tsthumb,
+.tslider.drag .tsthumb {
+  transform: translateY(-50%) scale(1);
+}
+.tslider.drag .tsthumb {
+  box-shadow:
+    0 0 0 5px rgba(var(--acc-rgb), 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.tslider.off .tsthumb,
+.tslider.off .tsfill {
+  display: none;
+}
+.tstip {
+  position: absolute;
+  bottom: calc(50% + 10px);
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--hair2);
+  background: var(--raise);
+  color: var(--fg);
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
 .terror {
   color: var(--acc);
   font-size: 10px;
@@ -1601,7 +1759,15 @@ body.resizing * {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
+}
+.setrow:last-child {
+  margin-bottom: 0;
+}
+/* A hint or link under one row is that row's footnote: tight above, a full
+   gap below before the next row starts. */
+.sethint + .setrow {
+  margin-top: 16px;
 }
 .setlabel {
   flex: none;
@@ -3912,32 +4078,98 @@ body.resizing-v * {
 }
 
 /* ── Theme picker ────────────────────────────────────────────────────────── */
-.themes {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 5px;
+/* The live dropdown, for theme and font. The list opens over what is below it
+   so the window behind keeps its layout while it is being repainted. */
+.pick {
+  position: relative;
+  flex: 0 1 240px;
+  min-width: 0;
 }
-.themebtn {
+.pickcur,
+.pickopt {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 7px;
-  border: 1px solid var(--hair2);
-  border-radius: 5px;
-  background: none;
-  color: var(--fg2);
+  width: 100%;
+  padding: 5px 9px;
   font: inherit;
-  cursor: pointer;
   text-align: left;
 }
-.themebtn:hover {
+.pickcur {
+  height: 28px;
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.pickcur:hover {
   background: var(--raise);
+}
+.pickcur.open,
+.pickcur:focus-visible {
+  border-color: var(--acc-line);
+  outline: none;
+}
+.pickname {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picknote {
+  color: var(--fg3);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.pickcaret {
+  width: 10px;
+  height: 6px;
+  margin-left: auto;
+  flex: none;
+  color: var(--fg3);
+  transition: transform 0.15s;
+}
+.pickcur.open .pickcaret {
+  transform: rotate(180deg);
+}
+.picklist {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  top: calc(100% + 4px);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: var(--raise);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38), 0 2px 6px rgba(0, 0, 0, 0.22);
+  animation: pickin 0.12s ease-out;
+}
+@keyframes pickin {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+.pickopt {
+  border-radius: 5px;
+  color: var(--fg2);
+  cursor: pointer;
+}
+.pickopt.at {
+  background: var(--acc-fill);
   color: var(--fg);
 }
-.themebtn.on {
-  border-color: var(--acc-line);
-  background: var(--acc-fill);
+.picktick {
+  margin-left: auto;
+  color: transparent;
+  font-size: 11px;
+}
+.picktick.on {
   color: var(--acc);
 }
 /* Background, panel, text and accent, left to right, on the theme's ground. */
@@ -4966,4 +5198,233 @@ button.sidelabel {
 }
 .sitebtn.siteedit:hover {
   color: var(--fg);
+}
+/* ── Toolbar groups ─────────────────────────────────────────────────────────
+   A group is its chosen icons and an arrow, drawn as one unit: the arrow sits
+   tight against them so the eye reads "these, and more like them". Hovering
+   the arrow opens the rest. */
+.bargroup {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  border-radius: 5px;
+}
+.bargroupbtn {
+  width: auto;
+  min-width: 24px;
+  gap: 3px;
+  padding: 0 4px;
+}
+.bargroupbtn.caretonly {
+  min-width: 14px;
+  padding: 0 2px;
+}
+.bargroupcaret {
+  width: 8px;
+  height: 5px;
+  opacity: 0.7;
+  transition: transform 0.15s;
+}
+.bargroup.open .bargroupbtn {
+  background: var(--raise);
+  color: var(--fg);
+}
+.bargroup.open .bargroupcaret {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+.bardrop {
+  position: fixed;
+  z-index: 13;
+  min-width: 230px;
+  padding: 4px;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
+  animation: pickin 0.12s ease-out;
+}
+.bardrophead {
+  padding: 5px 10px 4px;
+  color: var(--fg3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.bardropitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 10px;
+  border-radius: 5px;
+  color: var(--fg2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.bardropitem:hover {
+  background: var(--acc-fill);
+  color: var(--fg);
+}
+.bardropitem.off {
+  color: var(--fg4);
+  cursor: default;
+}
+.bardropitem.off:hover {
+  background: rgba(var(--fg-rgb), 0.03);
+}
+.bardropicon {
+  display: flex;
+  width: 16px;
+  justify-content: center;
+  color: var(--fg3);
+}
+.bardropicon svg {
+  width: 15px;
+  height: 15px;
+}
+.bardropitem:hover .bardropicon {
+  color: var(--acc);
+}
+.bardroplabel {
+  flex: 1;
+  white-space: nowrap;
+}
+/* The "show as icon" tick. Faint until hovered, so the list reads as actions
+   first; solid accent when the tool is in the bar. */
+.bardroppin {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+.bardropitem:hover .bardroppin {
+  color: var(--fg4);
+  border-color: var(--hair2);
+}
+.bardroppin:hover {
+  color: var(--fg) !important;
+  background: var(--panel);
+}
+.bardroppin.on,
+.bardropitem:hover .bardroppin.on {
+  color: var(--acc);
+  border-color: transparent;
+}
+
+/* ── Command palette ───────────────────────────────────────────────────────── */
+.palette {
+  position: fixed;
+  z-index: 11;
+  top: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, 86vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--raise);
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  animation: pickin 0.12s ease-out;
+}
+.palinput {
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--hair2);
+  background: none;
+  color: var(--fg);
+  font-size: 14px;
+  outline: none;
+}
+.palinput::placeholder {
+  color: var(--fg3);
+}
+.pallist {
+  max-height: min(420px, 56vh);
+  overflow-y: auto;
+  padding: 4px 6px 6px;
+}
+.palsection {
+  padding: 8px 10px 3px;
+  color: var(--fg3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.palitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--fg2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.palitem.at {
+  background: var(--acc-fill);
+  color: var(--fg);
+}
+.palitem.off {
+  color: var(--fg4);
+}
+.palicon {
+  display: flex;
+  width: 16px;
+  justify-content: center;
+  color: var(--fg3);
+}
+.palitem.at .palicon {
+  color: var(--acc);
+}
+.palicon svg,
+.palicon img {
+  width: 15px;
+  height: 15px;
+}
+.palnote {
+  margin-left: auto;
+  color: var(--fg4);
+  font-size: 10.5px;
+}
+.palempty {
+  padding: 18px;
+  text-align: center;
+  color: var(--fg3);
+}
+
+/* A group's name in a context menu: a hairline, then the name, small and grey,
+   like the headers of the toolbar's lists. */
+.ctxhead {
+  margin-top: 4px;
+  padding: 7px 14px 3px;
+  border-top: 1px solid var(--hair);
+  color: var(--fg3);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* One icon inside a group, with its own × while customising. */
+.bargroupicon {
+  position: relative;
+  display: flex;
+}
+.toolbar.editing .bargroupicon .barx.one {
+  pointer-events: auto;
+  top: -9px;
+  right: -5px;
+}
+.toolbar.editing .bargroupicon:hover .barx.one,
+.toolbar.editing .bargroup:hover .barx.one {
+  display: flex;
 }

@@ -9,7 +9,8 @@ const MID = 2;
 const HIGH = 3;
 
 /** How the waveform is drawn. Persisted; chosen in Settings. */
-export type WaveShape = "filled" | "bars";
+/** `slider` draws no waveform at all — see `SeekSlider`. */
+export type WaveShape = "filled" | "bars" | "slider";
 export type WaveColour = "rgb" | "threeband" | "blue" | "accent";
 export type WaveStyle = { shape: WaveShape; colour: WaveColour };
 

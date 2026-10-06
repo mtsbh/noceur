@@ -238,10 +238,14 @@ pub fn index_folders(state: State<'_, AppState>, roots: Vec<String>) {
                 continue;
             }
             let Ok(db) = db.lock() else { return };
-            let Ok(volume_id) = volume::for_path(&db, &path) else { continue };
+            let Ok(volume_id) = volume::for_path(&db, &path) else {
+                continue;
+            };
             // A folder that cannot be read - gone, or no permission - is skipped
             // rather than ending the walk.
-            let Ok(dir_id) = noceur_index::scan_dir(&db, volume_id, &path) else { continue };
+            let Ok(dir_id) = noceur_index::scan_dir(&db, volume_id, &path) else {
+                continue;
+            };
             if let Ok(names) = noceur_index::subdirs(&db, dir_id) {
                 stack.extend(names.into_iter().map(|n| path.join(n)));
             }

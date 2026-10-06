@@ -58,13 +58,18 @@ pub struct Settings {
     pub max: f64,
 }
 
+/// The one tempo range: wide enough for downtempo and drum & bass alike, so it
+/// is not offered as a choice. Stored ranges from before are read and ignored.
+pub const TEMPO_MIN: f64 = 70.0;
+pub const TEMPO_MAX: f64 = 200.0;
+
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
             enabled: false,
             mode: Mode::Fill,
-            min: 70.0,
-            max: 180.0,
+            min: TEMPO_MIN,
+            max: TEMPO_MAX,
         }
     }
 }
@@ -73,8 +78,8 @@ impl Settings {
     pub fn method(&self) -> Method {
         Method {
             version: VERSION,
-            range_min: self.min,
-            range_max: self.max,
+            range_min: TEMPO_MIN,
+            range_max: TEMPO_MAX,
         }
     }
 }
@@ -505,16 +510,9 @@ pub fn set_analysis_settings(
     state: State<'_, AppState>,
     settings: Settings,
 ) -> Result<Settings, String> {
-    let (min, max) = (
-        settings.min.clamp(40.0, 250.0),
-        settings.max.clamp(40.0, 250.0),
-    );
-    if max <= min * 1.5 {
-        return Err("the range must span at least half an octave".into());
-    }
     let settings = Settings {
-        min,
-        max,
+        min: TEMPO_MIN,
+        max: TEMPO_MAX,
         ..settings
     };
     let path = crate::config::Config::default_path();

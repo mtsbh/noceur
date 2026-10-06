@@ -38,7 +38,43 @@ export type BarItem = {
   /** Told when the bar adds or removes it, so that switch can follow. */
   onToggle?: (inBar: boolean) => void;
   run?: (e: MouseEvent & { currentTarget: HTMLElement }) => void;
+  /** The group it lives in. Grouped items are reached through their group. */
+  group?: GroupId;
+  /** A group cell: everything in it, in the order its list shows them. */
+  members?: () => BarItem[];
+  /** A group cell: the members drawn as icons beside its arrow. */
+  lead?: () => string[];
+  /** A group cell: shows or hides one member as an icon. */
+  onLead?: (id: string) => void;
 };
+
+export type GroupId = "tags" | "fix" | "analyse" | "files" | "send";
+
+/**
+ * The five groups the tools are sorted into, in bar order. What a track says,
+ * what is done to its name, what is measured, what happens to the file, and
+ * where it goes next.
+ */
+export const GROUPS: { id: GroupId; label: string }[] = [
+  { id: "tags", label: "Tags" },
+  { id: "fix", label: "Fix" },
+  { id: "analyse", label: "Analyse" },
+  { id: "files", label: "Files" },
+  { id: "send", label: "Send" },
+];
+
+/** What each group shows as icons before anyone has chosen. */
+export const DEFAULT_LEAD: Record<GroupId, string[]> = {
+  tags: ["tags", "quick"],
+  fix: ["rename"],
+  analyse: ["quality", "bpm"],
+  files: ["convert"],
+  send: [],
+};
+
+/** Bumped when the default arrangement changes enough that old ones are dropped. */
+export const BAR_VERSION = 2;
+export const isGroup = (id: string) => id.startsWith("group:");
 
 type SpacerKind = "sep" | "space" | "flex";
 
@@ -64,16 +100,26 @@ export function resolveBar(
   defaults: string[],
 ): BarLayout {
   const known = new Map(items.map((i) => [i.id, i]));
-  const order = (stored?.order ?? defaults).filter(
+  // An arrangement from before the groups is put back to the default one: its
+  // order is a list of single tools that now live inside groups.
+  const current = stored && stored.v === BAR_VERSION ? stored : null;
+  const order = (current?.order ?? defaults).filter(
     (id) => isSpacer(id) || (known.has(id) && known.get(id)!.forced !== false),
   );
-  const hidden = stored?.hidden ?? [];
+  const hidden = current?.hidden ?? [];
   for (const item of items) {
-    if (order.includes(item.id)) continue;
+    // Grouped tools are reached through their group, never appended alone.
+    if (order.includes(item.id) || item.group) continue;
     const wanted = item.forced ?? (item.auto !== false && !hidden.includes(item.id));
     if (wanted) order.push(item.id);
   }
-  return { order, hidden, icons: stored?.icons ?? {} };
+  return {
+    v: BAR_VERSION,
+    order,
+    hidden,
+    icons: stored?.icons ?? {},
+    lead: current?.lead ?? {},
+  };
 }
 
 /** Where a drag is and what it would do if let go now. */
@@ -119,8 +165,181 @@ export default function Toolbar(props: {
     return [...rest.slice(0, d.into), d.id, ...rest.slice(d.into)];
   };
 
-  /** What can be added: everything not already in the bar. */
+  /**
+   * What can be added: everything not already in the bar on its own. A
+   * group's tools are here too, so any one of them can stand alone.
+   */
   const spare = () => props.items.filter((i) => !props.layout.order.includes(i.id));
+
+  /** Every group swapped for all of its tools, side by side: no groups at all. */
+  function flatten() {
+    const order = props.layout.order.flatMap((id) => {
+      const g = isGroup(id) ? byId(id) : undefined;
+      if (!g?.members) return [id];
+      return g
+        .members()
+        .map((m) => m.id)
+        .filter((m) => !props.layout.order.includes(m));
+    });
+    props.onLayout({ ...props.layout, order });
+  }
+
+  /* ── Group dropdowns ─────────────────────────────────────────────────── */
+
+  const [openGroup, setOpenGroup] = createSignal<{ id: string; x: number; y: number } | null>(null);
+  let openTimer: number | undefined;
+  let closeTimer: number | undefined;
+
+  /** Opens a group's list under its arrow; hover waits a beat so passing over does not. */
+  function openAt(id: string, el: HTMLElement, delay: number) {
+    clearTimeout(closeTimer);
+    clearTimeout(openTimer);
+    if (props.editing) return;
+    openTimer = window.setTimeout(() => {
+      const r = el.closest(".bargroup")!.getBoundingClientRect();
+      setOpenGroup({ id, x: Math.min(r.left, window.innerWidth - 250), y: r.bottom + 4 });
+    }, delay);
+  }
+  function closeSoon() {
+    clearTimeout(openTimer);
+    closeTimer = window.setTimeout(() => setOpenGroup(null), 220);
+  }
+  function stay() {
+    clearTimeout(closeTimer);
+  }
+  onCleanup(() => {
+    clearTimeout(openTimer);
+    clearTimeout(closeTimer);
+  });
+
+  /** The group cell: its lead icons, then the arrow that opens the rest. */
+  const Group = (p: { item: BarItem }) => {
+    const leads = () => {
+      const chosen = p.item.lead?.() ?? [];
+      return (p.item.members?.() ?? []).filter((m) => !m.absent?.() && chosen.includes(m.id));
+    };
+    const open = () => openGroup()?.id === p.item.id;
+    const Glyph = () => {
+      const I = iconOf(p.item);
+      return <I />;
+    };
+    return (
+      <div class={`bargroup ${open() ? "open" : ""}`} data-group={p.item.id}>
+        <For each={leads()}>
+          {(m) => {
+            const I = iconOf(m);
+            return (
+              <span class="bargroupicon">
+                <button
+                  class={`toolbtn ${m.off?.() ? "off" : ""} ${m.on?.() ? "on" : ""}`}
+                  data-tip={m.label}
+                  aria-label={m.label}
+                  aria-disabled={m.off?.() ?? false}
+                  onClick={(e) => {
+                    if (props.editing || m.off?.()) return;
+                    m.run?.(e);
+                  }}
+                >
+                  <I />
+                </button>
+                {/* While customising, each icon comes off on its own; the
+                    group's own × takes the whole group. */}
+                <Show when={props.editing}>
+                  <button
+                    class="barx one"
+                    aria-label={`Remove ${m.label} icon`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => p.item.onLead?.(m.id)}
+                  >
+                    <CloseIcon />
+                  </button>
+                </Show>
+              </span>
+            );
+          }}
+        </For>
+        {/* With no icon chosen the group shows its own, so it is never just
+            an arrow on its own. */}
+        <button
+          class={`toolbtn bargroupbtn ${leads().length ? "caretonly" : ""}`}
+          data-tip={open() ? undefined : p.item.label}
+          aria-label={`${p.item.label} actions`}
+          aria-haspopup="menu"
+          aria-expanded={open()}
+          onPointerEnter={(e) => openAt(p.item.id, e.currentTarget, 140)}
+          onPointerLeave={closeSoon}
+          onClick={(e) => {
+            if (props.editing) return;
+            if (open()) setOpenGroup(null);
+            else openAt(p.item.id, e.currentTarget, 0);
+          }}
+        >
+          <Show when={!leads().length}>
+            <Glyph />
+          </Show>
+          <svg class="bargroupcaret" viewBox="0 0 10 6" aria-hidden="true">
+            <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" />
+          </svg>
+        </button>
+      </div>
+    );
+  };
+
+  /** The open group's list: every tool in it, with a tick for "show as icon". */
+  const Drop = (p: { at: { id: string; x: number; y: number } }) => {
+    const group = () => byId(p.at.id);
+    const lead = () => group()?.lead?.() ?? [];
+    return (
+      <div
+        class="bardrop"
+        role="menu"
+        style={{ left: `${p.at.x}px`, top: `${p.at.y}px` }}
+        onPointerEnter={stay}
+        onPointerLeave={closeSoon}
+      >
+        <div class="bardrophead">{group()?.label}</div>
+        <For each={(group()?.members?.() ?? []).filter((m) => !m.absent?.())}>
+          {(m) => {
+            const I = iconOf(m);
+            return (
+              <div
+                class={`bardropitem ${m.off?.() ? "off" : ""}`}
+                role="menuitem"
+                onClick={(e) => {
+                  if (m.off?.()) return;
+                  setOpenGroup(null);
+                  m.run?.(e as MouseEvent & { currentTarget: HTMLElement });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  group()?.onLead?.(m.id);
+                }}
+              >
+                <span class="bardropicon">
+                  <I />
+                </span>
+                <span class="bardroplabel">{m.label}</span>
+                <button
+                  class={`bardroppin ${lead().includes(m.id) ? "on" : ""}`}
+                  data-tip={lead().includes(m.id) ? "Hide icon" : "Show as icon"}
+                  data-tip-at="end"
+                  aria-label={lead().includes(m.id) ? `Hide ${m.label} icon` : `Show ${m.label} as icon`}
+                  aria-pressed={lead().includes(m.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    group()?.onLead?.(m.id);
+                  }}
+                >
+                  ✓
+                </button>
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    );
+  };
 
   /** Which slot a pointer at `x, y` points into, or `null` when off the bar. */
   function slotAt(x: number, y: number, id: string): number | null {
@@ -187,7 +406,7 @@ export default function Toolbar(props: {
       return;
     }
     const item = byId(id);
-    if (!item || item.render) return;
+    if (!item || item.render || item.members) return;
     const el = cells.get(id);
     const r = el?.getBoundingClientRect();
     // Kept inside the window: the picker is eight icons wide.
@@ -214,8 +433,15 @@ export default function Toolbar(props: {
     setPicker(null);
   }
 
-  // Escape leaves customising, the way it leaves every other mode.
+  // Escape closes an open group, and leaves customising, the way it leaves
+  // every other mode.
   const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && openGroup()) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpenGroup(null);
+      return;
+    }
     if (!props.editing || e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation();
@@ -271,6 +497,10 @@ export default function Toolbar(props: {
                 onPointerOver={placeTip}
               >
                 <Show
+                  when={!item.members}
+                  fallback={<Group item={item} />}
+                >
+                <Show
                   when={item.render}
                   fallback={
                     <button
@@ -293,6 +523,7 @@ export default function Toolbar(props: {
                   }
                 >
                   {item.render!()}
+                </Show>
                 </Show>
                 <Show when={props.editing}>
                   <button class="barx" aria-label={`Remove ${item.label}`} onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(p.id)}>
@@ -356,8 +587,17 @@ export default function Toolbar(props: {
             </For>
           </div>
           <div class="bartrayfoot">
-            <span class="barhint">Drag to arrange · click to change icon</span>
-            <button class="btn" onClick={props.onReset}>Reset</button>
+            <span class="barhint">Drag to arrange · click to change icon · × removes one</span>
+            <button
+              class="btn"
+              onClick={flatten}
+              data-tip="Every tool as its own icon, no groups"
+            >
+              All icons
+            </button>
+            <button class="btn" onClick={props.onReset} data-tip="Back to the groups">
+              Reset
+            </button>
             <button class="btn" onClick={props.onDone}>Done</button>
           </div>
         </div>
@@ -366,6 +606,8 @@ export default function Toolbar(props: {
       <Show when={drag()?.moved}>
         <Ghost />
       </Show>
+
+      <Show when={!props.editing && openGroup()}>{(at) => <Drop at={at()} />}</Show>
 
       <Show when={picker()}>
         {(pk) => (

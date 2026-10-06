@@ -6,28 +6,11 @@ import { analyseTracks, writeTags, type AnalysisRow, type WriteFailure } from ".
 const BATCH = 4;
 
 /**
- * The tempo ranges on offer. An estimator hears a track at 87 and at 174
- * equally well; the range says which one this library counts in.
+ * The one tempo range. An estimator hears a track at 87 and at 174 equally
+ * well; the range says which one this library counts in. Fixed rather than
+ * offered - the backend uses the same one whatever it is sent.
  */
-const RANGES: [number, number][] = [
-  [70, 180],
-  [60, 120],
-  [85, 175],
-  [100, 200],
-];
-
-const RANGE_KEY = "noceur.tempoRange";
-
-function storedRange(): [number, number] {
-  try {
-    const raw = localStorage.getItem(RANGE_KEY);
-    const found = RANGES.find((r) => r.join("-") === raw);
-    if (found) return found;
-  } catch {
-    // Storage can be unavailable; the default is fine.
-  }
-  return RANGES[0];
-}
+const RANGE: [number, number] = [70, 200];
 
 type Field = "bpm" | "key";
 
@@ -55,7 +38,7 @@ export default function Analysis(props: {
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [range, setRange] = createSignal<[number, number]>(storedRange());
+  const range = () => RANGE;
   const [rows, setRows] = createSignal<AnalysisRow[]>([]);
   const [done, setDone] = createSignal(0);
   const [running, setRunning] = createSignal(true);
@@ -108,15 +91,6 @@ export default function Analysis(props: {
     window.addEventListener("keydown", onKey, true);
     onCleanup(() => window.removeEventListener("keydown", onKey, true));
   });
-
-  function pickRange(r: [number, number]) {
-    try {
-      localStorage.setItem(RANGE_KEY, r.join("-"));
-    } catch {
-      // Remembering it is a convenience.
-    }
-    setRange(r);
-  }
 
   const ticked = (r: AnalysisRow, f: Field) => differs(r, f) && !skipped().has(`${r.fileId}:${f}`);
 
@@ -213,19 +187,6 @@ export default function Analysis(props: {
         </header>
 
         <div class="renamebody">
-          <div class="setseg" role="group" aria-label="BPM range">
-            <For each={RANGES}>
-              {(r) => (
-                <button
-                  class={`segbtn ${range() === r ? "on" : ""}`}
-                  onClick={() => pickRange(r)}
-                >
-                  {r[0]}–{r[1]}
-                </button>
-              )}
-            </For>
-          </div>
-
           <Show when={rows().length > 0} fallback={<p class="sethint">Listening…</p>}>
             <div class="quallist">
               <div class="temporow head">

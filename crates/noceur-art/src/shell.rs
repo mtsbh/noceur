@@ -337,7 +337,10 @@ mod tests {
     fn a_program_renders_its_own_icon() {
         let exe = Path::new("C:\\Windows\\notepad.exe");
         let key = locate(exe, ThumbSize::Small).expect("notepad must have an icon");
-        assert!(folder_icon(exe, ThumbSize::Small).is_some(), "{key:?} did not render");
+        assert!(
+            folder_icon(exe, ThumbSize::Small).is_some(),
+            "{key:?} did not render"
+        );
     }
 
     /// Every ordinary folder shares one icon source, so the cache key collapses

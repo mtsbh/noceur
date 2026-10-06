@@ -48,7 +48,12 @@ pub async fn analyse_tracks(
     max: f64,
 ) -> Result<Vec<AnalysisRow>, String> {
     let db = state.db.clone();
-    let range = Range { min, max };
+    // The range is fixed now; the arguments stay so the call keeps its shape.
+    let _ = (min, max);
+    let range = Range {
+        min: crate::background::TEMPO_MIN,
+        max: crate::background::TEMPO_MAX,
+    };
 
     tauri::async_runtime::spawn_blocking(move || {
         // Paths first, holding the index only for that; see `analyse_quality`.

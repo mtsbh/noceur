@@ -527,6 +527,16 @@ export function KeyboardIcon() {
   );
 }
 
+/** The command key's loop-square: the command palette. */
+export function CommandIcon() {
+  return (
+    <Icon>
+      <path d="M6 6h4v4H6z" />
+      <path d="M6 6V4.6A1.6 1.6 0 1 0 4.6 6H6M10 6V4.6A1.6 1.6 0 1 1 11.4 6H10M6 10v1.4A1.6 1.6 0 1 1 4.6 10H6M10 10v1.4a1.6 1.6 0 1 0 1.4-1.4H10" />
+    </Icon>
+  );
+}
+
 /** Three bars of a chart: the library overview. */
 export function ChartIcon() {
   return (

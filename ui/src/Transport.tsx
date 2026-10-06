@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup, Show } from "solid-js";
 import { transportCmd, transportState, thumbUrl, envelope, type Transport as T } from "./api";
 import Waveform from "./Waveform";
+import SeekSlider from "./SeekSlider";
 import Meters, { nextMeter, type MeterMode } from "./Meters";
 import { keyColour } from "./columns";
 import {
@@ -65,14 +66,18 @@ export default function Transport(props: {
     onCleanup(() => window.clearInterval(timer));
   });
 
+  const slider = () => props.settings.wave.shape === "slider";
+
   // Fetch the envelope when the loaded track changes, keyed on the file rather
   // than on the transport object: the state is replaced ten times a second while
-  // playing, and re-decoding on each of those would be unthinkable.
-  createEffect<number>((previous) => {
+  // playing, and re-decoding on each of those would be unthinkable. The slider
+  // draws no envelope, so it asks for none; switching back fetches it then.
+  createEffect<string>((previous) => {
     const id = props.state?.fileId ?? 0;
-    if (id === previous) return id;
+    const key = `${id}:${slider()}`;
+    if (key === previous) return key;
     setWave(new Uint8Array());
-    if (id > 0) {
+    if (id > 0 && !slider()) {
       // Extraction decodes the whole track, so a stale reply is possible if the
       // user loads another one first; the id check drops it.
       envelope(id)
@@ -81,8 +86,8 @@ export default function Transport(props: {
         })
         .catch(() => {});
     }
-    return id;
-  }, 0);
+    return key;
+  }, "");
 
   const loaded = () => Boolean(props.state?.path);
   const duration = () => props.state?.durationMs ?? 0;
@@ -303,12 +308,23 @@ export default function Transport(props: {
           it rather than replacing it, so the click and drag geometry stays on
           one element whether or not there is an envelope to show. */}
       <div
-        class="tbar"
+        class={`tbar ${slider() ? "slider" : ""}`}
         ref={(el) => (bar = el)}
         onPointerDown={startScrub}
-        title={duration() > 0 ? "Click or drag to seek" : ""}
+        title={duration() > 0 && !slider() ? "Click or drag to seek" : ""}
       >
-        <Waveform envelope={wave()} progress={progress()} style={props.settings.wave} />
+        <Show
+          when={slider()}
+          fallback={
+            <Waveform envelope={wave()} progress={progress()} style={props.settings.wave} />
+          }
+        >
+          <SeekSlider
+            progress={progress()}
+            durationMs={duration()}
+            scrubbing={scrubbing() !== null}
+          />
+        </Show>
       </div>
 
       <span class="ttime mono">{props.state?.duration ?? "—"}</span>

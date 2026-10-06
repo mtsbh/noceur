@@ -158,7 +158,9 @@ pub async fn write_tags(
                 .collect(),
             date_to_year: false,
         };
-        let hashtags = edit.hashtags.filter(|h| !h.set.is_empty() || !h.clear.is_empty());
+        let hashtags = edit
+            .hashtags
+            .filter(|h| !h.set.is_empty() || !h.clear.is_empty());
         if change.is_empty() && hashtags.is_none() {
             return Ok(WriteReport::default());
         }
@@ -340,7 +342,10 @@ mod tests {
     /// Mixed In Key's key and energy stay in front; tags go at the end.
     #[test]
     fn tags_go_after_what_the_comment_already_says() {
-        assert_eq!(retag("7A - 5", &v(&["peak", "dark"]), &[]), "7A - 5 #peak #dark");
+        assert_eq!(
+            retag("7A - 5", &v(&["peak", "dark"]), &[]),
+            "7A - 5 #peak #dark"
+        );
         assert_eq!(retag("", &v(&["warmup"]), &[]), "#warmup");
     }
 
@@ -348,7 +353,11 @@ mod tests {
     #[test]
     fn a_cleared_tag_leaves_and_nothing_else_moves() {
         assert_eq!(
-            retag("7A - 5 #warmup #dark", &v(&["peak"]), &v(&["warmup", "build"])),
+            retag(
+                "7A - 5 #warmup #dark",
+                &v(&["peak"]),
+                &v(&["warmup", "build"])
+            ),
             "7A - 5 #dark #peak"
         );
         assert_eq!(retag("#peak", &[], &v(&["peak"])), "");
@@ -364,7 +373,10 @@ mod tests {
     #[test]
     fn spaces_in_a_value_become_dashes() {
         assert_eq!(retag("", &v(&["peak time"]), &[]), "#peak-time");
-        assert_eq!(hashtags_of("7A - 5 #peak-time #dark"), v(&["peak-time", "dark"]));
+        assert_eq!(
+            hashtags_of("7A - 5 #peak-time #dark"),
+            v(&["peak-time", "dark"])
+        );
     }
 
     fn meta(artist: &str, bpm: Option<f32>) -> noceur_tags::TrackMeta {
@@ -479,7 +491,10 @@ pub const HASHTAG_FIELD: &str = "noceur:hashtags";
 /// How a value is written as a tag: `#` and the value, spaces as `-`, so
 /// "peak time" is one word to a DJ app's "contains" filter.
 fn hashtag(value: &str) -> String {
-    format!("#{}", value.trim().split_whitespace().collect::<Vec<_>>().join("-"))
+    format!(
+        "#{}",
+        value.split_whitespace().collect::<Vec<_>>().join("-")
+    )
 }
 
 /// The `#tags` in a comment, without their `#`, in order.

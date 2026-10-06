@@ -68,7 +68,15 @@ import MatchPicker from "./MatchPicker";
 import QuickTag from "./QuickTag";
 import Sidebar from "./Sidebar";
 import Renamer from "./Renamer";
-import Toolbar, { resolveBar, type ActionId, type BarItem } from "./Toolbar";
+import Toolbar, {
+  BAR_VERSION,
+  DEFAULT_LEAD,
+  GROUPS,
+  resolveBar,
+  type ActionId,
+  type BarItem,
+  type GroupId,
+} from "./Toolbar";
 import Quality, { startQuality, type QualityRun } from "./Quality";
 import Analysis from "./Analysis";
 import Spectrogram from "./Spectrogram";
@@ -133,8 +141,11 @@ import {
   TagIcon,
   TrashIcon,
   WindowsIcon,
+  CommandIcon,
+  FolderIcon,
   actionIcon,
 } from "./icons";
+import Palette from "./Palette";
 import {
   loadSettings,
   saveSettings,
@@ -781,6 +792,20 @@ export default function App() {
 
   createEffect(() => applyTheme(settings().theme));
 
+  // Single settings, each behind a memo so a change elsewhere - a click on the
+  // meter, a theme - does not reach them. Read straight from `settings()`,
+  // every pane re-listed its folder and reloaded every cover on any change.
+  const showMode = createMemo(() => (settings().tracksOnly ? "tracks" : "everything"));
+  const folderGrid = createMemo(() => settings().folderGrid);
+  const openWithList = createMemo(() => settings().openWith);
+  const searchList = createMemo(() => settings().searchIn);
+  const storedBar = createMemo(() => settings().bar);
+  const sideSites = createMemo(
+    () => searchList().filter((s) => s.inSide && s.target.trim()),
+    undefined,
+    { equals: (a, b) => a.length === b.length && a.every((s, i) => s === b[i]) },
+  );
+
   function commitColumns(next: Column[]) {
     setColumns(next);
     saveColumns(next);
@@ -1060,7 +1085,8 @@ export default function App() {
 
   /** Whether the top bar is being arranged. */
   const [barEditing, setBarEditing] = createSignal(false);
-  const [barMenu, setBarMenu] = createSignal<{ x: number; y: number } | null>(null);
+  const [barMenu, setBarMenu] = createSignal<{ x: number; y: number; group?: string } | null>(null);
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
 
   /**
    * Everything that can sit in the top bar. Settings is not among them: it is
@@ -1069,50 +1095,74 @@ export default function App() {
    */
   const barItems = createMemo<BarItem[]>(() => {
     const none = () => audioSelection().length === 0;
-    const tool = (id: ActionId, label: string, icon: () => JSX.Element): BarItem => ({
+    const tool = (
+      id: ActionId,
+      label: string,
+      icon: () => JSX.Element,
+      group: GroupId,
+    ): BarItem => ({
       id,
       label,
       icon,
+      group,
       off: id === "quick" ? undefined : none,
       on: id === "quick" ? quickOpen : undefined,
       run: () => runAction(id),
     });
-    return [
-      tool("tags", "Edit metadata", TagIcon),
-      tool("match", "Find metadata", GlobeIcon),
-      tool("fromname", "Tags from file name", NameToTagIcon),
-      tool("art", "Find album art", ImageIcon),
-      tool("quick", "Quick tag", StarIcon),
-      tool("rename", "Rename", RenameIcon),
-      tool("clean", "Clean up", BroomIcon),
-      tool("quality", "Check quality", SpectrumIcon),
-      tool("bpm", "Detect BPM & key", TempoIcon),
-      tool("copies", "Find duplicates", CopiesIcon),
-      tool("convert", "Convert", ConvertIcon),
-      // Your own buttons. Ones with an icon arrive in the bar by themselves;
-      // the rest wait in the tray until you drag them up.
+    const list: BarItem[] = [
+      tool("tags", "Edit metadata", TagIcon, "tags"),
+      tool("match", "Find metadata online", GlobeIcon, "tags"),
+      tool("fromname", "Tags from file name", NameToTagIcon, "tags"),
+      tool("art", "Find album art", ImageIcon, "tags"),
+      tool("quick", "Quick tag", StarIcon, "tags"),
+      tool("rename", "Rename", RenameIcon, "fix"),
+      tool("clean", "Clean up names", BroomIcon, "fix"),
+      {
+        id: "functions",
+        label: "Batch fixes",
+        icon: BoltIcon,
+        group: "fix",
+        off: none,
+        run: () => setTooling(audioSelection()),
+      },
+      // Your own buttons, with the fixes: they are what you wrote to do to
+      // the selection.
       ...buttons().map<BarItem>((action) => ({
         id: `user:${action.id}`,
         label: action.label,
         icon: actionIcon(action.icon),
-        auto: Boolean(actionIcon(action.icon)),
+        group: "fix",
         off: none,
         run: () => runButton(action, audioSelection()),
       })),
+      tool("quality", "Check quality", SpectrumIcon, "analyse"),
+      tool("bpm", "Detect BPM & key", TempoIcon, "analyse"),
+      tool("copies", "Find duplicates", CopiesIcon, "analyse"),
+      {
+        id: "spek",
+        label: "Spek",
+        icon: PigIcon,
+        group: "analyse",
+        on: spekOpen,
+        run: () => setSpekOpen((open) => !open),
+      },
+      tool("convert", "Convert", ConvertIcon, "files"),
       // Your programs and sites. In the bar only when switched on for it.
-      ...settings().openWith.map<BarItem>((program) => ({
+      ...openWithList().map<BarItem>((program) => ({
         id: `open:${program.id}`,
         label: `Open in ${program.name}`,
         icon: programIcon(program.target),
+        group: "send",
         forced: program.inBar,
         off: () => (focusHandle()?.selection().length ?? 0) === 0,
         onToggle: (on) => setInBar("openWith", program.id, on),
         run: () => launch(program),
       })),
-      ...settings().searchIn.map<BarItem>((site) => ({
+      ...searchList().map<BarItem>((site) => ({
         id: `search:${site.id}`,
         label: `Search ${site.name}`,
         icon: siteIcon(site.target),
+        group: "send",
         forced: site.inBar,
         off: none,
         onToggle: (on) => setInBar("searchIn", site.id, on),
@@ -1124,6 +1174,7 @@ export default function App() {
               id: "telegram",
               label: "Send to Telegram",
               icon: SendIcon,
+              group: "send",
               off: () => (focusHandle()?.selection().length ?? 0) === 0,
               run: () => toTelegram(),
             } as BarItem,
@@ -1133,8 +1184,22 @@ export default function App() {
         id: "newfolder",
         label: "New folder",
         icon: NewFolderIcon,
-        auto: false,
+        group: "files",
         run: () => setNewFolderIn(focusPath()),
+      },
+      {
+        id: "paste",
+        label: "Paste",
+        icon: ClipboardIcon,
+        group: "files",
+        off: () => !clip(),
+        run: () => void paste(),
+      },
+      {
+        id: "palette",
+        label: "Command palette · Ctrl+K",
+        icon: CommandIcon,
+        run: () => setPaletteOpen(true),
       },
       {
         id: "playlists",
@@ -1154,14 +1219,6 @@ export default function App() {
         icon: KeyboardIcon,
         auto: false,
         run: () => setShowKeys(true),
-      },
-      {
-        id: "paste",
-        label: "Paste",
-        icon: ClipboardIcon,
-        auto: false,
-        off: () => !clip(),
-        run: () => void paste(),
       },
       {
         id: "sizes",
@@ -1197,22 +1254,57 @@ export default function App() {
         absent: () => layout.groups.length < 2,
         run: flipSplit,
       },
-      {
-        id: "functions",
-        label: "Actions",
-        icon: BoltIcon,
-        off: none,
-        run: () => setTooling(audioSelection()),
-      },
-      {
-        id: "spek",
-        label: "Spek",
-        icon: PigIcon,
-        on: spekOpen,
-        run: () => setSpekOpen((open) => !open),
-      },
     ];
+
+    // The group cells, each holding the tools tagged with it.
+    const groupIcon: Record<GroupId, () => JSX.Element> = {
+      tags: TagIcon,
+      fix: RenameIcon,
+      analyse: SpectrumIcon,
+      files: FolderIcon,
+      send: SendIcon,
+    };
+    for (const g of GROUPS) {
+      const members = () => list.filter((i) => i.group === g.id);
+      list.push({
+        id: `group:${g.id}`,
+        label: g.label,
+        icon: groupIcon[g.id],
+        members,
+        lead: () => [
+          ...leadOf(g.id),
+          ...members()
+            .filter((m) => m.forced)
+            .map((m) => m.id),
+        ],
+        onLead: (id) => toggleLead(g.id, id, members()),
+      });
+    }
+    return list;
   });
+
+  /** The tools a group shows as icons, as chosen or by default. */
+  function leadOf(group: GroupId): string[] {
+    const bar = storedBar();
+    const chosen = bar?.v === BAR_VERSION ? bar.lead?.[group] : undefined;
+    return chosen ?? DEFAULT_LEAD[group];
+  }
+
+  /**
+   * Shows or hides one tool as an icon beside its group's arrow. A program or
+   * site has its own toolbar switch in Settings, which this flips instead so
+   * the two never disagree.
+   */
+  function toggleLead(group: GroupId, id: string, members: BarItem[]) {
+    const item = members.find((m) => m.id === id);
+    if (item?.onToggle) return item.onToggle(!item.forced);
+    const now = leadOf(group);
+    const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
+    // Kept in the group's own order, so icons do not shuffle as they are ticked.
+    const ordered = members.map((m) => m.id).filter((m) => next.includes(m));
+    const layout = barLayout();
+    commitSettings({ ...settings(), bar: { ...layout, lead: { ...layout.lead, [group]: ordered } } });
+  }
 
   /* ── Open with, Search in ─────────────────────────────────────────────── */
 
@@ -1253,27 +1345,30 @@ export default function App() {
     setSettingsOpen(true);
   }
 
-  /** The out-of-the-box arrangement, with your iconned buttons after the tools. */
-  const barDefaults = () => {
-    const mine = buttons()
-      .filter((a) => actionIcon(a.icon))
-      .map((a) => `user:${a.id}`);
-    return [
-      "flex:start",
-      "tags", "match", "fromname", "art", "quick",
-      "sep:a",
-      "rename", "clean", "quality", "bpm", "copies", "convert",
-      ...(mine.length ? ["sep:b", ...mine] : []),
-      "sep:c",
-      "sizes",
-      "sep:d",
-      "split", "splitdir",
-      "sep:e",
-      "functions", "spek",
-    ];
-  };
+  /**
+   * The out-of-the-box arrangement: the five groups, then the view switches.
+   * Your own buttons live in Fix; tick them there to give them an icon.
+   */
+  const barDefaults = () => [
+    "flex:start",
+    "group:tags",
+    "sep:a",
+    "group:fix",
+    "sep:b",
+    "group:analyse",
+    "sep:c",
+    "group:files",
+    "sep:d",
+    "group:send",
+    "sep:e",
+    "sizes",
+    "sep:f",
+    "split", "splitdir",
+    "sep:g",
+    "playlists", "overview", "palette",
+  ];
 
-  const barLayout = createMemo(() => resolveBar(settings().bar, barItems(), barDefaults()));
+  const barLayout = createMemo(() => resolveBar(storedBar(), barItems(), barDefaults()));
 
   /** Loads a row into the player, and remembers which tab it is walking. */
   function playRow(row: RowDisplay, tabId: number) {
@@ -1515,9 +1610,10 @@ export default function App() {
     const lookup = [row.artist, row.title || row.name].filter(Boolean).join(" ");
     const audio = row.kind !== 1;
 
-    // Grouped the way the toolbar is - the file itself, what it says, what is
-    // done to it, where to look it up - with the toolbar's icons, so the same
-    // action looks the same wherever it is reached from.
+    // In the toolbar's order and under its group names - Tags, Fix, Analyse,
+    // Files, Send - with its icons, so the same action is in the same place and
+    // looks the same wherever it is reached from. Playing and finding the file
+    // come first, ungrouped, because they are what a right-click is most often for.
     return [
       {
         kind: "item",
@@ -1546,7 +1642,6 @@ export default function App() {
           { kind: "item", label: "Open playlists", hint: "ctrl+p", run: () => setListing(true) },
         ],
       },
-      { kind: "separator" },
       {
         kind: "item",
         label: "Open in new tab",
@@ -1560,30 +1655,115 @@ export default function App() {
       },
       {
         kind: "item",
-        label: "New folder…",
-        hint: "ctrl+shift+n",
-        icon: NewFolderIcon,
-        run: () => setNewFolderIn(focusPath()),
-      },
-      {
-        kind: "item",
         label: "Reveal in Explorer",
         icon: OpenIcon,
         run: () => {
           reveal(row.fileId).catch(() => {});
         },
       },
+
+      { kind: "header", label: "Tags" },
       {
         kind: "item",
-        label: many ? `Copy ${ids.length} paths` : "Copy path",
-        icon: ClipboardIcon,
-        run: () => {
-          Promise.all(ids.map((id) => pathOf(id)))
-            .then((paths) => copyText(paths.join("\r\n")))
-            .catch(() => {});
-        },
+        label: many ? `Edit metadata of ${ids.length} tracks…` : "Edit metadata…",
+        hint: "f2",
+        icon: TagIcon,
+        disabled: audio,
+        run: () => setEditing(ids),
       },
-      { kind: "separator" },
+      {
+        kind: "item",
+        label: "Find metadata online…",
+        icon: GlobeIcon,
+        disabled: audio,
+        // Matched on the row that was right-clicked, applied to whatever is
+        // selected — the same rule the rest of the menu follows.
+        run: () => setMatching({ fileId: row.fileId, fileIds: ids }),
+      },
+      {
+        kind: "item",
+        label: many ? `Tags from file name for ${ids.length} tracks…` : "Tags from file name…",
+        icon: NameToTagIcon,
+        disabled: audio,
+        run: () => setNaming(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Find album art for ${ids.length} tracks…` : "Find album art…",
+        icon: ImageIcon,
+        disabled: audio,
+        // Searched on the row that was right-clicked, applied to the whole
+        // selection: an album's tracks share a sleeve, and searching on each of
+        // them would be twelve requests for one answer.
+        run: () => setCovering({ fileId: row.fileId, fileIds: ids }),
+      },
+
+      { kind: "header", label: "Fix" },
+      {
+        kind: "item",
+        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
+        icon: RenameIcon,
+        disabled: audio,
+        run: () => setRenaming(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Clean up ${ids.length} names` : "Clean up name",
+        icon: BroomIcon,
+        disabled: audio,
+        run: () => void cleanUp(ids),
+      },
+      {
+        kind: "item",
+        label: "Batch fixes…",
+        icon: BoltIcon,
+        disabled: audio,
+        run: () => setTooling(ids),
+      },
+      ...(buttons().length
+        ? ([
+            {
+              kind: "item",
+              label: "Your actions",
+              icon: BoltIcon,
+              disabled: audio,
+              run: () => {},
+              children: buttonItems(ids),
+            },
+          ] as MenuItem[])
+        : []),
+
+      { kind: "header", label: "Analyse" },
+      {
+        kind: "item",
+        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
+        icon: SpectrumIcon,
+        disabled: audio,
+        run: () => checkQuality(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Detect BPM & key of ${ids.length} tracks…` : "Detect BPM & key…",
+        icon: TempoIcon,
+        disabled: audio,
+        run: () => setTiming(ids),
+      },
+      {
+        kind: "item",
+        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
+        icon: CopiesIcon,
+        disabled: audio,
+        run: () => setComparing(ids),
+      },
+
+      { kind: "header", label: "Files" },
+      {
+        kind: "item",
+        label: many ? `Convert ${ids.length} tracks…` : "Convert…",
+        icon: ConvertIcon,
+        disabled: audio,
+        run: () => setConverting(ids),
+      },
       {
         kind: "item",
         label: "Copy",
@@ -1625,103 +1805,25 @@ export default function App() {
             },
           ] as MenuItem[])
         : []),
-      { kind: "separator" },
       {
         kind: "item",
-        label: many ? `Edit metadata of ${ids.length} tracks…` : "Edit metadata…",
-        hint: "f2",
-        icon: TagIcon,
-        disabled: audio,
-        run: () => setEditing(ids),
+        label: "New folder…",
+        hint: "ctrl+shift+n",
+        icon: NewFolderIcon,
+        run: () => setNewFolderIn(focusPath()),
       },
       {
         kind: "item",
-        label: many ? `Tags from file name for ${ids.length} tracks…` : "Tags from file name…",
-        icon: NameToTagIcon,
-        disabled: audio,
-        run: () => setNaming(ids),
+        label: many ? `Copy ${ids.length} paths` : "Copy path",
+        icon: ClipboardIcon,
+        run: () => {
+          Promise.all(ids.map((id) => pathOf(id)))
+            .then((paths) => copyText(paths.join("\r\n")))
+            .catch(() => {});
+        },
       },
-      {
-        kind: "item",
-        label: "Find metadata online…",
-        icon: GlobeIcon,
-        disabled: audio,
-        // Matched on the row that was right-clicked, applied to whatever is
-        // selected — the same rule the rest of the menu follows.
-        run: () => setMatching({ fileId: row.fileId, fileIds: ids }),
-      },
-      {
-        kind: "item",
-        label: many ? `Find album art for ${ids.length} tracks…` : "Find album art…",
-        icon: ImageIcon,
-        disabled: audio,
-        // Searched on the row that was right-clicked, applied to the whole
-        // selection: an album's tracks share a sleeve, and searching on each of
-        // them would be twelve requests for one answer.
-        run: () => setCovering({ fileId: row.fileId, fileIds: ids }),
-      },
-      { kind: "separator" },
-      {
-        kind: "item",
-        label: many ? `Rename ${ids.length} tracks…` : "Rename…",
-        icon: RenameIcon,
-        disabled: audio,
-        run: () => setRenaming(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Clean up ${ids.length} names` : "Clean up name",
-        icon: BroomIcon,
-        disabled: audio,
-        run: () => void cleanUp(ids),
-      },
-      {
-        kind: "item",
-        label: "Actions…",
-        icon: BoltIcon,
-        disabled: audio,
-        run: () => setTooling(ids),
-      },
-      ...(buttons().length
-        ? ([
-            {
-              kind: "item",
-              label: "My actions",
-              disabled: audio,
-              run: () => {},
-              children: buttonItems(ids),
-            },
-          ] as MenuItem[])
-        : []),
-      {
-        kind: "item",
-        label: many ? `Convert ${ids.length} tracks…` : "Convert…",
-        icon: ConvertIcon,
-        disabled: audio,
-        run: () => setConverting(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Check quality of ${ids.length} tracks…` : "Check quality…",
-        icon: SpectrumIcon,
-        disabled: audio,
-        run: () => checkQuality(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Detect BPM & key of ${ids.length} tracks…` : "Detect BPM & key…",
-        icon: TempoIcon,
-        disabled: audio,
-        run: () => setTiming(ids),
-      },
-      {
-        kind: "item",
-        label: many ? `Find duplicates of ${ids.length} tracks…` : "Find duplicates…",
-        icon: CopiesIcon,
-        disabled: audio,
-        run: () => setComparing(ids),
-      },
-      { kind: "separator" },
+
+      { kind: "header", label: "Send" },
       {
         kind: "item",
         label: "Open with",
@@ -1738,17 +1840,6 @@ export default function App() {
           { kind: "item", label: "Add program…", run: () => settingsAt("actions") },
         ],
       },
-      ...(hasTelegram()
-        ? ([
-            {
-              kind: "item",
-              label: "Send to Telegram",
-              icon: SendIcon,
-              disabled: row.kind === 0,
-              run: () => toTelegram(ids),
-            },
-          ] as MenuItem[])
-        : []),
       {
         kind: "item",
         label: "Search in",
@@ -1766,6 +1857,18 @@ export default function App() {
           { kind: "item", label: "Add site…", run: () => settingsAt("actions") },
         ],
       },
+      ...(hasTelegram()
+        ? ([
+            {
+              kind: "item",
+              label: "Send to Telegram",
+              icon: SendIcon,
+              disabled: row.kind === 0,
+              run: () => toTelegram(ids),
+            },
+          ] as MenuItem[])
+        : []),
+
       { kind: "separator" },
       {
         kind: "item",
@@ -1775,7 +1878,6 @@ export default function App() {
         danger: true,
         run: deleteSelection,
       },
-      { kind: "separator" },
       {
         kind: "item",
         label: "Windows menu",
@@ -1840,6 +1942,13 @@ export default function App() {
       if (mod && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setFinding(true);
+        return;
+      }
+
+      // Ctrl+K: every action, by name.
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
         return;
       }
 
@@ -2073,7 +2182,8 @@ export default function App() {
         class="topbar"
         onContextMenu={(e) => {
           e.preventDefault();
-          if (!barEditing()) setBarMenu({ x: e.clientX, y: e.clientY });
+          const group = (e.target as HTMLElement).closest<HTMLElement>("[data-group]")?.dataset.group;
+          if (!barEditing()) setBarMenu({ x: e.clientX, y: e.clientY, group });
         }}
       >
         <Toolbar
@@ -2114,6 +2224,19 @@ export default function App() {
         </div>
       </Show>
 
+      <Show when={paletteOpen()}>
+        <Palette
+          items={barItems()}
+          extra={[
+            { id: "x:settings", label: "Settings", icon: SettingsIcon, run: () => setSettingsOpen(true) },
+            { id: "x:search", label: "Search library", icon: SearchIcon, run: () => setFinding(true) },
+            { id: "x:keys", label: "Keyboard shortcuts", icon: KeyboardIcon, run: () => setShowKeys(true) },
+            { id: "x:bar", label: "Customize toolbar", icon: SettingsIcon, run: () => setBarEditing(true) },
+          ]}
+          onClose={() => setPaletteOpen(false)}
+        />
+      </Show>
+
       <Show when={barMenu()}>
         {(m) => (
           <Menu
@@ -2121,6 +2244,24 @@ export default function App() {
             y={m().y}
             onClose={() => setBarMenu(null)}
             items={[
+              // On a group: a tick per tool, for which ones show as icons.
+              ...(() => {
+                const group = barItems().find((i) => i.id === m().group);
+                if (!group?.members) return [];
+                const lead = group.lead?.() ?? [];
+                return [
+                  ...group.members()
+                    .filter((t) => !t.absent?.())
+                    .map<MenuItem>((t) => ({
+                      kind: "item",
+                      label: t.label,
+                      checked: lead.includes(t.id),
+                      run: () => group.onLead?.(t.id),
+                    })),
+                  { kind: "separator" } as MenuItem,
+                ];
+              })(),
+              { kind: "item", label: "Command palette", hint: "ctrl+k", run: () => setPaletteOpen(true) },
               { kind: "item", label: "Customize toolbar…", run: () => setBarEditing(true) },
               { kind: "item", label: "Reset toolbar", run: () => commitSettings({ ...settings(), bar: null }) },
               { kind: "item", label: "Keyboard shortcuts", run: () => setShowKeys(true) },
@@ -2220,8 +2361,8 @@ export default function App() {
                         }
                         columns={columns()}
                         artSize={artSize()}
-                        show={settings().tracksOnly ? "tracks" : "everything"}
-                        folderGrid={settings().folderGrid}
+                        show={showMode()}
+                        folderGrid={folderGrid()}
                         rowHeight={metrics().row}
                         onColumnMenu={(x, y) => setColumnMenu({ x, y })}
                         onColumnResize={startColumnDrag}
@@ -2272,7 +2413,7 @@ export default function App() {
         <Show when={sideOpen()}>
           <Sidebar
             fileId={sideTrack()}
-            sites={settings().searchIn.filter((s) => s.inSide && s.target.trim())}
+            sites={sideSites()}
             onSites={() => settingsAt("actions")}
             version={written() + artNonce()}
             onWritten={refetchAll}

@@ -46,6 +46,10 @@ export const UI_FONTS: FontOption[] = [
   { name: "system", label: "System", stack: `"Segoe UI Variable Text", ${FALLBACK}` },
   { name: "segoe", label: "Segoe UI", stack: `"Segoe UI", ${FALLBACK}` },
   { name: "inter", label: "Inter", stack: `Inter, ${FALLBACK}` },
+  // Windows' own DIN: narrow and engineered, it suits a dense track list.
+  { name: "bahnschrift", label: "Bahnschrift", stack: `Bahnschrift, ${FALLBACK}` },
+  // Office's face since 2023; on most machines with Microsoft 365.
+  { name: "aptos", label: "Aptos", stack: `Aptos, ${FALLBACK}` },
   { name: "tahoma", label: "Tahoma", stack: `Tahoma, ${FALLBACK}` },
   { name: "verdana", label: "Verdana", stack: `Verdana, ${FALLBACK}` },
   { name: "calibri", label: "Calibri", stack: `Calibri, ${FALLBACK}` },

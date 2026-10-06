@@ -27,11 +27,12 @@ import {
   HASHTAG_FIELD,
 } from "./api";
 import type { Column } from "./columns";
-import { CUSTOM, UI_FONTS, cleanFamily, head, installed } from "./fonts";
+import { CUSTOM, UI_FONTS, cleanFamily, head, installed, stackFor } from "./fonts";
 import { recipesFor } from "./recipes";
 import ActionEditor from "./ActionEditor";
-import { THEMES } from "./themes";
-import { METER_MODES } from "./Meters";
+import { THEMES, applyTheme, type ThemeName } from "./themes";
+import LivePicker from "./LivePicker";
+import { METER_MODES, type MeterMode } from "./Meters";
 import {
   NEW_QUICK_GROUP,
   QUICK_KEYS,
@@ -120,14 +121,6 @@ const ANALYSIS_MODES: [AnalysisMode, string][] = [
   ["fill", "Empty fields"],
   ["show", "Show only"],
   ["overwrite", "Replace mine"],
-];
-
-/** The tempo ranges the Detect dialog offers too. */
-const TEMPO_RANGES: [number, number][] = [
-  [70, 180],
-  [60, 120],
-  [85, 175],
-  [100, 200],
 ];
 
 function Section(props: {
@@ -447,56 +440,59 @@ export default function Settings(props: {
           >
             <div class="setrow">
               <span class="setlabel">Theme</span>
-              <div class="themes" role="group">
-                <For each={THEMES}>
-                  {(t) => (
-                    <button
-                      class={`themebtn ${props.settings.theme === t.name ? "on" : ""}`}
-                      onClick={() => patch({ theme: t.name })}
-                      aria-pressed={props.settings.theme === t.name}
-                    >
-                      <span class="themesw" style={{ background: t.swatch[0] }}>
-                        <span style={{ background: t.swatch[1] }} />
-                        <span style={{ background: t.swatch[2] }} />
-                        <span style={{ background: t.swatch[3] }} />
-                      </span>
-                      {t.label}
-                    </button>
-                  )}
-                </For>
-              </div>
+              {/* Hovering a theme puts it on the whole window; only a click
+                  keeps it. */}
+              <LivePicker
+                label="Theme"
+                value={props.settings.theme}
+                options={THEMES.map((t) => ({
+                  id: t.name,
+                  label: t.label,
+                  note: t.note,
+                  lead: () => (
+                    <span class="themesw" style={{ background: t.swatch[0] }}>
+                      <span style={{ background: t.swatch[1] }} />
+                      <span style={{ background: t.swatch[2] }} />
+                      <span style={{ background: t.swatch[3] }} />
+                    </span>
+                  ),
+                }))}
+                onPreview={(id) => applyTheme(id as ThemeName)}
+                onRevert={() => applyTheme(props.settings.theme)}
+                onChange={(id) => patch({ theme: id as ThemeName })}
+              />
             </div>
 
             <div class="setrow">
               <span class="setlabel">Meter</span>
-              <div class="setseg wrap" role="group">
-                <For each={[{ value: "off", short: "Off" } as const, ...METER_MODES]}>
-                  {(m) => (
-                    <button
-                      class={`segbtn ${props.settings.meter === m.value ? "on" : ""}`}
-                      onClick={() => patch({ meter: m.value })}
-                    >
-                      {m.short}
-                    </button>
-                  )}
-                </For>
-              </div>
+              <LivePicker
+                label="Meter"
+                value={props.settings.meter}
+                options={[
+                  { id: "off", label: "Off" },
+                  ...METER_MODES.map((m) => ({ id: m.value, label: m.label })),
+                ]}
+                onPreview={() => {}}
+                onRevert={() => {}}
+                onChange={(id) => patch({ meter: id as MeterMode })}
+              />
             </div>
           </Section>
 
           <Section
             tab="look"
-            title="Waveform"
-            info={<p>RGB blends bands · 3-band splits them</p>}
+            title="Seek bar"
+            info={<p>Slider drops the waveform · RGB blends bands, 3-band splits them</p>}
           >
             <div class="setrow">
-              <span class="setlabel">Shape</span>
+              <span class="setlabel">Style</span>
               <div class="setseg" role="group">
                 <For
                   each={
                     [
-                      ["filled", "Filled"],
-                      ["bars", "Bars"],
+                      ["filled", "Filled waveform"],
+                      ["bars", "Waveform bars"],
+                      ["slider", "Slider"],
                     ] as const
                   }
                 >
@@ -514,6 +510,7 @@ export default function Settings(props: {
               </div>
             </div>
 
+            <Show when={props.settings.wave.shape !== "slider"}>
             <div class="setrow">
               <span class="setlabel">Colour</span>
               <div class="setseg wrap" role="group">
@@ -540,6 +537,7 @@ export default function Settings(props: {
                 </For>
               </div>
             </div>
+            </Show>
 
           </Section>
 
@@ -1030,22 +1028,6 @@ export default function Settings(props: {
                       </For>
                     </div>
                   </div>
-                  <div class="setrow">
-                    <span class="setlabel">Range</span>
-                    <div class="setseg" role="group" aria-label="BPM range">
-                      <For each={TEMPO_RANGES}>
-                        {([min, max]) => (
-                          <button
-                            class={`segbtn ${a().min === min && a().max === max ? "on" : ""}`}
-                            disabled={!a().enabled}
-                            onClick={() => patchAnalysis({ min, max })}
-                          >
-                            {min}–{max}
-                          </button>
-                        )}
-                      </For>
-                    </div>
-                  </div>
                 </>
               )}
             </Show>
@@ -1129,32 +1111,34 @@ export default function Settings(props: {
           >
             <div class="setrow">
               <span class="setlabel">Font</span>
-              {/* Each choice is drawn in the face it selects, which is the only
-                  honest way to show a font and saves a preview row. */}
-              <div class="setseg wrap" role="group" aria-label="Interface font">
-                <For each={UI_FONTS}>
-                  {(font) => (
-                    <button
-                      class={`segbtn ${props.settings.font === font.name ? "on" : ""} ${
-                        missing().has(font.name) ? "miss" : ""
-                      }`}
-                      style={{ "font-family": font.stack }}
-                      data-tip={
-                        missing().has(font.name) ? "Not installed" : undefined
-                      }
-                      onClick={() => patch({ font: font.name })}
-                    >
-                      {font.label}
-                    </button>
-                  )}
-                </For>
-                <button
-                  class={`segbtn ${props.settings.font === CUSTOM ? "on" : ""}`}
-                  onClick={() => patch({ font: CUSTOM })}
-                >
-                  Other…
-                </button>
-              </div>
+              {/* Each choice is drawn in the face it selects, and hovering it
+                  puts it on the whole window. */}
+              <LivePicker
+                label="Interface font"
+                value={props.settings.font}
+                options={[
+                  ...UI_FONTS.map((f) => ({
+                    id: f.name,
+                    label: f.label,
+                    face: f.stack,
+                    note: missing().has(f.name) ? "not installed" : undefined,
+                  })),
+                  { id: CUSTOM, label: "Other…", note: "type a name" },
+                ]}
+                onPreview={(id) =>
+                  document.documentElement.style.setProperty(
+                    "--ui-font",
+                    stackFor(id, props.settings.fontCustom),
+                  )
+                }
+                onRevert={() =>
+                  document.documentElement.style.setProperty(
+                    "--ui-font",
+                    stackFor(props.settings.font, props.settings.fontCustom),
+                  )
+                }
+                onChange={(id) => patch({ font: id })}
+              />
             </div>
             <Show when={props.settings.font === CUSTOM}>
               <div class="setrow">
