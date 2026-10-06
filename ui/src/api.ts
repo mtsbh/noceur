@@ -84,6 +84,23 @@ export function folderIconUrl(path: string, size: ArtSize = "small"): string {
   return `${convertFileSrc("0", "thumb")}?size=${size}&path=${encodeURIComponent(path)}`;
 }
 
+/**
+ * A search site's icon, by the host its address goes to.
+ *
+ * Asked of a favicon service rather than `/favicon.ico` on the site itself:
+ * plenty of sites (Beatport, Bandcamp) keep theirs elsewhere and declare it in
+ * their HTML, which only a page load would find.
+ */
+export function siteIconUrl(template: string): string {
+  try {
+    const host = new URL(template.replace(/\{\w+\}/g, "x")).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+  } catch {
+    // Not an address yet - half typed in settings.
+    return "";
+  }
+}
+
 export type Segment = { label: string; path: string };
 
 /** A contiguous slice of a listing, starting at `offset`. */

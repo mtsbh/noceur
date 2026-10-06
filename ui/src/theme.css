@@ -2639,6 +2639,19 @@ body.resizing * {
   height: 100%;
 }
 
+/* The sidebar's own: the picture alone, for a glance at the cutoff. */
+.spek.compact {
+  height: 110px;
+  margin-top: 12px;
+  padding: 0;
+  border-top: 0;
+  background: none;
+}
+.spek.compact .spekplot {
+  flex: 1;
+  border-radius: 3px;
+}
+
 /* Time, along the bottom. The first and last labels are pulled inside the plot
    so neither hangs off the end of it. */
 .spektime {
@@ -3173,7 +3186,7 @@ label.artoffer:hover {
 }
 .qualrow {
   display: grid;
-  grid-template-columns: 6px minmax(0, 1.4fr) 92px 92px 68px 54px 44px 56px minmax(0, 1.3fr);
+  grid-template-columns: 6px minmax(0, 1.4fr) 92px 92px 68px 54px 52px 44px 56px minmax(0, 1.3fr);
   gap: 8px;
   align-items: baseline;
   padding: 4px 0;
@@ -3219,10 +3232,12 @@ label.artoffer:hover {
 .qualname {
   color: var(--fg);
 }
-/* Column names, in the list header's own small capitals; stays put on scroll. */
+/* Column names, in the list header's own small capitals; stays put on scroll.
+   Pinned up into the body's top padding: at 0 it stuck below the padding, and
+   rows scrolled through the gap above it. */
 .qualrow.qualhead {
   position: sticky;
-  top: 0;
+  top: -14px;
   z-index: 1;
   background: var(--panel);
   font-size: 10px;
@@ -3236,13 +3251,20 @@ label.artoffer:hover {
 .qualclaim,
 .qualreal,
 .qualcut,
-.qualclip {
+.qualclip,
+.qualrun {
   color: var(--fg2);
   text-align: right;
 }
 .qualreal.bad,
-.qualclip.bad {
+.qualcut.bad,
+.qualclip.bad,
+.qualrun.bad {
   color: var(--qual-bad);
+}
+.qualreal.good,
+.qualcut.good {
+  color: var(--qual-good);
 }
 .quallufs,
 .qualpeak {
@@ -4752,39 +4774,32 @@ body.resizing-v * {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Labels beside the boxes rather than over them: half the height, so a cover
-   and every field fit without scrolling. */
+/* Set like the facts above - a small label over its value, no boxes - so the
+   panel reads as one sheet. Every value is still a field: a faint line on
+   hover says so, the accent line under focus says where typing goes. */
 .sidetags {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 10px;
+  gap: 7px 10px;
 }
 .sidetag {
   grid-column: span 2;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
   min-width: 0;
 }
 .sidetag.narrow {
   grid-column: span 1;
 }
 .sidelabel {
-  flex: none;
-  width: 68px;
+  align-self: flex-start;
+  max-width: 100%;
   text-align: left;
   color: var(--fg3);
   font-size: 0.9em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.sidetag.narrow .sidelabel {
-  width: 34px;
-}
-.sidetag input,
-.sidetag textarea {
-  flex: 1;
 }
 button.sidelabel {
   padding: 0;
@@ -4801,23 +4816,49 @@ button.sidelabel {
 .sidetag input,
 .sidetag textarea {
   min-width: 0;
-  padding: 3px 6px;
-  background: var(--bg);
-  border: 1px solid var(--hair2);
-  border-radius: 4px;
-  color: var(--fg);
+  margin: 1px 0 0;
+  padding: 0 0 1px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  /* The facts' own colour, so the two blocks read as one sheet. */
+  color: var(--fg2);
   font: inherit;
+  font-variant-numeric: tabular-nums;
   outline: none;
-  resize: vertical;
+  resize: none;
+  text-overflow: ellipsis;
+}
+.sidetag input::placeholder,
+.sidetag textarea::placeholder {
+  color: var(--fg3);
+  opacity: 0.6;
+}
+/* The comment grows with what it holds, up to a few lines. */
+.sidetag textarea {
+  field-sizing: content;
+  min-height: 1.4em;
+  max-height: 6.5em;
+  overflow-y: auto;
+}
+.sidetag input:hover,
+.sidetag textarea:hover {
+  border-bottom-color: var(--hair2);
 }
 .sidetag input:focus,
 .sidetag textarea:focus {
-  border-color: var(--acc-line);
+  color: var(--fg);
+  border-bottom-color: var(--acc-line);
+}
+.sidetag input:disabled,
+.sidetag textarea:disabled {
+  border-bottom-color: transparent;
 }
 .sidetag input.edited,
 .sidetag textarea.edited {
-  border-color: var(--acc-line);
-  background: var(--acc-fill);
+  color: var(--acc);
+  border-bottom-color: var(--acc-line);
 }
 .sideapply {
   display: flex;

@@ -1,9 +1,10 @@
-import { For, Show, createEffect, createSignal, on } from "solid-js";
+import { For, Show, createEffect, createSignal, on, type JSX } from "solid-js";
 import {
   TAG_FIELDS,
   fullArtUrl,
   openUrl,
   readTags,
+  siteIconUrl,
   writeTags,
   type FileFacts,
   type TagField,
@@ -32,15 +33,6 @@ function storedArt(): number | null {
     return v >= ART_MIN ? v : null;
   } catch {
     return null;
-  }
-}
-
-/** A site's own icon, by the host its search goes to. */
-function favicon(target: string): string {
-  try {
-    return `https://www.google.com/s2/favicons?domain=${new URL(target).hostname}&sz=32`;
-  } catch {
-    return "";
   }
 }
 
@@ -76,6 +68,8 @@ export default function Sidebar(props: {
   onArt: (fileId: number) => void;
   /** Opens the settings where the sites are chosen. */
   onSites: () => void;
+  /** Drawn at the foot of the panel, under the search sites. */
+  children?: JSX.Element;
 }) {
   const [form, setForm] = createSignal<TagForm | null>(null);
   const [edits, setEdits] = createSignal<Partial<Record<TagField, string>>>({});
@@ -294,6 +288,7 @@ export default function Sidebar(props: {
                           type="text"
                           class={edits()[key] !== undefined ? "edited" : ""}
                           value={shown(key)}
+                          placeholder="–"
                           spellcheck={false}
                           disabled={!form()}
                           onInput={(e) => setEdits({ ...edits(), [key]: e.currentTarget.value })}
@@ -303,6 +298,7 @@ export default function Sidebar(props: {
                     >
                       <textarea
                         rows="1"
+                        placeholder="–"
                         class={edits()[key] !== undefined ? "edited" : ""}
                         value={shown(key)}
                         spellcheck={false}
@@ -345,11 +341,11 @@ export default function Sidebar(props: {
                     aria-label={`Search ${site.name}`}
                   >
                     <Show
-                      when={!broken() && favicon(site.target)}
+                      when={!broken() && siteIconUrl(site.target)}
                       fallback={<span class="siteletter">{site.name.slice(0, 1)}</span>}
                     >
                       <img
-                        src={favicon(site.target)}
+                        src={siteIconUrl(site.target)}
                         alt=""
                         draggable={false}
                         onError={() => setBroken(true)}
@@ -368,6 +364,8 @@ export default function Sidebar(props: {
               +
             </button>
           </div>
+
+          {props.children}
         </div>
       </Show>
     </aside>

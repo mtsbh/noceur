@@ -95,6 +95,10 @@ export default function Spectrogram(props: {
   name: string;
   /** Moves playback to a position, in milliseconds. */
   onSeek: (ms: number) => void;
+  /** The picture alone - no name, axes or legend - for the sidebar. */
+  compact?: boolean;
+  /** Double-click on the picture. */
+  onExpand?: () => void;
 }) {
   let canvas: HTMLCanvasElement | undefined;
   const [size, setSize] = createSignal({ w: 0, h: 0 });
@@ -248,6 +252,31 @@ export default function Spectrogram(props: {
     onCleanup(() => observer.disconnect());
   });
 
+  const plot = (
+    <div
+      class={`spekplot ${props.durationMs > 0 ? "seekable" : ""}`}
+      onPointerDown={startScrub}
+      onPointerMove={(e) => setHover(fractionAt(e))}
+      onPointerLeave={() => setHover(null)}
+      onDblClick={() => props.onExpand?.()}
+    >
+      <canvas ref={(el) => (canvas = el)} />
+      <Show when={props.durationMs > 0 && (scrubbing() ?? hover()) !== null}>
+        <span
+          class="spekat mono"
+          style={{
+            left: `${(scrubbing() ?? hover()!) * 100}%`,
+            "--f": String(scrubbing() ?? hover()!),
+          }}
+        >
+          {clock((scrubbing() ?? hover()!) * seconds())}
+        </span>
+      </Show>
+    </div>
+  );
+
+  if (props.compact) return <div class="spek compact">{plot}</div>;
+
   return (
     <div class="spek">
       <div class="spekhead" title={props.name}>
@@ -265,25 +294,7 @@ export default function Spectrogram(props: {
           </For>
         </div>
 
-        <div
-          class={`spekplot ${props.durationMs > 0 ? "seekable" : ""}`}
-          onPointerDown={startScrub}
-          onPointerMove={(e) => setHover(fractionAt(e))}
-          onPointerLeave={() => setHover(null)}
-        >
-          <canvas ref={(el) => (canvas = el)} />
-          <Show when={props.durationMs > 0 && (scrubbing() ?? hover()) !== null}>
-            <span
-              class="spekat mono"
-              style={{
-                left: `${(scrubbing() ?? hover()!) * 100}%`,
-                "--f": String(scrubbing() ?? hover()!),
-              }}
-            >
-              {clock((scrubbing() ?? hover()!) * seconds())}
-            </span>
-          </Show>
-        </div>
+        {plot}
 
         <div class="speklegend">
           <div class="spekramp" style={{ background: LEGEND }} />

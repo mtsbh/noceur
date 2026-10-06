@@ -48,6 +48,7 @@ import {
   clipboardRelease,
   type Clip,
   folderIconUrl,
+  siteIconUrl,
   type Action,
   type Transport as TransportState,
   type ArtSize,
@@ -242,15 +243,9 @@ function programIcon(path: string) {
   return () => <ImageGlyph src={folderIconUrl(path.trim().replace(/^"|"$/g, ""))} fallback={OpenWithIcon} />;
 }
 
-/** A site's favicon, from the site itself, falling back to a globe. */
+/** A site's favicon, falling back to a globe. */
 function siteIcon(template: string) {
-  let origin = "";
-  try {
-    origin = new URL(template.replace(/\{\w+\}/g, "x")).origin;
-  } catch {
-    // Not an address yet - half typed in settings.
-  }
-  return () => <ImageGlyph src={origin ? `${origin}/favicon.ico` : ""} fallback={GlobeIcon} />;
+  return () => <ImageGlyph src={siteIconUrl(template)} fallback={GlobeIcon} />;
 }
 
 function ImageGlyph(props: { src: string; fallback: () => JSX.Element }) {
@@ -918,13 +913,22 @@ export default function App() {
     window.addEventListener("pointerup", stop);
   }
 
+  /** Fraction of the playing track already played, for the spectrograms. */
+  const played = () => {
+    const t = transport();
+    return t && t.durationMs > 0 ? (t.positionMs ?? 0) / t.durationMs : 0;
+  };
+  const seekTo = (ms: number) => transportCmd("seek", ms).then(setTransport).catch(() => {});
+
   // Measured only while the strip is open — a full decode per track is not
   // something to do for a panel nobody is looking at. Keyed on the file id
   // rather than on the transport, which is replaced ten times a second while
   // something plays.
   createEffect<string>((previous) => {
-    const id = spekOpen() ? (transport()?.fileId ?? 0) : 0;
-    const key = `${spekOpen()}:${id}`;
+    // The sidebar carries a small one of its own.
+    const want = spekOpen() || sideOpen();
+    const id = want ? (transport()?.fileId ?? 0) : 0;
+    const key = `${want}:${id}`;
     if (key === previous) return key;
 
     setSpek(new Uint8Array());
@@ -2247,15 +2251,11 @@ export default function App() {
         <Show when={spekOpen()}>
           <Spectrogram
             grid={spek()}
-            progress={
-              (transport()?.durationMs ?? 0) > 0
-                ? (transport()!.positionMs ?? 0) / transport()!.durationMs
-                : 0
-            }
+            progress={played()}
             sampleRate={transport()?.sampleRate ?? 0}
             durationMs={transport()?.durationMs ?? 0}
             name={transport()?.path ?? ""}
-            onSeek={(ms) => transportCmd("seek", ms).then(setTransport).catch(() => {})}
+            onSeek={seekTo}
           />
         </Show>
         </div>
@@ -2281,7 +2281,20 @@ export default function App() {
               setFindTag(link);
               setFinding(true);
             }}
-          />
+          >
+            <Show when={!spekOpen() && (transport()?.fileId ?? 0) > 0}>
+              <Spectrogram
+                compact
+                grid={spek()}
+                progress={played()}
+                sampleRate={transport()?.sampleRate ?? 0}
+                durationMs={transport()?.durationMs ?? 0}
+                name={transport()?.path ?? ""}
+                onSeek={seekTo}
+                onExpand={() => setSpekOpen(true)}
+              />
+            </Show>
+          </Sidebar>
         </Show>
       </div>
 

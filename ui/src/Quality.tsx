@@ -194,6 +194,17 @@ export default function Quality(props: {
     return r.lossless ? "lossless" : "full";
   };
 
+  /**
+   * Green for what holds up, red for what does not, plain where there is
+   * nothing to judge - so the verdict reads down a column without the bar.
+   */
+  const tone = (r: QualityRow) =>
+    r.verdict === "genuine"
+      ? "good"
+      : r.verdict === "upscaled" || r.verdict === "transcoded"
+        ? "bad"
+        : "";
+
   /** What the file says it is, for the left-hand column. */
   const claim = (r: QualityRow) => {
     if (r.lossless) return "lossless";
@@ -266,6 +277,7 @@ export default function Quality(props: {
                 <span class="qualreal" data-tip="What the audio itself shows it was encoded at">Actual bitrate</span>
                 <span class="qualcut" data-tip="Highest frequency with real signal">Cutoff</span>
                 <span class="qualclip" data-tip="Samples in flat tops, at full scale or turned down">Clip</span>
+                <span class="qualrun" data-tip="Longest run of clipped samples">Max clip</span>
                 <span class="quallufs" data-tip="Integrated loudness, LUFS">LUFS</span>
                 <span class="qualpeak" data-tip="True peak, dBTP">Peak</span>
                 <span class="qualwhy">Result</span>
@@ -278,10 +290,10 @@ export default function Quality(props: {
                       {r.name}
                     </span>
                     <span class="qualclaim mono">{claim(r)}</span>
-                    <span class={`qualreal mono ${r.verdict === "upscaled" || r.verdict === "transcoded" ? "bad" : ""}`}>
+                    <span class={`qualreal mono ${tone(r)}`}>
                       {real(r)}
                     </span>
-                    <span class="qualcut mono">
+                    <span class={`qualcut mono ${tone(r)}`}>
                       <Show when={r.cutoffKhz > 0} fallback="—">
                         {r.cutoffKhz.toFixed(1)} kHz
                       </Show>
@@ -296,6 +308,9 @@ export default function Quality(props: {
                         {clipText(r)}
                         <Show when={r.clipDb < 0}> ↓</Show>
                       </Show>
+                    </span>
+                    <span class={`qualrun mono ${clipped(r) ? "bad" : ""}`}>
+                      <Show when={r.clipRun > 0}>{r.clipRun}</Show>
                     </span>
                     <span class="quallufs mono" data-tip="Integrated loudness">
                       {r.lufs === null ? "—" : r.lufs.toFixed(1)}

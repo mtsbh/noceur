@@ -4,6 +4,7 @@ import {
   actions,
   credentials,
   folderIconUrl,
+  siteIconUrl,
   openUrl,
   preserveDates,
   setActions,
@@ -118,7 +119,7 @@ function targetOf(field: string): (typeof QUICK_TARGETS)[number]["id"] {
 const ANALYSIS_MODES: [AnalysisMode, string][] = [
   ["fill", "Empty fields"],
   ["show", "Show only"],
-  ["overwrite", "Overwrite"],
+  ["overwrite", "When different"],
 ];
 
 /** The tempo ranges the Detect dialog offers too. */
@@ -176,11 +177,7 @@ function LauncherList(props: {
     props.onChange(props.items.map((l) => (l.id === id ? { ...l, ...change } : l)));
   const icon = (l: Launcher) => {
     if (props.kind === "open") return l.target.trim() ? folderIconUrl(l.target.trim().replace(/^"|"$/g, "")) : "";
-    try {
-      return `${new URL(l.target.replace(/\{\w+\}/g, "x")).origin}/favicon.ico`;
-    } catch {
-      return "";
-    }
+    return siteIconUrl(l.target);
   };
 
   return (

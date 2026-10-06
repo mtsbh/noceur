@@ -67,25 +67,40 @@ mod imp {
                 SHGFI_ICONLOCATION,
             )
         };
-        if ok == 0 {
-            return None;
-        }
-
         let end = info
             .szDisplayName
             .iter()
             .position(|&c| c == 0)
             .unwrap_or(info.szDisplayName.len());
         let file = String::from_utf16_lossy(&info.szDisplayName[..end]);
-        if file.is_empty() {
-            return None;
+        if ok != 0 && !file.is_empty() {
+            return Some(IconKey {
+                file,
+                index: info.iIcon,
+                size,
+            });
         }
 
-        Some(IconKey {
-            file,
-            index: info.iIcon,
-            size,
-        })
+        // A program carries its own icon, so the shell names no location for it
+        // - each .exe is its own source. The first icon in the file is the one
+        // Explorer shows.
+        if carries_own_icon(path) {
+            return Some(IconKey {
+                file: path.display().to_string(),
+                index: 0,
+                size,
+            });
+        }
+        None
+    }
+
+    fn carries_own_icon(path: &Path) -> bool {
+        path.is_file()
+            && path.extension().is_some_and(|e| {
+                ["exe", "dll", "ico"]
+                    .iter()
+                    .any(|x| e.eq_ignore_ascii_case(x))
+            })
     }
 
     /// Renders a located icon to PNG at its key's size.
@@ -314,6 +329,15 @@ mod tests {
             let img = image::load_from_memory(&thumb.png).unwrap();
             assert_eq!((img.width(), img.height()), (size.px(), size.px()));
         }
+    }
+
+    /// "Open with" shows each program by its own icon.
+    #[cfg(windows)]
+    #[test]
+    fn a_program_renders_its_own_icon() {
+        let exe = Path::new("C:\\Windows\\notepad.exe");
+        let key = locate(exe, ThumbSize::Small).expect("notepad must have an icon");
+        assert!(folder_icon(exe, ThumbSize::Small).is_some(), "{key:?} did not render");
     }
 
     /// Every ordinary folder shares one icon source, so the cache key collapses
