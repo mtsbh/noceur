@@ -78,8 +78,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
+          # Notes are written by hand: GitHub's own list pull requests and
+          # "new contributors", which on a one-person repo is just noise.
           draft: true
-          generate_release_notes: true
-          files: |
-            target/release/bundle/nsis/*-setup.exe
-            target/release/noceur-app.exe
+          files: target/release/bundle/nsis/*-setup.exe
