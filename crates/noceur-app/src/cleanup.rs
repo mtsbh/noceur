@@ -163,7 +163,9 @@ fn rename_to(path: &Path, to: &str) -> Result<(), String> {
     if destination == path {
         return Ok(());
     }
-    if destination.exists() {
+    // A change of case only is the same file to Windows, which `exists` would
+    // report as being in the way.
+    if destination.exists() && !same_but_case(path, &destination) {
         return Err(format!("{safe} already exists"));
     }
 
@@ -174,4 +176,9 @@ pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default()
+}
+
+/// Whether two paths differ only in letter case.
+pub(crate) fn same_but_case(a: &Path, b: &Path) -> bool {
+    a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
 }
