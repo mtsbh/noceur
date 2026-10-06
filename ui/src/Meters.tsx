@@ -18,7 +18,7 @@ export const METER_MODES: {
   short: string;
 }[] = [
   { value: "vu", label: "Peak meter", short: "Peak" },
-  { value: "needle", label: "VU needles", short: "VU" },
+  { value: "needle", label: "VU meter", short: "VU" },
   { value: "scope", label: "Oscilloscope", short: "Scope" },
   { value: "vector", label: "Vectorscope", short: "Vector" },
   { value: "spectrum", label: "Spectrum", short: "Spectrum" },

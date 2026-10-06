@@ -490,8 +490,8 @@ export default function Settings(props: {
                 <For
                   each={
                     [
-                      ["filled", "Filled waveform"],
-                      ["bars", "Waveform bars"],
+                      ["filled", "Waveform"],
+                      ["bars", "Bars"],
                       ["slider", "Slider"],
                     ] as const
                   }
