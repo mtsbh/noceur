@@ -95,7 +95,7 @@ export default function Spectrogram(props: {
   name: string;
   /** Moves playback to a position, in milliseconds. */
   onSeek: (ms: number) => void;
-  /** The picture alone - no name, axes or legend - for the sidebar. */
+  /** Narrower and without the name, for the sidebar. */
   compact?: boolean;
   /** Double-click on the picture. */
   onExpand?: () => void;
@@ -275,20 +275,21 @@ export default function Spectrogram(props: {
     </div>
   );
 
-  if (props.compact) return <div class="spek compact">{plot}</div>;
-
   return (
-    <div class="spek">
-      <div class="spekhead" title={props.name}>
-        {props.name}
-      </div>
+    <div class={`spek ${props.compact ? "compact" : ""}`}>
+      <Show when={!props.compact}>
+        <div class="spekhead" title={props.name}>
+          {props.name}
+        </div>
+      </Show>
 
       <div class="spekgrid">
         <div class="spekfreq">
           <For each={frequencies()}>
             {(khz) => (
               <span style={{ bottom: `${(khz / nyquist()) * 100}%` }}>
-                {khz % 1 === 0 ? khz : khz.toFixed(1)} kHz
+                {khz % 1 === 0 ? khz : khz.toFixed(1)}
+                {props.compact ? "k" : " kHz"}
               </span>
             )}
           </For>
@@ -301,13 +302,15 @@ export default function Spectrogram(props: {
           <div class="spekdb">
             <For each={decibels()}>
               {(db) => (
-                <span style={{ top: `${(db / FLOOR_DB) * 100}%` }}>{db} dB</span>
+                <span style={{ top: `${(db / FLOOR_DB) * 100}%` }}>
+                  {props.compact ? db : `${db} dB`}
+                </span>
               )}
             </For>
           </div>
         </div>
 
-        <div class="spektime">
+        <div class="spektime" hidden={props.compact}>
           <For each={times()}>
             {(at) => (
               <span style={{ left: `${(at / seconds()) * 100}%` }}>

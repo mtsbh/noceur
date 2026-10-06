@@ -2639,17 +2639,30 @@ body.resizing * {
   height: 100%;
 }
 
-/* The sidebar's own: the picture alone, for a glance at the cutoff. */
+/* The sidebar's own: kHz up the left and dB down the right as bare numbers, no
+   time row, so the picture keeps most of the width. Pulled out over the
+   sidebar's padding for the same reason. */
 .spek.compact {
-  height: 110px;
-  margin-top: 4px;
+  height: 130px;
+  margin: 4px -6px 0;
   padding: 0;
   border-top: 0;
   background: none;
 }
-.spek.compact .spekplot {
-  flex: 1;
-  border-radius: 3px;
+.spek.compact .spekgrid {
+  grid-template-columns: 24px 1fr 26px;
+  grid-template-rows: 1fr;
+  column-gap: 3px;
+}
+.spek.compact .spekramp {
+  width: 5px;
+}
+.spek.compact .speklegend {
+  gap: 3px;
+}
+.spek.compact .spekfreq span,
+.spek.compact .spekdb span {
+  font-size: 8.5px;
 }
 
 /* Time, along the bottom. The first and last labels are pulled inside the plot
@@ -4438,8 +4451,12 @@ body.resizing-v * {
 
 /* Actions: the old Clean up dialog, wider, with its ticks on the left and the
    preview on the right. */
+/* As wide as Convert and Check quality, and ended like every other dialog: one
+   footer across the whole width. The footer is written inside the right-hand
+   view (each view has its own buttons), so that view steps aside with
+   `display: contents` and its body and footer take the grid's cells. */
 .renamer.actwide {
-  width: 880px;
+  width: 1020px;
   height: min(600px, calc(100vh - 80px));
 }
 .actsplit {
@@ -4447,17 +4464,26 @@ body.resizing-v * {
   min-height: 0;
   display: grid;
   grid-template-columns: 290px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 .actleft {
+  grid-column: 1;
+  grid-row: 1;
   overflow-y: auto;
   padding: 6px 10px 14px;
   border-right: 1px solid var(--hair);
 }
 .actright {
+  display: contents;
+}
+.actright > .renamebody {
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+}
+.actright > .tagfoot {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 .actgroup {
   display: flex;
@@ -4504,10 +4530,6 @@ body.resizing-v * {
 }
 .actleft .toolopts {
   margin: 2px 0 6px 28px;
-}
-.actright .renamebody {
-  flex: 1;
-  min-height: 0;
 }
 
 /* ── Playlists ─────────────────────────────────────────────────────────── */
