@@ -117,6 +117,7 @@ import {
   ConvertIcon,
   CopiesIcon,
   GlobeIcon,
+  ListenIcon,
   ImageIcon,
   NameToTagIcon,
   MoveIcon,
@@ -682,13 +683,15 @@ export default function App() {
     null,
   );
   /** The row being matched online, and the files a chosen match would edit. */
-  const [matching, setMatching] = createSignal<{ fileId: number; fileIds: number[] } | null>(
-    null,
-  );
+  const [matching, setMatching] = createSignal<{
+    fileId: number;
+    fileIds: number[];
+    bySound?: boolean;
+  } | null>(null);
   /** The match the editor was filled from, for its Back button. */
   const [backTo, setBackTo] = createSignal<{ fileId: number; fileIds: number[] } | null>(null);
   /** What the last search found, so going back does not search again. */
-  const [found, setFound] = createSignal<{ fileId: number; result: Matched } | null>(null);
+  const [found, setFound] = createSignal<{ fileId: number; bySound?: boolean; result: Matched } | null>(null);
   /** Fields a match pre-filled the editor with, cleared when it closes. */
   const [prefill, setPrefill] = createSignal<Partial<Record<TagField, string>>>({});
   /** Cover art the chosen match came with, offered in the editor alongside it. */
@@ -747,6 +750,9 @@ export default function App() {
       // twelve times.
       case "match":
         setMatching({ fileId: ids[0], fileIds: ids });
+        break;
+      case "identify":
+        setMatching({ fileId: ids[0], fileIds: ids, bySound: true });
         break;
       case "art":
         setCovering({ fileId: ids[0], fileIds: ids });
@@ -1112,6 +1118,7 @@ export default function App() {
     const list: BarItem[] = [
       tool("tags", "Edit metadata", TagIcon, "tags"),
       tool("match", "Find metadata online", GlobeIcon, "tags"),
+      tool("identify", "Identify by sound", ListenIcon, "tags"),
       tool("fromname", "Tags from file name", NameToTagIcon, "tags"),
       tool("art", "Find album art", ImageIcon, "tags"),
       tool("quick", "Quick tag", StarIcon, "tags"),
@@ -1679,6 +1686,14 @@ export default function App() {
         // Matched on the row that was right-clicked, applied to whatever is
         // selected — the same rule the rest of the menu follows.
         run: () => setMatching({ fileId: row.fileId, fileIds: ids }),
+      },
+      {
+        kind: "item",
+        label: "Identify by sound…",
+        icon: ListenIcon,
+        disabled: audio,
+        // For a file whose name and tags may be wrong: Shazam listens to it.
+        run: () => setMatching({ fileId: row.fileId, fileIds: ids, bySound: true }),
       },
       {
         kind: "item",
@@ -2641,8 +2656,15 @@ export default function App() {
         {(target) => (
           <MatchPicker
             fileId={target().fileId}
-            cached={found()?.fileId === target().fileId ? found()!.result : undefined}
-            onLoaded={(result) => setFound({ fileId: target().fileId, result })}
+            bySound={target().bySound}
+            cached={
+              found()?.fileId === target().fileId && !!found()!.bySound === !!target().bySound
+                ? found()!.result
+                : undefined
+            }
+            onLoaded={(result) =>
+              setFound({ fileId: target().fileId, bySound: target().bySound, result })
+            }
             onClose={() => {
               setMatching(null);
               setFound(null);

@@ -388,6 +388,18 @@ export function HeadphonesIcon() {
   );
 }
 
+/** Identify by sound: a speaker's waves, heard. */
+export function ListenIcon() {
+  return (
+    <Icon>
+      <circle cx="4" cy="8" r="1.3" />
+      <path d="M7 5.2a4 4 0 0 1 0 5.6" />
+      <path d="M9.4 3.2a7 7 0 0 1 0 9.6" />
+      <path d="M11.8 1.6a9.6 9.6 0 0 1 0 12.8" />
+    </Icon>
+  );
+}
+
 export function CrateIcon() {
   return (
     <Icon>

@@ -18,8 +18,17 @@ use tauri::State;
 /// with no tags — promos, rips, things pulled off a stick.
 ///
 /// The duration comes from the file's own header and is used only as a tiebreak.
+///
+/// `by_sound` is Identify by sound: for a file whose tags and name may be
+/// wrong, neither is searched with. Shazam listens first, asked for explicitly
+/// so whether or not it is on in Settings, then AcoustID.
 #[tauri::command]
-pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Matched, String> {
+pub async fn match_track(
+    state: State<'_, AppState>,
+    file_id: i64,
+    by_sound: Option<bool>,
+) -> Result<Matched, String> {
+    let by_sound = by_sound.unwrap_or(false);
     let db = state.db.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -88,13 +97,20 @@ pub async fn match_track(state: State<'_, AppState>, file_id: i64) -> Result<Mat
         let mut result = Ok(Vec::new());
         let mut query = None;
         let mut tried: Vec<(String, String)> = Vec::new();
-        for by in [By::Tags, By::Sound, By::Shazam, By::Name] {
+        let order: &[By] = if by_sound {
+            &[By::Shazam, By::Sound]
+        } else {
+            &[By::Tags, By::Sound, By::Shazam, By::Name]
+        };
+        for &by in order {
             let mut heard = None;
             let next = match by {
                 By::Tags => tagged.then(|| (tagged_artist.clone(), tagged_title.clone())),
                 By::Sound => identify(&found.path, meta.duration_ms).map(|h| (h.artist(), h.title)),
                 By::Shazam => {
-                    heard = config.shazam.then(|| shazam(&found.path)).flatten();
+                    heard = (config.shazam || by_sound)
+                        .then(|| shazam(&found.path))
+                        .flatten();
                     heard.as_ref().map(|m| (m.artist(), m.title.clone()))
                 }
                 By::Name => Some(named.clone()),

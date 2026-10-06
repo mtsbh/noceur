@@ -22,6 +22,8 @@ const PER_SOURCE = 3;
 
 export default function MatchPicker(props: {
   fileId: number;
+  /** Identify by sound: listens, and searches with neither tags nor name. */
+  bySound?: boolean;
   onClose: () => void;
   /** What an earlier search of this track found, so coming back is instant. */
   cached?: Matched;
@@ -68,7 +70,7 @@ export default function MatchPicker(props: {
   createEffect(() => {
     const id = props.fileId;
     const cached = props.cached;
-    (cached ? Promise.resolve(cached) : matchTrack(id))
+    (cached ? Promise.resolve(cached) : matchTrack(id, props.bySound))
       .then((r) => {
         setQuery(r.query);
         setMatches(r.matches);
@@ -138,9 +140,13 @@ export default function MatchPicker(props: {
   return (
     <>
       <div class="scrim" onPointerDown={props.onClose} />
-      <div class="matches" role="dialog" aria-label="Find metadata">
+      <div
+        class="matches"
+        role="dialog"
+        aria-label={props.bySound ? "Identify by sound" : "Find metadata"}
+      >
         <header class="sethead">
-          <span class="settitle">Find metadata</span>
+          <span class="settitle">{props.bySound ? "Identify by sound" : "Find metadata"}</span>
           <button
             class="setclose"
             onClick={props.onClose}
@@ -153,7 +159,10 @@ export default function MatchPicker(props: {
         </header>
 
         <div class="matchbody">
-          <Show when={matches()} fallback={<p class="sethint">Searching…</p>}>
+          <Show
+            when={matches()}
+            fallback={<p class="sethint">{props.bySound ? "Listening…" : "Searching…"}</p>}
+          >
             <Show when={query()}>
               {(q) => (
                 <p class="sethint">
@@ -171,9 +180,14 @@ export default function MatchPicker(props: {
               when={shown().length > 0}
               fallback={
                 <p class="sethint">
-                  <span data-tip="Try adding artist and title" data-tip-at="start">
-                    No match
-                  </span>
+                  <Show
+                    when={!props.bySound}
+                    fallback={<span>Shazam and AcoustID didn't recognise it</span>}
+                  >
+                    <span data-tip="Try adding artist and title" data-tip-at="start">
+                      No match
+                    </span>
+                  </Show>
                 </p>
               }
             >

@@ -6,6 +6,7 @@ import type { BarLayout } from "./settings";
 export type ActionId =
   | "tags"
   | "match"
+  | "identify"
   | "art"
   | "rename"
   | "clean"

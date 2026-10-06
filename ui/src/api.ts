@@ -697,8 +697,8 @@ export type Matched = { matches: TrackMatch[]; query: Query | null };
  * Tries the file's tags, then its fingerprint (AcoustID, then Shazam when on),
  * then its name, until one finds something — the files that most need this are the ones with no tags.
  */
-export function matchTrack(fileId: number): Promise<Matched> {
-  return invoke<Matched>("match_track", { fileId });
+export function matchTrack(fileId: number, bySound = false): Promise<Matched> {
+  return invoke<Matched>("match_track", { fileId, bySound });
 }
 
 /**
