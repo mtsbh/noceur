@@ -69,8 +69,8 @@ const GROUPS: { title: string; items: Shortcut[] }[] = [
     title: "Tagging",
     items: [
       [["F2"], "Edit tags"],
-      [["Alt", "F1"], "File name from tags"],
-      [["Alt", "F2"], "Tags from file name"],
+      [["Alt", "F1"], "Tags from file name"],
+      [["Alt", "F2"], "File name from tags"],
       [["Alt", "F3"], "Find metadata"],
       [["Alt", "1–5"], "Rate"],
       [["Alt", "0"], "Clear rating"],

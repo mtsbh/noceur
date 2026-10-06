@@ -1024,7 +1024,7 @@ export default function App() {
   }
 
   /**
-   * Alt+F1: file names from the tags, as `Artist - Title`, at once.
+   * Alt+F2: file names from the tags, as `Artist - Title`, at once.
    * Like Clean up, no dialog — Ctrl+Z puts the names back.
    */
   async function nameFromTags(ids: number[]) {
@@ -1048,7 +1048,7 @@ export default function App() {
   }
 
   /**
-   * Alt+F2: artist and title from `Artist - Title` file names, at once.
+   * Alt+F1: artist and title from `Artist - Title` file names, at once.
    * Names that do not fit are left alone and counted.
    */
   async function tagsFromName(ids: number[]) {
@@ -1935,14 +1935,14 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
 
-      // Alt+F1 names files from the tags, Alt+F2 tags them from their names,
+      // Alt+F1 tags files from their names, Alt+F2 names them from their tags,
       // Alt+F3 finds metadata — the three converters a folder goes through.
       if (e.altKey && !mod && !e.shiftKey && ["F1", "F2", "F3"].includes(e.key)) {
         e.preventDefault();
         const ids = audioSelection();
         if (ids.length === 0) return;
-        if (e.key === "F1") void nameFromTags(ids);
-        else if (e.key === "F2") void tagsFromName(ids);
+        if (e.key === "F1") void tagsFromName(ids);
+        else if (e.key === "F2") void nameFromTags(ids);
         else runAction("match", ids);
         return;
       }
