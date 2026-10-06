@@ -2151,7 +2151,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "noceur-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lofty",
  "noceur-art",
@@ -2172,7 +2172,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-art"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "image",
  "noceur-tags",
@@ -2183,7 +2183,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-audio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lofty",
  "noceur-fsmodel",
@@ -2198,7 +2198,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "noceur-index",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-fsmodel"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "regex",
  "tempfile",
@@ -2216,7 +2216,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-index"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lofty",
  "noceur-fsmodel",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-online"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "noceur-audio",
  "serde",
@@ -2242,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-rekordbox"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "quick-xml",
  "thiserror 2.0.19",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "noceur-tags"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lofty",
  "tempfile",

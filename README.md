@@ -204,7 +204,7 @@ Only `noceur-app` depends on Tauri; the other crates build and test without a wi
 
 ## Status
 
-Noceur is at version 0.1 and is developed against one large, real DJ library. It is used
+Noceur is at version 0.2 and is developed against one large, real DJ library. It is used
 every day, but it has not had wide testing yet. It runs on Windows only: file operations,
 the clipboard, shell icons and drag and drop go through Windows APIs. Back up anything you
 can't afford to lose before you batch-retag or rename it.
