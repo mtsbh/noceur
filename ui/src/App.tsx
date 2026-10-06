@@ -1412,24 +1412,10 @@ export default function App() {
 
   /* ── Sidebar ───────────────────────────────────────────────────────────── */
 
-  const SIDE_KEY = "noceur.sidebar";
-  const [sideOpen, setSideOpen] = createSignal(
-    (() => {
-      try {
-        return localStorage.getItem(SIDE_KEY) === "1";
-      } catch {
-        return false;
-      }
-    })(),
-  );
+  // Closed at every start: opening it (Ctrl+B) lasts until the app closes.
+  const [sideOpen, setSideOpen] = createSignal(false);
   function toggleSide() {
-    const open = !sideOpen();
-    setSideOpen(open);
-    try {
-      localStorage.setItem(SIDE_KEY, open ? "1" : "0");
-    } catch {
-      /* remembered for this session only */
-    }
+    setSideOpen(!sideOpen());
   }
 
   /** The focused pane's current row, with the tab it is in. */
