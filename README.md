@@ -27,53 +27,47 @@ same track often exists in more than one place.
 
 **Browsing**
 - Fast, virtualized listing that handles folders with tens of thousands of files
-- Folder tree with pinned folders, breadcrumbs, back/forward history
-- Tabs and a dual-pane layout (side by side or stacked), each pane with its own sort and history
-- 19 columns, reorderable and resizable; sort by BPM, key, rating, date and more
-- Icon view for folders that contain no audio
-- Full-text search across the indexed library; results use the list's columns (add, remove, move, resize, sort), with the folder as a column of its own
-- Option to hide non-audio files (cover scans, `.nfo`, `.cue`)
+- Folder tree with pinned folders and back/forward history
+- Tabs and a dual-pane layout (side by side/stacked), each pane with its own sort and history
+- Full-text search across the indexed library
+- Option to hide non-audio files (covers, `.nfo`, `.cue`)
 
 **Files**
-- Drag and drop to and from Explorer, between panes, onto tabs, tree folders and folder rows
-- Copy, cut and paste (`Ctrl+C` / `Ctrl+X` / `Ctrl+V`), shared with the Windows clipboard, so files copied in Explorer paste in Noceur and vice versa
-- `Ctrl` or `Shift` at the drop forces copy or move, as in Explorer
-- Copy or move to the other pane; new folder; delete to the Recycle Bin
-- Folders drag out of the tree (onto a pane, a tab, another folder, Explorer or rekordbox) and delete from its right-click menu
-- File operations go through the Windows shell (progress, conflict prompts, Explorer undo)
+- Drag and drop to and from Explorer, between panes, tabs, tree folders etc.
+- Copy, cut and paste (`Ctrl+C` / `Ctrl+X` / `Ctrl+V`), shared with the Windows clipboard, so files copied in Explorer paste in Noceur and vice-versa
 - `Ctrl+Z` undoes the last rename job inside the app
-- "Open with" your own programs (e.g. Spek, Mp3tag, fre:ac), all selected files in one launch
-- Playlists (`Ctrl+P`): gather tracks from anywhere without copying them. `P` adds the selection to the current playlist (again takes it out), right-click → Playlists ticks it into any of them; play through in order, reorder by drag or `Alt+↑↓`. Entries follow files the app renames or moves
+- "Open with" your own programs (e.g. Spek, Mp3tag, fre:ac)
+- Playlists (`Ctrl+P`): gather tracks from anywhere without copying them. `P` adds the selection to the current playlist (again takes it out), right-click → Playlists ticks it into any of them; play through in order, reorder by drag or `Alt+↑↓`
 - Send to rekordbox (Playlists window): every playlist goes into a `noceur` folder in the `rekordbox.xml` rekordbox's Imported Library reads, with tracks rekordbox doesn't have yet added to its collection, each with a beat grid and up to eight cues (hot and memory) on the bar lines where its sections start, named Intro, Drop, Break or Outro. A track already in the file keeps its own cues. Nothing else in the file changes: the old file is backed up, and every existing track, cue and playlist is checked unchanged before the new one replaces it. Reload in rekordbox, then import as usual
-- Track sidebar (`Ctrl+B`, or the tab on the right edge): cover (drag it shorter to fit), file facts, tags edited in place with Apply / Cancel, Artist / Genre / Label as links to every track with that tag, and search icons for the sites ticked in Settings → Search in. While it is open, moving through the list plays each track
+- Track sidebar (`Ctrl+B`, or the tab on the right edge): cover, file specs, tags editable, Artist / Genre / Label as links to every track with that tag, and search icons for the sites ticked in Settings → Search in.
 - Send to Telegram: the selected files open in Telegram Desktop's chat picker, sent from your own account (button hidden when Telegram isn't installed)
 
 **Playback**
 - Preview player with a seekable three-band waveform (four styles)
-- Spectrogram of the playing track, click to seek
-- Meters: peak LEDs, VU needles, oscilloscope, vectorscope with phase correlation, spectrum
+- Spectrogram of the playing track, seekable on click
+- Meters: peak LEDs, VU, oscilloscope, vectorscope with phase correlation, spectrum
 
 **Tagging**
 - Edit one file or many; fields that differ across the selection are shown as mixed
-- Inline editing in the list: click a selected row's name or tag cell to edit it in place
+- Inline editing
 - Star ratings (`Alt+0`–`Alt+5`), stored where DJ software reads them
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
-- Metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive, always picked by hand
-- Untagged files identified by sound (AcoustID fingerprint, then Shazam for new and underground releases AcoustID doesn't know, when turned on in Settings), then searched by what they turn out to be; the file name is the last resort
+- Pick metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive
+- Untagged files identified by sound (AcoustID fingerprint, then Shazam for new or underground releases AcoustID doesn't know)
 - Tags from file name (`%artist% - %title%` patterns, with preview)
-- Rename from templates; Clean up renames to `Artist - Title` in one click (Ctrl+Z undoes)
-- Actions, previewed old → new: clean tags, remove (Original Mix) or trailing brackets, tidy featuring, album artist from artist, artist into or out of the title, year only, cut N characters off the name, move into folders built from tags
-- Your own buttons built by picking a field and an operation; Mp3tag expressions (`$regexp`, `$cutLeft`, `$cutRight`, `$eql`) run as pasted
-- File modification dates are preserved when retagging (configurable)
+- Rename from templates; Clean up renames to `Artist - Title`
+- Actions, previewed old → new: clean tags, removing (Original Mix) or trailing brackets, tidy featuring, cut N characters off the name etc.
+- Add your own buttons built by picking a field and an operation; Mp3tag expressions (`$regexp`, `$cutLeft`, `$cutRight`, `$eql`) run as pasted
+- You can keep file modification dates when retagging
 
 **Analysis**
 - Quality check: detects lossy sources in lossless containers, upscaled MP3s, upsampled files and clipping (also when it was turned down afterwards), with an estimate of the original bitrate
 - Damage check: files cut short of their stated length, decode errors, dropouts, clicks and 16-bit audio padded to 24, in the same pass
 - Loudness: integrated LUFS and true peak (ITU-R BS.1770 / EBU R128) in the quality report, and optionally written as ReplayGain
 - Duplicate finder based on decoded audio, independent of tags and file names
-- BPM and key detection, shown next to the tagged values and written only for the ones you tick; half/double time settled by a range, keys by a neural network (KeyNet) that agrees with Mixed In Key on about two tracks in three
-- Library overview (`Ctrl+I`): tracks and playing time, BPM spread, keys on a Camelot wheel, formats and sample rates, quality and loudness, missing tags, top labels, genres and artists, and the folders with the most problems, for the whole library or one folder
-- Optional: BPM and key measured automatically for each track you play, written only into empty fields (or shown, or overwritten), with the list marking where a tag disagrees
+- BPM and key detection, shown next to the tagged values and written only for the ones you tick; half/double time settled by a range, keys by a neural network (KeyNet) - pretty much same as Mixed in Key.
+- Library overview (`Ctrl+I`): tracks and playing time, BPM spread, keys on a Camelot wheel, formats and sample rates, quality and loudness, missing tags and top labels
+- Optional: BPM and key measured automatically for each track you play, written only into empty fields (or shown, or overwritten), with marking where a tag disagrees
 
 **Conversion**
 - Lossless conversion between WAV, AIFF, FLAC and ALAC via ffmpeg
@@ -81,15 +75,15 @@ same track often exists in more than one place.
 
 **Customization**
 - Customizable toolbar: reorder, add or remove buttons, separators and spaces, change icons
-- Your own action buttons using foobar2000 title-formatting syntax, with a built-in syntax reference and recipes
-- "Search in" sites (Google and YouTube by default, add your own) from the context menu or toolbar
-- Seven themes, including one light theme; selectable UI font
+- Your own action buttons using foobar2000 title-formatting syntax, with a useful built-in syntax reference and recipes
+- "Search in" sites (Google and YouTube by default, you can add your own) from the context menu or toolbar
+- Choose between dark and light themes + UI font
 
 ## Installation
 
-Requirements: Windows 10 or 11 (64-bit). WebView2 ships with Windows.
+Requirements: Windows 10 or 11 (64-bit)
 
-There are no pre-built releases yet; [build from source](#building). Installers will be published
+There are no pre-built releases yet; [build from source](#building). Installers are published
 on the [Releases](https://github.com/mtsbh/noceur/releases) page.
 
 The app is portable. Settings live in `noceur-config.json` next to the executable, and the index
@@ -97,7 +91,7 @@ The app is portable. Settings live in `noceur-config.json` next to the executabl
 or `AppData`.
 
 Converting requires [ffmpeg](https://ffmpeg.org/download.html). Put `ffmpeg.exe` next to
-Noceur, on your `PATH`, or set its path in Settings → Files.
+Noceur, on your `PATH`, or set its path in Settings.
 
 ## Keyboard shortcuts
 
@@ -236,7 +230,7 @@ issue first.
 Noceur is not affiliated with AlphaTheta (rekordbox), Mixed In Key, Beatport, Bandcamp, Deezer,
 Apple, Discogs, Tidal, Shazam or MusicBrainz. Beatport, Bandcamp and Shazam are reached through
 their public websites rather than published APIs, so a change on their side can break a source
-until Noceur is updated. In that case the source returns no results; nothing breaks in the app.
+until Noceur is updated.
 
 ## Licence
 
