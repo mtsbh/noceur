@@ -10,9 +10,8 @@ env:
 
 jobs:
   check:
-    # Windows is the tested target: the shell integration, the drag payload and
-    # the folder icons are all Win32, and half the suite would be skipped
-    # anywhere else.
+    # Windows is the supported target: the shell integration, the drag payload
+    # and the folder icons are all Win32. See `portable` for macOS and Linux.
     runs-on: windows-latest
 
     steps:
@@ -55,3 +54,54 @@ jobs:
       # by hand — see the README.
       - name: Tests
         run: cargo test --workspace
+
+  portable:
+    # macOS and Linux are not supported yet: this shows how far they are from
+    # building and passing, without turning master red while that work is open.
+    name: portable (${{ matrix.os }})
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      # Tauri's WebKitGTK and GTK, and ALSA for the player.
+      - name: Install Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libasound2-dev libssl-dev
+
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+
+      - name: Build the frontend
+        run: npm --prefix ui run build
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Tests
+        run: cargo test --workspace
+
+      # Last, so lints left by the Windows-only code don't hide build or test
+      # failures.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
