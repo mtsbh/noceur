@@ -13,6 +13,9 @@ import {
 } from "./api";
 import { searchUrl, type Launcher } from "./settings";
 
+/** The tag editor's fields, less the ones rarely set track by track. */
+const SIDE_FIELDS = TAG_FIELDS.filter(([key]) => key !== "albumArtist");
+
 /** Fields that share a row in pairs rather than taking the full width. */
 const NARROW: TagField[] = ["year", "trackNo", "bpm", "key"];
 
@@ -260,7 +263,7 @@ export default function Sidebar(props: {
           </Show>
 
           <div class="sidetags">
-            <For each={TAG_FIELDS}>
+            <For each={SIDE_FIELDS}>
               {([key, label]) => {
                 const link = LINKED[key];
                 return (

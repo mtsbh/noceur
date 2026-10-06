@@ -4778,8 +4778,11 @@ body.resizing-v * {
   gap: 8px;
   padding: 8px 12px 10px;
 }
+/* A hairline under the file's facts, so they don't run into the tags below. */
 .sidefacts {
   margin: 0;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--hair);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px 10px;

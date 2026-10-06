@@ -148,8 +148,11 @@ export default function Spectrogram(props: {
     const marks: number[] = [];
     for (let khz = 0; khz <= top; khz += step) marks.push(khz);
     // The very top is worth labelling even when it is not on the interval: it
-    // is where the answer usually is.
-    if (top - marks[marks.length - 1] > step * 0.35) marks.push(top);
+    // is where the answer usually is. The sidebar's picture is too short for
+    // two labels that close, so there the top takes the round mark's place.
+    const gap = top - marks[marks.length - 1];
+    if (props.compact && gap > 0 && gap < step * 0.6) marks.pop();
+    if (gap > step * 0.35) marks.push(top);
     return marks;
   };
 
