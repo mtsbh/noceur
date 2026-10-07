@@ -306,6 +306,19 @@ fn strip_original(text: &str) -> String {
             return out[..cut].to_string();
         }
     }
+    // Bare at the end: `Title Original Mix`. Only the full phrase, since a
+    // title can end in "Original" on its own.
+    let trimmed = out.trim_end();
+    if let Some(head) = trimmed
+        .len()
+        .checked_sub("original mix".len())
+        .filter(|&at| trimmed.is_char_boundary(at))
+        .filter(|&at| trimmed[at..].eq_ignore_ascii_case("original mix"))
+        .map(|at| &trimmed[..at])
+        .filter(|head| head.ends_with(char::is_whitespace))
+    {
+        return head.trim_end().to_string();
+    }
     out
 }
 
@@ -649,6 +662,9 @@ mod tests {
                 "Skee Mask - Rev8617",
             ),
             ("Skee Mask - Rev8617 (Original Mix)", "Skee Mask - Rev8617"),
+            ("Skee Mask - Rev8617 Original Mix", "Skee Mask - Rev8617"),
+            ("Skee Mask - Rev8617 original mix", "Skee Mask - Rev8617"),
+            ("Skee Mask - The Original", "Skee Mask - The Original"),
             (
                 "01_Skee_Mask_-_Rev8617_(Original_Mix)",
                 "Skee Mask - Rev8617",
