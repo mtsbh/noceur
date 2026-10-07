@@ -3440,6 +3440,8 @@ label.artoffer:hover {
 .qualclip.bad,
 .qualrun.bad {
   color: var(--qual-bad);
+  /* The global .bad shrinks text to 10px; here it must match its row. */
+  font-size: inherit;
 }
 .qualreal.good,
 .qualcut.good {
@@ -3452,6 +3454,7 @@ label.artoffer:hover {
 }
 .qualpeak.bad {
   color: var(--qual-bad);
+  font-size: inherit;
 }
 .qualdamage {
   color: var(--qual-bad);
