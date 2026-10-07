@@ -14,14 +14,7 @@ place, no import needed. Built for DJs and audiophiles.
 
 </div>
 
-<img src="docs/images/main.png" alt="Noceur: folder tree, tabs, a track listing with BPM, key and artist columns, and the player along the bottom.">
-
-Noceur browses your music folders directly. There is no import step and no library database to
-keep in sync: the folder tree is the library. Each row shows BPM, key, duration, rating and tags,
-and the app includes a player, a tagger, a quality checker and a lossless converter.
-
-It is designed for large collections (20k–100k tracks) spread across several drives, where the
-same track often exists in more than one place.
+<img src="docs/images/main.png" alt="Noceur: folder tree, tabs, a track listing with BPM, key, year and rating columns, and the player along the bottom.">
 
 ## Features
 
@@ -47,6 +40,8 @@ same track often exists in more than one place.
 - Spectrogram of the playing track, seekable on click
 - Meters: peak LEDs, VU, oscilloscope, vectorscope with phase correlation, spectrum
 
+<img src="docs/images/sidebar.webp" alt="Track sidebar with cover, specs and tags, and the spectrogram below the listing.">
+
 **Tagging**
 - Edit one file or many; fields that differ across the selection are shown as mixed
 - Inline editing
@@ -54,11 +49,13 @@ same track often exists in more than one place.
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
 - Pick metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive
 - Untagged files identified by sound (AcoustID fingerprint, then Shazam for new or underground releases AcoustID doesn't know)
-- Tags from file name (`%artist% - %title%` patterns, with preview)
-- Rename from templates; Clean up renames to `Artist - Title`
+- Tags from file name: reads tags out of the name (`%artist% - %title%` patterns, with preview)
+- Rename: the other way round, writes the file name from tags using templates; Clean up renames to `Artist - Title`
 - Actions, previewed old → new: clean tags, removing (Original Mix) or trailing brackets, tidy featuring, cut N characters off the name etc.
 - Add your own buttons built by picking a field and an operation; Mp3tag expressions (`$regexp`, `$cutLeft`, `$cutRight`, `$eql`) run as pasted
 - You can keep file modification dates when retagging
+
+<img src="docs/images/find-metadata.png" width="612" alt="Find metadata: matches from Beatport, Tidal, Discogs, Bandcamp and iTunes, scored.">
 
 **Analysis**
 - Quality check: detects lossy sources in lossless containers, upscaled MP3s, upsampled files and clipping (also when it was turned down afterwards), with an estimate of the original bitrate
@@ -69,6 +66,8 @@ same track often exists in more than one place.
 - Library overview (`Ctrl+I`): tracks and playing time, BPM spread, keys on a Camelot wheel, formats and sample rates, quality and loudness, missing tags and top labels
 - Optional: BPM and key measured automatically for each track you play, written only into empty fields (or shown, or overwritten), with marking where a tag disagrees
 
+<img src="docs/images/quality.png" alt="Quality check: one transcoded file flagged among eleven genuine ones, with cutoff, clipping, LUFS and peak.">
+
 **Conversion**
 - Lossless conversion between WAV, AIFF, FLAC and ALAC via ffmpeg
 - Keeps bit depth and sample rate, verifies each output against the source (MD5), copies tags and art
@@ -78,6 +77,12 @@ same track often exists in more than one place.
 - Your own action buttons using foobar2000 title-formatting syntax, with a useful built-in syntax reference and recipes
 - "Search in" sites (Google and YouTube by default, you can add your own) from the context menu or toolbar
 - Choose between dark and light themes + UI font
+- Command palette (`Ctrl+K`): every action, including your own buttons, by typing
+
+<p>
+<img src="docs/images/expressions.png" width="49%" alt="Expression syntax reference with recipes.">
+<img src="docs/images/palette.png" width="49%" alt="Command palette.">
+</p>
 
 ## Installation
 
@@ -111,6 +116,7 @@ Noceur, on your `PATH`, or set its path in Settings.
 | `Ctrl+Z` | Undo last rename |
 | `Ctrl+Shift+N` | New folder |
 | `Ctrl+F` | Search |
+| `Ctrl+K` | Command palette |
 | `Ctrl+I` | Library overview |
 | `Ctrl+P` | Playlists |
 | `Ctrl+B` | Track sidebar (selecting plays while open) |
