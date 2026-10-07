@@ -76,7 +76,10 @@ pub fn write_id3(path: &Path, stars: Option<u8>) -> Result<(), lofty::error::Lof
     /// and the alternative is the same twelve lines written three times.
     macro_rules! rate {
         ($ty:ty) => {{
-            let mut file = <$ty>::read_from(&mut handle, ParseOptions::new())?;
+            // Parsed through the mask, so a broken INFO list doesn't stop it;
+            // written to the real file.
+            let mut file =
+                <$ty>::read_from(&mut crate::riff::open_masked(path)?, ParseOptions::new())?;
 
             // A file with no ID3 tag and no rating to write is left alone.
             // Adding an empty tag to clear a rating that was never there would
@@ -122,7 +125,7 @@ fn with_id3<T>(path: &Path, f: impl FnOnce(&Id3v2Tag) -> T) -> Option<T> {
     if !uses_id3(file_type) {
         return None;
     }
-    let mut handle = std::fs::File::open(path).ok()?;
+    let mut handle = crate::riff::open_masked(path).ok()?;
 
     match file_type {
         FileType::Mpeg => lofty::mpeg::MpegFile::read_from(&mut handle, ParseOptions::new())

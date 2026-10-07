@@ -15,7 +15,6 @@ pub enum MetaError {
 
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::prelude::{Accessor, ItemKey};
-use lofty::probe::Probe;
 
 /// Everything a file claims about itself, normalised.
 ///
@@ -81,11 +80,7 @@ pub fn read(path: &Path) -> Result<TrackMeta, MetaError> {
         path: path.display().to_string(),
         source,
     };
-    let probe = Probe::open(path)
-        .map_err(fail)?
-        .guess_file_type()
-        .map_err(|e| fail(lofty::error::LoftyError::from(e)))?;
-    let tagged = probe.read().map_err(fail)?;
+    let tagged = crate::riff::read(path).map_err(fail)?;
 
     let props = tagged.properties();
     let mut meta = TrackMeta {
@@ -228,12 +223,10 @@ pub fn is_lossless(file_type: lofty::file::FileType) -> bool {
 /// back to the first one present — plenty of files in a real library carry a
 /// single untyped picture, and refusing to show it would be pedantic.
 pub fn artwork(path: &Path) -> Result<Option<Artwork>, MetaError> {
-    let tagged = Probe::open(path)
-        .and_then(|p| p.read())
-        .map_err(|source| MetaError::Read {
-            path: path.display().to_string(),
-            source,
-        })?;
+    let tagged = crate::riff::read(path).map_err(|source| MetaError::Read {
+        path: path.display().to_string(),
+        source,
+    })?;
 
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
         return Ok(None);
@@ -262,12 +255,10 @@ pub fn artwork(path: &Path) -> Result<Option<Artwork>, MetaError> {
 /// Missing fields are simply absent rather than empty, so the caller can tell
 /// "not set" from "set to nothing".
 pub fn read_fields(path: &Path, names: &[String]) -> Result<Fields, MetaError> {
-    let tagged = Probe::open(path)
-        .and_then(|p| p.read())
-        .map_err(|source| MetaError::Read {
-            path: path.display().to_string(),
-            source,
-        })?;
+    let tagged = crate::riff::read(path).map_err(|source| MetaError::Read {
+        path: path.display().to_string(),
+        source,
+    })?;
 
     let mut out = Fields::default();
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {

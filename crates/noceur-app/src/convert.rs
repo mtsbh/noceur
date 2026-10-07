@@ -363,7 +363,7 @@ fn copy_tags(src: &Path, dst: &Path) -> Result<(), String> {
     use lofty::prelude::*;
     use lofty::tag::{ItemKey, Tag};
 
-    let from = lofty::read_from_path(src).map_err(|e| e.to_string())?;
+    let from = noceur_tags::riff::read(src).map_err(|e| e.to_string())?;
     let Some(source) = from.primary_tag().or_else(|| from.first_tag()) else {
         return Ok(());
     };

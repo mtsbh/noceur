@@ -11,7 +11,6 @@ use lofty::config::WriteOptions;
 use lofty::file::TaggedFileExt;
 use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::{Accessor, ItemKey, TagExt};
-use lofty::probe::Probe;
 use lofty::tag::Tag;
 use std::path::Path;
 
@@ -144,13 +143,10 @@ pub fn write(path: &Path, edit: &Edit) -> Result<(), EditError> {
     let track_no = number(&edit.track_no, "track number")?;
     let bpm = decimal(&edit.bpm, "BPM")?;
 
-    let mut tagged =
-        Probe::open(path)
-            .and_then(|p| p.read())
-            .map_err(|source| EditError::Read {
-                path: path.display().to_string(),
-                source,
-            })?;
+    let mut tagged = crate::riff::read(path).map_err(|source| EditError::Read {
+        path: path.display().to_string(),
+        source,
+    })?;
 
     // The container's own preferred tag type, so an edit to a FLAC writes Vorbis
     // comments and an edit to an MP3 writes ID3v2 — rather than bolting a
@@ -482,13 +478,10 @@ pub fn set_front_cover(path: &Path, image: &[u8]) -> Result<(), EditError> {
         path: path.display().to_string(),
     })?;
 
-    let mut tagged =
-        Probe::open(path)
-            .and_then(|p| p.read())
-            .map_err(|source| EditError::Read {
-                path: path.display().to_string(),
-                source,
-            })?;
+    let mut tagged = crate::riff::read(path).map_err(|source| EditError::Read {
+        path: path.display().to_string(),
+        source,
+    })?;
 
     let tag_type = tagged.primary_tag_type();
     if tagged.tag(tag_type).is_none() {
@@ -524,13 +517,10 @@ pub fn set_front_cover(path: &Path, image: &[u8]) -> Result<(), EditError> {
 /// runs across a selection, and rewriting an untouched file would cost it its
 /// cached thumbnail and waveform for no change.
 pub fn remove_pictures(path: &Path) -> Result<(), EditError> {
-    let mut tagged =
-        Probe::open(path)
-            .and_then(|p| p.read())
-            .map_err(|source| EditError::Read {
-                path: path.display().to_string(),
-                source,
-            })?;
+    let mut tagged = crate::riff::read(path).map_err(|source| EditError::Read {
+        path: path.display().to_string(),
+        source,
+    })?;
 
     let tag_type = tagged.primary_tag_type();
     let Some(tag) = tagged.tag_mut(tag_type) else {
