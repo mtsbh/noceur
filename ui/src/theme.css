@@ -5452,3 +5452,432 @@ button.sidelabel {
 .toolbar.editing .baritem:hover .barx.one {
   display: flex;
 }
+
+/* ── Set: a recorded set's tracklist, under the panes like the spectrogram ──
+   The list's own look: greys, and the accent for the one track playing. Its
+   height is dragged from the top edge. */
+.setp {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hair);
+  background: var(--panel);
+}
+.setphead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--hair);
+  white-space: nowrap;
+}
+.setptitle {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+.setpmeta {
+  color: var(--fg3);
+}
+.setpgrip {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 3;
+}
+/* Where each identified track falls in the set: a hairline track with the
+   stretches TrackID named on it, the one playing in the accent. */
+.setpstrip {
+  position: relative;
+  flex: none;
+  height: 10px;
+  margin: 8px 14px 6px;
+  border-radius: 2px;
+  background: var(--hair);
+  cursor: pointer;
+}
+.setpspan {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--fg4);
+}
+.setpspan:hover {
+  background: var(--fg3);
+}
+.setpspan.on {
+  background: var(--acc);
+}
+.setppos {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--fg);
+  pointer-events: none;
+}
+.setpgap {
+  grid-column: span 4;
+  color: var(--fg4);
+  font-style: italic;
+}
+.setpsep {
+  flex: 1;
+}
+.setpnudge,
+.setplink,
+.setpclose {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--fg2);
+  font: inherit;
+  cursor: pointer;
+}
+.setpnudge {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-color: var(--hair2);
+}
+.setplink {
+  padding: 2px 6px;
+}
+.setpclose {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 15px;
+  color: var(--fg3);
+}
+.setpnudge:hover,
+.setplink:hover,
+.setpclose:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.setpoffset {
+  min-width: 46px;
+  text-align: center;
+  color: var(--fg2);
+  cursor: default;
+}
+.setpsearch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 6px;
+}
+/* The Search dialog's box: no fill, a hairline under the words, the accent
+   line once it has the cursor. */
+.setpsearch input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hair2);
+  border-radius: 0;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 2px;
+  outline: none;
+}
+.setpsearch input:focus {
+  border-bottom-color: var(--acc-line);
+}
+.setpsearch input::placeholder {
+  color: var(--fg4);
+}
+.setpsearch .btn {
+  padding: 4px 12px;
+}
+.setperror {
+  flex: none;
+  padding: 4px 14px;
+  color: var(--qual-bad);
+}
+.setpempty {
+  margin: 0;
+  padding: 16px 14px;
+  color: var(--fg3);
+}
+.setplist {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-top: 1px solid var(--hair);
+}
+.setprow,
+.setpresult {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  height: var(--row-h);
+  padding: 0 14px;
+  white-space: nowrap;
+  box-shadow: inset 2px 0 0 transparent;
+}
+.setprow,
+.setpcols.tracks {
+  grid-template-columns: 18px 58px 58px minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) 40px 24px;
+}
+.setprow {
+  cursor: pointer;
+}
+.setpresult,
+.setpcols.results {
+  grid-template-columns: 28px minmax(0, 1.8fr) minmax(0, 1fr) 64px 72px 84px;
+}
+.setpresult {
+  width: 100%;
+  height: 34px;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.setpresult:disabled {
+  cursor: default;
+}
+.setprow:hover,
+.setpresult:not(:disabled):hover {
+  background: rgba(var(--fg-rgb), 0.025);
+}
+.setprow.sel {
+  background: rgba(var(--fg-rgb), 0.045);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+.setprow.sel .setpname,
+.setprow.sel .mono {
+  color: var(--fg);
+}
+.setpname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.setpplay {
+  color: var(--fg3);
+  font-size: 9px;
+}
+.setprow:hover .setpplay {
+  color: var(--fg);
+}
+.setprow.sel .setpplay {
+  color: var(--acc);
+}
+.setprow.gap .setpplay {
+  color: var(--fg4);
+}
+
+
+/* In your sets, in the sidebar: where the selected track was played. */
+.sidesets {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+.sidesetshead {
+  color: var(--fg3);
+  font-size: 0.9em;
+  margin-bottom: 4px;
+}
+.sideset {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 4px;
+  margin: 0 -4px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--fg2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sideset:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--fg);
+}
+.sideset:disabled {
+  cursor: default;
+  color: var(--fg3);
+}
+
+.sideset span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.setpwait {
+  flex: none;
+  padding: 4px 14px 8px;
+  color: var(--fg2);
+}
+
+/* The linked set's own header: its sleeve, its name large, where it is from. */
+.setphead.tall {
+  height: 44px;
+  gap: 10px;
+}
+.setpart {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--raise);
+}
+.setpwho {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.setphead.tall .setptitle {
+  font-size: 13px;
+}
+/* The search field: a dark well with its glass, never a white box. */
+.setpfield {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg3);
+  cursor: text;
+}
+.setpfield:focus-within {
+  border-color: var(--acc-line);
+  color: var(--fg2);
+}
+.setpsearch .setpfield input {
+  flex: 1;
+  border: 0;
+  padding: 0;
+  background: none;
+}
+/* Column names over the results and the tracklist, as over the file list. */
+.setpcols {
+  flex: none;
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  height: 26px;
+  padding: 0 14px;
+  border-top: 1px solid var(--hair);
+  color: var(--fg4);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.setpcols + .setplist {
+  border-top: 0;
+}
+.num {
+  text-align: right;
+}
+.setpname.strong {
+  color: var(--fg);
+}
+.setpthumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 3px;
+  object-fit: cover;
+  background: var(--raise);
+}
+.setpthumb.blank,
+.setpart.blank {
+  display: block;
+  /* A failed picture keeps its box but not its broken-image glyph. */
+  object-position: -9999px 0;
+}
+.setpsource {
+  margin-right: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--hair2);
+  border-radius: 3px;
+  color: var(--fg3);
+  font-size: 10px;
+}
+.setpresult.match {
+  box-shadow: inset 2px 0 0 var(--acc-line);
+}
+.setpcopy {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg3);
+  cursor: pointer;
+  opacity: 0;
+}
+.setprow:hover .setpcopy,
+.setpcopy.done {
+  opacity: 1;
+}
+.setpcopy:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.setpcopy.done {
+  color: var(--acc);
+}
+/* A previewed set playing where it is published: the service's own player,
+   kept small and in the panel's flow. */
+.setpstream {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--hair);
+}
+.setpsc {
+  flex: none;
+  width: 260px;
+  height: 20px;
+  border: 0;
+}
+.setpyt {
+  flex: none;
+  width: 72px;
+  height: 40px;
+  border: 0;
+  border-radius: 3px;
+}
+.btn.setpuse {
+  padding: 3px 10px;
+}
+.setpback {
+  margin-left: -6px;
+}

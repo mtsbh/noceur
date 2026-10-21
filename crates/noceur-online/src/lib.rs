@@ -11,6 +11,7 @@
 //! stating plainly rather than leaving it to be discovered. The one exception is
 //! identifying a track by sound (`acoustid`, and `shazam` when the user has
 //! turned it on), which sends a fingerprint of the audio and its length instead.
+//! `trackid` sends the words typed to find a set, and the set chosen.
 
 pub mod acoustid;
 pub mod bandcamp;
@@ -24,6 +25,7 @@ pub mod musicbrainz;
 pub mod shazam;
 pub mod sources;
 pub mod tidal;
+pub mod trackid;
 pub mod tracks;
 
 pub use covers::{fetch_front, CoverSize};

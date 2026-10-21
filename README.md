@@ -49,6 +49,7 @@ place, no import needed. Built for DJs and audiophiles.
 - Quick tag: apply your own values (energy, mood, …) to the playing track by keyboard
 - Pick metadata from Beatport, Bandcamp, Deezer, iTunes, Discogs and Tidal, and cover art from those plus the Cover Art Archive
 - Untagged files identified by sound (AcoustID fingerprint, then Shazam for new or underground releases AcoustID doesn't know)
+- Tracklist for a recorded set from TrackID: identified tracks green on its waveform, click one to play from where it starts; the sidebar shows which of your sets a track was played in, and when
 - Tags from file name: reads tags out of the name (`%artist% - %title%` patterns, with preview)
 - Rename: the other way round, writes the file name from tags using templates; Clean up renames to `Artist - Title`
 - Actions, previewed old → new: clean tags, removing (Original Mix) or trailing brackets, tidy featuring, cut N characters off the name etc.
@@ -191,7 +192,7 @@ crates/
   noceur-tags      tag reading and writing, key normalization, ratings
   noceur-art       cover art extraction, thumbnails, shell icons
   noceur-audio     playback, waveforms, spectrograms, meters, quality analysis, audio identity
-  noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Tidal, Cover Art Archive, AcoustID, Shazam clients
+  noceur-online    Beatport, Bandcamp, MusicBrainz, Deezer, iTunes, Discogs, Tidal, TrackID, Cover Art Archive, AcoustID, Shazam clients
   noceur-index     SQLite index, scanner, queries, caches
   noceur-rekordbox rekordbox.xml export: playlists, beat grids, hot and memory cues
   noceur-app       Tauri application: commands, state, formatting
@@ -234,7 +235,7 @@ issue first.
 ## Disclaimer
 
 Noceur is not affiliated with AlphaTheta (rekordbox), Mixed In Key, Beatport, Bandcamp, Deezer,
-Apple, Discogs, Tidal, Shazam or MusicBrainz. Beatport, Bandcamp and Shazam are reached through
+Apple, Discogs, Tidal, TrackID, Shazam or MusicBrainz. Beatport, Bandcamp and Shazam are reached through
 their public websites rather than published APIs, so a change on their side can break a source
 until Noceur is updated.
 

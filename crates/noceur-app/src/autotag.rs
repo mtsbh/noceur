@@ -284,6 +284,8 @@ pub fn credentials() -> Credentials {
         discogs: !config.discogs_token.trim().is_empty(),
         tidal: !config.tidal_client_id.trim().is_empty()
             && !config.tidal_client_secret.trim().is_empty(),
+        trackid: !config.trackid_key().is_empty(),
+        trackid_upload: noceur_online::trackid::session_expires(&config.trackid_session),
         shazam: config.shazam,
     }
 }
@@ -295,6 +297,11 @@ pub struct Credentials {
     pub discogs: bool,
     /// True when both halves of the Tidal credentials are stored.
     pub tidal: bool,
+    /// True when both halves of the TrackID credentials are stored.
+    pub trackid: bool,
+    /// When the stored trackid.net sign-in runs out, as Unix seconds; `None`
+    /// when there is none, or what is stored is not a token.
+    pub trackid_upload: Option<i64>,
     /// True when the user has turned Shazam lookups on. Not a credential, but
     /// asked and answered in the same place as the sources that need one.
     pub shazam: bool,
@@ -320,6 +327,31 @@ pub fn set_tidal(client_id: String, secret: String) -> Result<Credentials, Strin
     let mut config = crate::config::Config::load(&path);
     config.tidal_client_id = client_id.trim().to_string();
     config.tidal_client_secret = secret.trim().to_string();
+    config.save(&path)?;
+    Ok(credentials())
+}
+
+/// Stores or clears the TrackID API client. Both empty clears it.
+#[tauri::command]
+pub fn set_trackid(client_id: String, secret: String) -> Result<Credentials, String> {
+    let path = crate::config::Config::default_path();
+    let mut config = crate::config::Config::load(&path);
+    config.trackid_client_id = client_id.trim().to_string();
+    config.trackid_client_secret = secret.trim().to_string();
+    config.save(&path)?;
+    Ok(credentials())
+}
+
+/// Stores or clears the trackid.net sign-in token used to upload sets.
+#[tauri::command]
+pub fn set_trackid_session(token: String) -> Result<Credentials, String> {
+    let token = token.trim().trim_start_matches("Bearer ").trim().to_string();
+    if !token.is_empty() && noceur_online::trackid::session_expires(&token).is_none() {
+        return Err("that isn't a trackid.net sign-in token".into());
+    }
+    let path = crate::config::Config::default_path();
+    let mut config = crate::config::Config::load(&path);
+    config.trackid_session = token;
     config.save(&path)?;
     Ok(credentials())
 }

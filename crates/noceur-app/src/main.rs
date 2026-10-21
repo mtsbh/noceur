@@ -29,6 +29,7 @@ mod playlists;
 mod quality;
 mod rekordbox;
 mod renamer;
+mod sets;
 mod shellmenu;
 mod state;
 mod tagedit;
@@ -169,6 +170,8 @@ fn main() {
             autotag::credentials,
             autotag::set_discogs_token,
             autotag::set_tidal,
+            autotag::set_trackid,
+            autotag::set_trackid_session,
             autotag::set_shazam,
             telegram::telegram_available,
             telegram::send_to_telegram,
@@ -200,6 +203,14 @@ fn main() {
             playlists::playlist_remove,
             playlists::playlist_reorder,
             playlists::playlists_holding,
+            sets::set_search,
+            sets::set_tracklist,
+            sets::set_link,
+            sets::set_preview,
+            sets::set_unlink,
+            sets::set_offset,
+            sets::set_appearances,
+            sets::set_upload,
             rekordbox::rekordbox_target,
             rekordbox::set_rekordbox_xml,
             rekordbox::send_to_rekordbox,

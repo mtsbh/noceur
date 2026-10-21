@@ -19,7 +19,7 @@ pub fn init(state: &AppState) {
     let _ = INDEX.set(state.db.clone());
 }
 
-/// Keeps playlists pointing at files the app renamed or moved.
+/// Keeps playlists, and linked sets, pointing at files the app renamed or moved.
 ///
 /// Applied on a thread of its own: some callers rename while holding the index
 /// lock, and waiting for it here would wait on them forever.
@@ -30,6 +30,7 @@ pub fn follow(from: PathBuf, to: PathBuf) {
     std::thread::spawn(move || {
         if let Ok(db) = db.lock() {
             let _ = playlist::repath(&db, &from, &to);
+            let _ = noceur_index::sets::repath(&db, &from, &to);
         }
     });
 }

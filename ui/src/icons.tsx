@@ -621,3 +621,13 @@ export function OpenWithIcon() {
     </Icon>
   );
 }
+
+/** A set's tracklist: a waveform cut into tracks, a mark where each begins. */
+export function TracklistIcon() {
+  return (
+    <Icon>
+      <path d="M2.6 8.6V6.2M4.4 9.6V4.6M6.2 8.8V5.8M9.4 9.8V4.2M11.2 8.6V5.4M13 9.2V6" />
+      <path d="M2.6 13.2v-1.6M9.4 13.2v-1.6" />
+    </Icon>
+  );
+}

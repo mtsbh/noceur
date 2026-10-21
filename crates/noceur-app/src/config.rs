@@ -2,7 +2,7 @@
 //!
 //! The index is a cache of what is on disk and is safe to delete at any time;
 //! anything here is not derived from anything and would be gone with it. So far
-//! that means the Discogs token and the Tidal app credentials.
+//! that means the Discogs token and the Tidal and TrackID app credentials.
 //!
 //! The token is stored in plain text in the user's own profile, the way every
 //! tool of this kind does it. That is worth being explicit about rather than
@@ -26,6 +26,16 @@ pub struct Config {
     pub tidal_client_id: String,
     #[serde(default)]
     pub tidal_client_secret: String,
+    /// Client ID and secret of the user's TrackID API client, for set
+    /// tracklists. Stored and guarded like the Tidal pair.
+    #[serde(default)]
+    pub trackid_client_id: String,
+    #[serde(default)]
+    pub trackid_client_secret: String,
+    /// The token trackid.net signs the user in with, for uploading sets: the
+    /// published API has no upload, the website's does. Lasts a year.
+    #[serde(default)]
+    pub trackid_session: String,
     /// Whether Find metadata may ask Shazam about tracks AcoustID does not
     /// know. Off by default: it is Shazam's private app API, which can change
     /// or block without notice, and the user should choose to rely on it.
@@ -76,6 +86,9 @@ impl Default for Config {
             discogs_token: String::new(),
             tidal_client_id: String::new(),
             tidal_client_secret: String::new(),
+            trackid_client_id: String::new(),
+            trackid_client_secret: String::new(),
+            trackid_session: String::new(),
             shazam: false,
             preserve_dates: true,
             window: None,
@@ -107,6 +120,18 @@ impl Config {
 
     /// Where the config lives: beside the index, which is beside the executable,
     /// so a portable install stays portable.
+    /// The TrackID bearer token, `clientId:secret`, or empty when either half
+    /// is missing.
+    pub fn trackid_key(&self) -> String {
+        let id = self.trackid_client_id.trim();
+        let secret = self.trackid_client_secret.trim();
+        if id.is_empty() || secret.is_empty() {
+            String::new()
+        } else {
+            format!("{id}:{secret}")
+        }
+    }
+
     pub fn default_path() -> PathBuf {
         crate::state::AppState::default_db_path().with_file_name("noceur-config.json")
     }

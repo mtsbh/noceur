@@ -80,6 +80,7 @@ import Toolbar, {
 import Quality, { startQuality, type QualityRun } from "./Quality";
 import Analysis from "./Analysis";
 import Spectrogram from "./Spectrogram";
+import SetPanel, { InYourSets } from "./SetPanel";
 import ActionRunner from "./ActionRunner";
 import Tools from "./Tools";
 import Duplicates from "./Duplicates";
@@ -129,6 +130,7 @@ import {
   OpenIcon,
   OpenWithIcon,
   PigIcon,
+  TracklistIcon,
   PlayIcon,
   RenameIcon,
   SearchIcon,
@@ -546,6 +548,10 @@ export default function App() {
   /** Whether the spectrogram strip is showing. */
   const [spekOpen, setSpekOpen] = createSignal(false);
   const [spek, setSpek] = createSignal<Uint8Array>(new Uint8Array());
+  /** Whether the playing set's tracklist is showing. */
+  const [setOpen, setSetOpen] = createSignal(false);
+  /** Bumped when a set is linked or unlinked, for the sidebar's "In your sets". */
+  const [setsVersion, setSetsVersion] = createSignal(0);
   /** Files the rename dialog is open on, or null when it is closed. */
   const [renaming, setRenaming] = createSignal<number[] | null>(null);
   /** The folder a new folder is being named in, or null. */
@@ -1153,6 +1159,14 @@ export default function App() {
         on: spekOpen,
         run: () => setSpekOpen((open) => !open),
       },
+      {
+        id: "tracklist",
+        label: "Tracklist",
+        icon: TracklistIcon,
+        group: "analyse",
+        on: setOpen,
+        run: () => setSetOpen((open) => !open),
+      },
       tool("convert", "Convert", ConvertIcon, "files"),
       // Your programs and sites. In the bar only when switched on for it.
       ...openWithList().map<BarItem>((program) => ({
@@ -1347,7 +1361,7 @@ export default function App() {
   }
 
   /** Opens settings on one tab - the "Add…" at the foot of each submenu. */
-  function settingsAt(tab: "actions") {
+  function settingsAt(tab: "actions" | "sources") {
     setSettingsTab(tab);
     setSettingsOpen(true);
   }
@@ -1378,6 +1392,19 @@ export default function App() {
   const barLayout = createMemo(() => resolveBar(storedBar(), barItems(), barDefaults()));
 
   /** Loads a row into the player, and remembers which tab it is walking. */
+  /** Plays a set from a moment in it, with its tracklist open. */
+  function playSetAt(fileId: number, ms: number) {
+    setQueue(null);
+    setSetOpen(true);
+    play(fileId)
+      .then((t) => {
+        setTransport(t);
+        return transportCmd("seek", ms);
+      })
+      .then(setTransport)
+      .catch(() => {});
+  }
+
   function playRow(row: RowDisplay, tabId: number) {
     if (row.kind !== 1) return;
     setQueue(null);
@@ -2419,6 +2446,20 @@ export default function App() {
             onSeek={seekTo}
           />
         </Show>
+        <Show when={setOpen()}>
+          <SetPanel
+            fileId={transport()?.fileId ?? 0}
+            path={transport()?.path ?? ""}
+            durationMs={transport()?.durationMs ?? 0}
+            positionMs={transport()?.positionMs ?? 0}
+            playing={transport()?.playing ?? false}
+            onSeek={seekTo}
+            onLinked={() => setSetsVersion((v) => v + 1)}
+            onPausePlayer={() => transportCmd("pause").then(setTransport).catch(() => {})}
+            onSettings={() => settingsAt("sources")}
+            onClose={() => setSetOpen(false)}
+          />
+        </Show>
         </div>
 
         <button
@@ -2443,6 +2484,7 @@ export default function App() {
               setFinding(true);
             }}
           >
+            <InYourSets fileId={sideTrack()} version={setsVersion()} onJump={playSetAt} />
             <Show when={!spekOpen() && (transport()?.fileId ?? 0) > 0}>
               <Spectrogram
                 compact

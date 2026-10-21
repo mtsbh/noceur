@@ -1,11 +1,11 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 15;
+pub const SCHEMA_VERSION: i32 = 17;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
 pub const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17,
 ];
 
 const V1: &str = r#"
@@ -323,4 +323,59 @@ CREATE TABLE cues (
     version    INTEGER NOT NULL,
     data       TEXT    NOT NULL
 );
+"#;
+
+/// Recorded sets linked to their tracklists.
+///
+/// Held by path, like a playlist track and for the same reason: a rescan drops
+/// the `file` row of anything it did not see, and a link the user made by hand
+/// must not go with it because a drive was unplugged. `ON UPDATE CASCADE` lets a
+/// rename move the tracklist with its set in one statement.
+///
+/// The tracklist is stored rather than fetched each time, so a linked set opens
+/// offline and costs the service nothing after the first time. `title_key` is
+/// the title folded and `artist_key` the credit's names folded and joined with
+/// commas, for matching a library track to the sets it was played in; see
+/// [`crate::sets::appearances`].
+///
+/// `offset_ms` is how far this copy of the set is ahead of the one the times
+/// were measured on: a download that starts four seconds later than the stream
+/// has every track four seconds earlier.
+const V16: &str = r#"
+CREATE TABLE set_link (
+    path_key    TEXT    PRIMARY KEY,
+    path        TEXT    NOT NULL,
+    source      TEXT    NOT NULL DEFAULT 'trackid',
+    slug        TEXT    NOT NULL,
+    title       TEXT    NOT NULL DEFAULT '',
+    channel     TEXT    NOT NULL DEFAULT '',
+    url         TEXT    NOT NULL DEFAULT '',
+    duration_ms INTEGER,
+    offset_ms   INTEGER NOT NULL DEFAULT 0,
+    linked_at   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE set_track (
+    path_key   TEXT    NOT NULL REFERENCES set_link(path_key)
+                                ON DELETE CASCADE ON UPDATE CASCADE,
+    position   INTEGER NOT NULL,
+    start_ms   INTEGER NOT NULL,
+    end_ms     INTEGER NOT NULL,
+    artist     TEXT    NOT NULL DEFAULT '',
+    title      TEXT    NOT NULL DEFAULT '',
+    label      TEXT    NOT NULL DEFAULT '',
+    artist_key TEXT    NOT NULL DEFAULT '',
+    title_key  TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (path_key, position)
+);
+
+CREATE INDEX idx_set_track_title ON set_track(title_key);
+"#;
+
+/// What the Set panel shows of a linked set beyond its tracklist: the sleeve,
+/// when it was published, and for each track how many sets it was heard in.
+const V17: &str = r#"
+ALTER TABLE set_link ADD COLUMN artwork TEXT NOT NULL DEFAULT '';
+ALTER TABLE set_link ADD COLUMN published TEXT NOT NULL DEFAULT '';
+ALTER TABLE set_track ADD COLUMN plays INTEGER NOT NULL DEFAULT 0;
 "#;

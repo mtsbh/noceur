@@ -705,7 +705,14 @@ export function matchTrack(fileId: number, bySound = false): Promise<Matched> {
  * Which optional credentials are set, and whether Shazam is on. Never carries
  * the values themselves.
  */
-export type Credentials = { discogs: boolean; tidal: boolean; shazam: boolean };
+export type Credentials = {
+  discogs: boolean;
+  tidal: boolean;
+  trackid: boolean;
+  /** When the stored trackid.net sign-in runs out, Unix seconds; null when none. */
+  trackidUpload: number | null;
+  shazam: boolean;
+};
 
 export function credentials(): Promise<Credentials> {
   return invoke<Credentials>("credentials");
@@ -729,6 +736,111 @@ export function setShazam(on: boolean): Promise<Credentials> {
 /** Stores the Tidal app's client ID and secret. Both empty clears them. */
 export function setTidal(clientId: string, secret: string): Promise<Credentials> {
   return invoke<Credentials>("set_tidal", { clientId, secret });
+}
+
+/** Stores the TrackID API client's ID and secret. Both empty clears them. */
+export function setTrackid(clientId: string, secret: string): Promise<Credentials> {
+  return invoke<Credentials>("set_trackid", { clientId, secret });
+}
+
+/** Stores or clears the trackid.net sign-in token sets are uploaded with. */
+export function setTrackidSession(token: string): Promise<Credentials> {
+  return invoke<Credentials>("set_trackid_session", { token });
+}
+
+/** Uploads a set to TrackID, privately, under its file name. Resolves to that title. */
+export function uploadSet(fileId: number): Promise<string> {
+  return invoke<string>("set_upload", { fileId });
+}
+
+/** One set on TrackID, as a search lists it. */
+export type SetSummary = {
+  slug: string;
+  title: string;
+  channel: string;
+  url: string;
+  durationMs: number | null;
+  /** `YYYY-MM-DD`, or empty. */
+  published: string;
+  artwork: string;
+  /** Only a ready set has a tracklist. */
+  status: "ready" | "queued" | "processing";
+  /** Share of its length TrackID put a name to, 0..1. */
+  coverage: number | null;
+  source: "soundcloud" | "mixcloud" | "youtube" | "hearthis" | "upload";
+};
+
+/** One track heard in a set, at the times measured on the published copy. */
+export type SetTrack = {
+  startMs: number;
+  endMs: number;
+  artist: string;
+  title: string;
+  label: string;
+  /** How many sets TrackID heard the track in. */
+  plays: number;
+};
+
+/** A set file's tracklist and what it is linked to. */
+export type LinkedSet = {
+  link: {
+    source: string;
+    slug: string;
+    title: string;
+    channel: string;
+    url: string;
+    durationMs: number | null;
+    /** Added to every time to line the list up with this copy. */
+    offsetMs: number;
+    artwork: string;
+    /** `YYYY-MM-DD`, or empty. */
+    published: string;
+  };
+  tracks: SetTrack[];
+};
+
+/** Where a track was played in one of the linked sets. */
+export type SetAppearance = {
+  setTitle: string;
+  /** In this copy of the set: the offset already applied. */
+  startMs: number;
+  endMs: number;
+  /** The set's file, or null when its drive is not attached. */
+  fileId: number | null;
+};
+
+/** Searches TrackID's finished sets. */
+export function searchSets(query: string): Promise<SetSummary[]> {
+  return invoke<SetSummary[]>("set_search", { query });
+}
+
+/** The tracklist a file is linked to, or null. */
+export function setTracklist(fileId: number): Promise<LinkedSet | null> {
+  return invoke<LinkedSet | null>("set_tracklist", { fileId });
+}
+
+/** A set's tracklist from TrackID, linked to nothing: for looking before choosing. */
+export function previewSet(slug: string): Promise<LinkedSet> {
+  return invoke<LinkedSet>("set_preview", { slug });
+}
+
+/** Fetches a set's tracklist and links the file to it. */
+export function linkSet(fileId: number, slug: string): Promise<LinkedSet> {
+  return invoke<LinkedSet>("set_link", { fileId, slug });
+}
+
+export function unlinkSet(fileId: number): Promise<void> {
+  return invoke<void>("set_unlink", { fileId });
+}
+
+/** Moves a file's tracklist to line it up with this copy. */
+export function setOffset(fileId: number, offsetMs: number): Promise<LinkedSet | null> {
+  return invoke<LinkedSet | null>("set_offset", { fileId, offsetMs });
+}
+
+/** The linked sets a file's track was played in. */
+export function setAppearances(fileId: number): Promise<SetAppearance[]> {
+  return invoke<SetAppearance[]>("set_appearances", { fileId });
 }
 
 /** Reads the quick-tag fields currently set on one track. */

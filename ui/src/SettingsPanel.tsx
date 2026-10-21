@@ -11,6 +11,8 @@ import {
   setDiscogsToken,
   setShazam,
   setTidal,
+  setTrackid,
+  setTrackidSession,
   setPreserveDates,
   ffmpegInfo,
   setFfmpegPath,
@@ -381,6 +383,13 @@ export default function Settings(props: {
   const [tidalId, setTidalId] = createSignal("");
   const [tidalSecret, setTidalSecret] = createSignal("");
   const [hasTidal, setHasTidal] = createSignal(false);
+  const [trackidId, setTrackidId] = createSignal("");
+  const [trackidSecret, setTrackidSecret] = createSignal("");
+  const [hasTrackid, setHasTrackid] = createSignal(false);
+  const [session, setSession] = createSignal("");
+  /** When the stored sign-in runs out, Unix seconds; null when there is none. */
+  const [sessionEnds, setSessionEnds] = createSignal<number | null>(null);
+  const [sessionError, setSessionError] = createSignal("");
   const [shazamOn, setShazamOn] = createSignal(false);
 
   createEffect(() => {
@@ -388,6 +397,8 @@ export default function Settings(props: {
       .then((c) => {
         setHasDiscogs(c.discogs);
         setHasTidal(c.tidal);
+        setHasTrackid(c.trackid);
+        setSessionEnds(c.trackidUpload);
         setShazamOn(c.shazam);
       })
       .catch(() => {});
@@ -835,7 +846,11 @@ export default function Settings(props: {
             title="Metadata sources"
             info={
               <>
-                <p>Discogs and Tidal need your own keys. Each is sent only to its service.</p>
+                <p>
+                  Discogs, Tidal and TrackID need your own keys. Each is sent only to its
+                  service.
+                </p>
+                <p>TrackID gives a recorded set its tracklist, with the time of every track.</p>
                 <p>
                   Shazam hears twelve seconds of the track, for what AcoustID
                   doesn't know. Unofficial: it can stop working without notice.
@@ -951,6 +966,103 @@ export default function Settings(props: {
               >
                 Create an app on Tidal
               </a>
+            </p>
+            <div class="setrow">
+              <span class="setlabel">TrackID ID</span>
+              <input
+                type="text"
+                placeholder={hasTrackid() ? "— saved —" : "client ID"}
+                value={trackidId()}
+                spellcheck={false}
+                onInput={(e) => {
+                  // The portal shows the two halves joined as `id:secret`;
+                  // pasting that here fills both.
+                  const v = e.currentTarget.value.trim();
+                  const at = v.indexOf(":");
+                  if (at > 0 && v.startsWith("tkid_")) {
+                    setTrackidId(v.slice(0, at));
+                    setTrackidSecret(v.slice(at + 1));
+                    e.currentTarget.value = v.slice(0, at);
+                  } else {
+                    setTrackidId(e.currentTarget.value);
+                  }
+                }}
+              />
+            </div>
+            <div class="setrow">
+              <span class="setlabel">TrackID secret</span>
+              <input
+                type="password"
+                placeholder={hasTrackid() ? "— saved —" : "client secret"}
+                value={trackidSecret()}
+                spellcheck={false}
+                onInput={(e) => setTrackidSecret(e.currentTarget.value)}
+              />
+              <button
+                class="btn"
+                disabled={
+                  saving() || (!trackidId().trim() !== !trackidSecret().trim())
+                }
+                onClick={() => {
+                  setSaving(true);
+                  setTrackid(trackidId(), trackidSecret())
+                    .then((c) => {
+                      setHasTrackid(c.trackid);
+                      setTrackidId("");
+                      setTrackidSecret("");
+                      setSaving(false);
+                    })
+                    .catch(() => setSaving(false));
+                }}
+              >
+                {trackidId().trim() || !hasTrackid() ? "Save" : "Clear"}
+              </button>
+            </div>
+            <p class="sethint">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openUrl("https://trackid.net/account/apicredentials").catch(() => {});
+                }}
+              >
+                Get API credentials on TrackID
+              </a>
+            </p>
+            <div class="setrow">
+              <span class="setlabel">TrackID sign-in</span>
+              <input
+                type="password"
+                placeholder={sessionEnds() != null ? "— saved —" : "for uploading sets"}
+                value={session()}
+                spellcheck={false}
+                onInput={(e) => {
+                  setSession(e.currentTarget.value);
+                  setSessionError("");
+                }}
+              />
+              <button
+                class="btn"
+                disabled={saving()}
+                onClick={() => {
+                  setSaving(true);
+                  setTrackidSession(session())
+                    .then((c) => {
+                      setSessionEnds(c.trackidUpload);
+                      setSession("");
+                    })
+                    .catch((e) => setSessionError(String(e)))
+                    .finally(() => setSaving(false));
+                }}
+              >
+                {session().trim() || sessionEnds() == null ? "Save" : "Clear"}
+              </button>
+            </div>
+            <p class="sethint">
+              {sessionError() ||
+                (sessionEnds() != null
+                  ? `Uploads work until ${new Date(sessionEnds()! * 1000).toLocaleDateString()}.`
+                  : "The token trackid.net signs you in with. Uploading isn't part of the API.")}
             </p>
           </Section>
 
