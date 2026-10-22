@@ -300,7 +300,10 @@ pub fn upload(
         .header("Accept", "application/json, text/plain, */*")
         .header("Origin", "https://trackid.net")
         .header("Referer", "https://trackid.net/")
-        .header("Content-Type", &format!("multipart/form-data; boundary={boundary}"))
+        .header(
+            "Content-Type",
+            &format!("multipart/form-data; boundary={boundary}"),
+        )
         .header("Content-Length", &total.to_string())
         .send(ureq::SendBody::from_reader(&mut body));
 
@@ -525,7 +528,10 @@ mod tests {
         assert_eq!(clock_ms("00:01:46.2340000"), Some(106_234));
         assert_eq!(clock_ms("02:00:00.0530000"), Some(7_200_053));
         assert_eq!(clock_ms("00:00:01.5"), Some(1_500));
-        assert_eq!(clock_ms("1.02:03:04"), Some(((26 * 60 + 3) * 60 + 4) * 1000));
+        assert_eq!(
+            clock_ms("1.02:03:04"),
+            Some(((26 * 60 + 3) * 60 + 4) * 1000)
+        );
     }
 
     #[test]

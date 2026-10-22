@@ -29,8 +29,8 @@ Desktop.ini
 *.db-wal
 *.db-shm
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code local settings and launch configs
+.claude/
 
 # Agent handoff notes, local only
 HANDOFF.md

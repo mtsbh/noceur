@@ -213,7 +213,10 @@ pub fn repath(db: &Db, from: &Path, to: &Path) -> Result<usize, IndexError> {
         let new_key = path_key(Path::new(&path));
         // Something already linked at the destination is the one to keep: the
         // file there is what plays now.
-        tx.execute("DELETE FROM set_link WHERE path_key = ?1 AND ?1 <> ?2", params![new_key, key])?;
+        tx.execute(
+            "DELETE FROM set_link WHERE path_key = ?1 AND ?1 <> ?2",
+            params![new_key, key],
+        )?;
         tx.execute(
             "UPDATE set_link SET path = ?1, path_key = ?2 WHERE path_key = ?3",
             params![path, new_key, key],
@@ -398,7 +401,9 @@ mod tests {
         assert_eq!(got.tracks, tracks);
         assert_eq!(got.link.slug, "all-night");
         // Paths are matched the way the rest of the index matches them.
-        assert!(get(&db, Path::new("d:\\sets\\all night.flac")).unwrap().is_some());
+        assert!(get(&db, Path::new("d:\\sets\\all night.flac"))
+            .unwrap()
+            .is_some());
 
         unlink(&db, set).unwrap();
         assert!(get(&db, set).unwrap().is_none());
@@ -443,25 +448,42 @@ mod tests {
             set,
             &sample_link("night"),
             &[
-                track(60_000, "Robag Wruhme, Wighnomy Brothers", "Killerteppich (Original Mix)"),
+                track(
+                    60_000,
+                    "Robag Wruhme, Wighnomy Brothers",
+                    "Killerteppich (Original Mix)",
+                ),
                 track(400_000, "Someone Else", "Killerteppich"),
             ],
         )
         .unwrap();
         set_offset(&db, set, 2_500).unwrap();
 
-        let found = appearances(&db, "Wighnomy Brothers & Robag Wruhme", "Killerteppich", None).unwrap();
+        let found = appearances(
+            &db,
+            "Wighnomy Brothers & Robag Wruhme",
+            "Killerteppich",
+            None,
+        )
+        .unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].start_ms, 62_500);
         assert_eq!(found[0].set_title, "All night");
 
-        assert!(appearances(&db, "Nobody", "Killerteppich", None).unwrap().is_empty());
-        assert!(appearances(&db, "Robag Wruhme", "Killerteppich", Some(set)).unwrap().is_empty());
+        assert!(appearances(&db, "Nobody", "Killerteppich", None)
+            .unwrap()
+            .is_empty());
+        assert!(appearances(&db, "Robag Wruhme", "Killerteppich", Some(set))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
     fn folding_keeps_only_what_tells_titles_apart() {
-        assert_eq!(fold("  Lost And... (LoSoul Remix) "), "lost and losoul remix");
+        assert_eq!(
+            fold("  Lost And... (LoSoul Remix) "),
+            "lost and losoul remix"
+        );
         assert_eq!(fold_title("QuoVadis - Original Mix"), "quovadis");
         assert_eq!(fold_title("Lucy (Extended Mix)"), "lucy");
         assert_eq!(artists("Tanzmann & Stefanik"), vec!["tanzmann", "stefanik"]);

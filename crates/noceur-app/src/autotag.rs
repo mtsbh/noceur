@@ -345,7 +345,11 @@ pub fn set_trackid(client_id: String, secret: String) -> Result<Credentials, Str
 /// Stores or clears the trackid.net sign-in token used to upload sets.
 #[tauri::command]
 pub fn set_trackid_session(token: String) -> Result<Credentials, String> {
-    let token = token.trim().trim_start_matches("Bearer ").trim().to_string();
+    let token = token
+        .trim()
+        .trim_start_matches("Bearer ")
+        .trim()
+        .to_string();
     if !token.is_empty() && noceur_online::trackid::session_expires(&token).is_none() {
         return Err("that isn't a trackid.net sign-in token".into());
     }

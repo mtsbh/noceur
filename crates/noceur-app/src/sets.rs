@@ -187,8 +187,14 @@ pub async fn set_appearances(
         let path = path.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let meta = noceur_tags::read(&path).ok();
-            let artist = meta.as_ref().and_then(|m| m.artist.clone()).unwrap_or_default();
-            let title = meta.as_ref().and_then(|m| m.title.clone()).unwrap_or_default();
+            let artist = meta
+                .as_ref()
+                .and_then(|m| m.artist.clone())
+                .unwrap_or_default();
+            let title = meta
+                .as_ref()
+                .and_then(|m| m.title.clone())
+                .unwrap_or_default();
             if !title.trim().is_empty() {
                 return (artist, title);
             }
@@ -206,7 +212,8 @@ pub async fn set_appearances(
     };
 
     with_db(&state, move |db| {
-        let found = sets::appearances(db, &artist, &title, Some(&path)).map_err(|e| e.to_string())?;
+        let found =
+            sets::appearances(db, &artist, &title, Some(&path)).map_err(|e| e.to_string())?;
         Ok(found
             .into_iter()
             .map(|a| Appearance {
@@ -252,7 +259,14 @@ pub async fn set_upload(
     let sent_title = title.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let report = move |sent: u64, total: u64| {
-            let _ = app.emit("set-upload-progress", UploadProgress { file_id, sent, total });
+            let _ = app.emit(
+                "set-upload-progress",
+                UploadProgress {
+                    file_id,
+                    sent,
+                    total,
+                },
+            );
         };
         trackid::upload(&path, &sent_title, &session, &report).map_err(|e| e.to_string())
     })

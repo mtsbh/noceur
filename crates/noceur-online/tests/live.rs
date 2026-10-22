@@ -375,15 +375,22 @@ fn a_real_set_has_a_tracklist_with_times() {
         eprintln!("NOCEUR_TRACKID_KEY not set; skipping");
         return;
     };
-    let found = noceur_online::trackid::search_sets("Katzenohr", &key).expect("TrackID should answer");
-    assert!(!found.is_empty(), "a DJ with several sets there should be found");
+    let found =
+        noceur_online::trackid::search_sets("Katzenohr", &key).expect("TrackID should answer");
+    assert!(
+        !found.is_empty(),
+        "a DJ with several sets there should be found"
+    );
     for s in &found {
         println!("{:<60} {:?} {}", s.title, s.duration_ms, s.slug);
     }
 
     let set = noceur_online::trackid::fetch_set(&found[0].slug, &key).expect("the set should load");
     for t in &set.tracks {
-        println!("{:>8} {:>8}  {} - {}", t.start_ms, t.end_ms, t.artist, t.title);
+        println!(
+            "{:>8} {:>8}  {} - {}",
+            t.start_ms, t.end_ms, t.artist, t.title
+        );
         assert!(t.end_ms >= t.start_ms);
     }
     assert!(!set.tracks.is_empty(), "a finished set should have tracks");
