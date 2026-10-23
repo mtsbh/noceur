@@ -82,6 +82,15 @@ pub struct Action {
     /// frontend knows the set; a button with one also sits in the toolbar.
     #[serde(default)]
     pub icon: String,
+    /// Whether the button sits in the toolbar. `None` for one saved before this
+    /// was a choice, which kept the old rule: in the toolbar if it has an icon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toolbar: Option<bool>,
+    /// For a copy or move with a pattern: look for each folder among the ones
+    /// already there, ignoring capitals and symbols, before making a new one.
+    /// See [`crate::folders`].
+    #[serde(default)]
+    pub match_folders: bool,
 }
 
 impl Action {
@@ -198,6 +207,49 @@ pub fn fields_of<'a>(meta: &noceur_tags::TrackMeta, path: &Path) -> Fields<'a> {
     f
 }
 
+/// The tags with any slash in them made a comma, for a copy or move pattern.
+///
+/// The pattern is split into folders after the tags are substituted, so a
+/// credit tagged `A Blade Of Grass/Baasmal` would otherwise file into a folder
+/// inside a folder. Only the tags: the path fields are meant to have slashes.
+pub fn for_filing(meta: &noceur_tags::TrackMeta) -> noceur_tags::TrackMeta {
+    let mut m = meta.clone();
+    for v in [
+        &mut m.artist,
+        &mut m.title,
+        &mut m.album,
+        &mut m.album_artist,
+        &mut m.genre,
+        &mut m.label,
+        &mut m.comment,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        *v = v.replace(['/', '\\'], ", ");
+    }
+    m
+}
+
+/// Whether a move would leave the file in the folder it is already in: the
+/// shell would ask about overwriting it with itself.
+fn same_folder(path: &Path, action: &Action, result: &str) -> bool {
+    let to = if action.script.trim().is_empty() {
+        PathBuf::from(&action.target)
+    } else {
+        match Path::new(result).parent() {
+            Some(p) => p.to_path_buf(),
+            None => return false,
+        }
+    };
+    let lower = |p: &Path| {
+        p.to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_lowercase()
+    };
+    path.parent().is_some_and(|from| lower(from) == lower(&to))
+}
+
 /// Turns a filed-away path pattern into folders and a file name.
 ///
 /// The pattern is relative and may name folders that do not exist yet:
@@ -306,6 +358,9 @@ pub struct Preview {
     pub result: String,
     /// Why it will be skipped, or empty.
     pub problem: String,
+    /// A folder the action would have to make, or empty. Shown so making it is
+    /// something the user agreed to, not something that happened.
+    pub new_folder: String,
 }
 
 /// Works out what an action would do. Changes nothing.
@@ -323,12 +378,18 @@ pub async fn preview_action(
 
     tauri::async_runtime::spawn_blocking(move || {
         let targets = locate_all(&db, &file_ids)?;
+        let mut finder = crate::folders::Finder::default();
 
         Ok(targets
             .into_iter()
             .map(|(file_id, path)| {
-                let meta = noceur_tags::read(&path).unwrap_or_default();
+                let mut meta = noceur_tags::read(&path).unwrap_or_default();
+                if matches!(action.kind, Kind::Copy | Kind::Move) {
+                    meta = for_filing(&meta);
+                }
                 let result = script.run(&fields_of(&meta, &path));
+                let mut new_folder = String::new();
+                let mut no_folder = false;
 
                 // A copy or move with a pattern is previewed as the path it
                 // would land on, which is the only part worth checking.
@@ -339,9 +400,19 @@ pub async fn preview_action(
                         .extension()
                         .map(|e| e.to_string_lossy().into_owned())
                         .unwrap_or_default();
-                    filed_path(&result, &ext)
-                        .map(|rel| Path::new(&action.target).join(rel).display().to_string())
-                        .unwrap_or_default()
+                    let root = Path::new(&action.target);
+                    match filed_path(&result, &ext) {
+                        Some(rel) if action.match_folders => {
+                            no_folder = rel.parent().is_none_or(|p| p.as_os_str().is_empty());
+                            let landed = finder.land(root, &rel);
+                            if let Some(folder) = landed.new_folder {
+                                new_folder = folder.display().to_string();
+                            }
+                            landed.path.display().to_string()
+                        }
+                        Some(rel) => root.join(rel).display().to_string(),
+                        None => String::new(),
+                    }
                 } else {
                     result
                 };
@@ -354,6 +425,12 @@ pub async fn preview_action(
                         if !action.script.trim().is_empty() && result.is_empty() =>
                     {
                         "the pattern leaves nothing to name it".to_string()
+                    }
+                    Kind::Copy | Kind::Move if no_folder => {
+                        "no folder to file it in - the tag it names is empty".to_string()
+                    }
+                    Kind::Move if same_folder(&path, &action, &result) => {
+                        "already in that folder".to_string()
                     }
                     Kind::Copy | Kind::Move if !Path::new(&action.target).is_dir() => {
                         format!("{} is not a folder", action.target)
@@ -369,6 +446,7 @@ pub async fn preview_action(
                     name: file_name(&path),
                     result,
                     problem,
+                    new_folder,
                 }
             })
             .collect())
@@ -428,8 +506,9 @@ pub async fn run_action(
                 // track. The folders are made here because the shell will not
                 // make them, and this is what knows which ones were implied.
                 let mut items = Vec::new();
+                let mut finder = crate::folders::Finder::default();
                 for (_, path) in &targets {
-                    let meta = noceur_tags::read(path).unwrap_or_default();
+                    let meta = for_filing(&noceur_tags::read(path).unwrap_or_default());
                     let ext = path
                         .extension()
                         .map(|e| e.to_string_lossy().into_owned())
@@ -444,7 +523,11 @@ pub async fn run_action(
                         continue;
                     };
 
-                    let full = root.join(&relative);
+                    let full = if action.match_folders {
+                        finder.land(root, &relative).path
+                    } else {
+                        root.join(&relative)
+                    };
                     let (Some(folder), Some(name)) = (full.parent(), full.file_name()) else {
                         continue;
                     };
@@ -635,6 +718,8 @@ mod tests {
             recipe: String::new(),
             slots: Vec::new(),
             icon: String::new(),
+            toolbar: None,
+            match_folders: false,
         }
     }
 
@@ -817,6 +902,27 @@ mod tests {
         assert_eq!(run("%_path%"), r"E:\music\downloads\track.flac");
         assert_eq!(run("%directoryname%"), "downloads");
         assert_eq!(run("%ext%"), "flac");
+    }
+
+    /// The artist-folder recipe in `recipes.ts`: the tag when there is one, the
+    /// name before " - " when there is not, and nothing rather than a folder
+    /// named after the whole file.
+    #[test]
+    fn the_artist_folder_falls_back_to_the_file_name() {
+        const RECIPE: &str =
+            r"$if2(%artist%,$regexp(%filename%,'^(.+?) - .*$|^.*$','$1'))\%filename%";
+        let script = Script::parse(RECIPE).unwrap();
+        let untagged = noceur_tags::TrackMeta::default();
+
+        let run = |meta: &noceur_tags::TrackMeta, name: &str| {
+            script.run(&fields_of(meta, Path::new(name)))
+        };
+        assert_eq!(run(&meta(), "x - y.wav"), r"Skee Mask\x - y");
+        assert_eq!(
+            run(&untagged, "A-B Sides - xlx.wav"),
+            r"A-B Sides\A-B Sides - xlx"
+        );
+        assert_eq!(run(&untagged, "untitled.wav"), r"\untitled");
     }
 
     /// foobar2000 users write `%ALBUM ARTIST%`, and the lookup is lower-cased,

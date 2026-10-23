@@ -38,6 +38,8 @@ export type Recipe = {
   slots?: Slot[];
   /** Prefills the target box — a program, or a folder. */
   target?: string;
+  /** Files into folders already there however they are spelled; see `folders.rs`. */
+  matchFolders?: boolean;
   /**
    * Builds the expression. `f` is the chosen tag field, `v` the slot values.
    *
@@ -327,6 +329,17 @@ export const RECIPES: Recipe[] = [
     hint: "Bicep - Isles (2021)\\Glue.wav — the folder is made if it is missing",
     target: "",
     build: () => `%artist% - %album% '('%year%')'\\%filename%`,
+  },
+  {
+    id: "move.artist",
+    label: "Move into the artist's folder",
+    kind: "move",
+    hint: "finds the folder whatever its capitals or symbols, and asks before making one",
+    target: "",
+    matchFolders: true,
+    // No artist tag - common on WAVs - falls back to the name before " - ".
+    build: () =>
+      `$if2(%artist%,$regexp(%filename%,'^(.+?) - .*$|^.*$','$1'))\\%filename%`,
   },
 ];
 

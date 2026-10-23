@@ -49,13 +49,16 @@ export default function ActionRunner(props: {
 
   const ready = () => (rows() ?? []).filter((r) => !r.problem);
   const problems = () => (rows() ?? []).filter((r) => r.problem);
+  /** Folders the run would make, each once however many tracks go into it. */
+  const newFolders = () => [...new Set(ready().map((r) => r.newFolder).filter(Boolean))];
+  const existing = () => ready().filter((r) => !r.newFolder);
 
-  function run() {
-    if (ready().length === 0 || busy()) return;
+  function run(chosen: ActionPreview[] = ready()) {
+    if (chosen.length === 0 || busy()) return;
     setBusy(true);
     setError("");
 
-    runAction(props.action, ready().map((r) => r.fileId))
+    runAction(props.action, chosen.map((r) => r.fileId))
       .then((result) => {
         setBusy(false);
         setReport(result);
@@ -116,10 +119,26 @@ export default function ActionRunner(props: {
                     <span class="renamefrom">{r.name}</span>
                     <span class="renamearrow">→</span>
                     <span class="renameto">{r.problem || r.result}</span>
+                    <Show when={!r.problem && r.newFolder}>
+                      <span class="actkind">new folder</span>
+                    </Show>
                   </div>
                 )}
               </For>
             </div>
+          </Show>
+
+          {/* Making a folder is asked, not done: a typo in a tag would
+              otherwise leave a stray artist folder behind. */}
+          <Show when={newFolders().length > 0}>
+            <p class="sethint">
+              No folder yet for {newFolders().length === 1 ? "this one" : "these"}:{" "}
+              {newFolders()
+                .slice(0, 12)
+                .map((f) => f.split(/[\\/]/).pop())
+                .join(", ")}
+              {newFolders().length > 12 ? ` and ${newFolders().length - 12} more` : ""}
+            </p>
           </Show>
 
           <Show when={error()}>
@@ -149,12 +168,21 @@ export default function ActionRunner(props: {
           <button class="btn" onClick={props.onClose}>
             Cancel
           </button>
+          <Show when={newFolders().length > 0 && existing().length > 0}>
+            <button class="btn" disabled={busy()} onClick={() => run(existing())}>
+              Only existing ({existing().length})
+            </button>
+          </Show>
           <button
             class="btn primary"
             disabled={ready().length === 0 || busy()}
-            onClick={run}
+            onClick={() => run()}
           >
-            {busy() ? "Working…" : `Run on ${ready().length}`}
+            {busy()
+              ? "Working…"
+              : newFolders().length > 0
+                ? `Make ${newFolders().length} ${newFolders().length === 1 ? "folder" : "folders"} · run on ${ready().length}`
+                : `Run on ${ready().length}`}
           </button>
         </footer>
       </div>

@@ -19,6 +19,7 @@ mod covers;
 mod dragdrop;
 mod dto;
 mod fileops;
+mod folders;
 mod format;
 mod fromname;
 mod identity;

@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX 
 import { CloseIcon, GlobeIcon, OpenWithIcon, actionIcon } from "./icons";
 import {
   actions,
+  inToolbar,
   credentials,
   folderIconUrl,
   siteIconUrl,
@@ -776,6 +777,22 @@ export default function Settings(props: {
                   </Show>
                   <span class="actname">{a.label || "Unnamed"}</span>
                   <span class="actkind">{KIND_LABELS[a.kind]}</span>
+                  <label
+                    class="setcheck"
+                    data-tip="Show in toolbar"
+                    data-tip-at="end"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={inToolbar(a)}
+                      onChange={(e) => {
+                        const toolbar = e.currentTarget.checked;
+                        saveActions(buttons().map((b, i) => (i === at() ? { ...b, toolbar } : b)));
+                      }}
+                    />
+                    <span>Toolbar</span>
+                  </label>
                   <button
                     class="setremove"
                     data-tip="Remove"

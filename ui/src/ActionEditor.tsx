@@ -88,6 +88,7 @@ export default function ActionEditor(props: {
     const target = first.field ? "title" : (first.target ?? "");
     patch({
       kind,
+      matchFolders: !!first.matchFolders,
       recipe: first.id,
       target,
       slots: (first.slots ?? []).map((s) => s.value ?? ""),
@@ -106,6 +107,7 @@ export default function ActionEditor(props: {
     const target = r.field ? props.action.target || "title" : (r.target ?? props.action.target);
     patch({
       recipe: id,
+      matchFolders: !!r.matchFolders,
       target,
       slots: values,
       script: r.build(target || "title", values),
@@ -169,9 +171,6 @@ export default function ActionEditor(props: {
               </For>
             </div>
           </div>
-          <Show when={props.action.icon}>
-            <p class="acthint">Buttons with an icon also sit in the toolbar.</p>
-          </Show>
 
           <div class="setrow">
             <span class="setlabel">Does</span>

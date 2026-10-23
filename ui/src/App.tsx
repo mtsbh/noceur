@@ -25,6 +25,8 @@ import {
   writeTags,
   type TagField,
   actions,
+  inToolbar,
+  setActions,
   runAction as runUserAction,
   actionWrites,
   openUrl,
@@ -1139,12 +1141,21 @@ export default function App() {
         run: () => setTooling(audioSelection()),
       },
       // Your own buttons, with the fixes: they are what you wrote to do to
-      // the selection.
+      // the selection. An icon beside the group when ticked for the toolbar,
+      // in its list either way.
       ...buttons().map<BarItem>((action) => ({
         id: `user:${action.id}`,
         label: action.label,
-        icon: actionIcon(action.icon),
+        // Ticked into the toolbar without an icon of its own: it still needs
+        // something to be drawn as.
+        icon: actionIcon(action.icon) ?? BoltIcon,
         group: "fix",
+        forced: inToolbar(action),
+        onToggle: (toolbar) => {
+          const next = buttons().map((b) => (b.id === action.id ? { ...b, toolbar } : b));
+          setButtons(next);
+          setActions(next).catch((e) => flash(String(e)));
+        },
         off: none,
         run: () => runButton(action, audioSelection()),
       })),
@@ -1293,7 +1304,9 @@ export default function App() {
         icon: groupIcon[g.id],
         members,
         lead: () => [
-          ...leadOf(g.id),
+          // A tool with its own toolbar switch, switched off, stays off even
+          // if it was picked here before it had one.
+          ...leadOf(g.id).filter((id) => members().find((m) => m.id === id)?.forced !== false),
           ...members()
             .filter((m) => m.forced)
             .map((m) => m.id),

@@ -1118,7 +1118,16 @@ export type Action = {
   slots: string[];
   /** Name from `ACTION_ICONS`, or empty. A button with an icon is also in the toolbar. */
   icon?: string;
+  /** Shown in the toolbar. Unset on buttons saved before it was a choice: then an icon decides. */
+  toolbar?: boolean;
+  /** Copy and move: use the folder already there however it is spelled. */
+  matchFolders?: boolean;
 };
+
+/** Whether a button sits in the toolbar. */
+export function inToolbar(a: Action): boolean {
+  return a.toolbar ?? !!a.icon;
+}
 
 /** What an action would do to one file. */
 export type ActionPreview = {
@@ -1126,6 +1135,8 @@ export type ActionPreview = {
   name: string;
   result: string;
   problem: string;
+  /** A folder it would have to make, or empty. */
+  newFolder: string;
 };
 
 /** Whether a kind changes files, and so is worth previewing first. */
