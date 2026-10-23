@@ -188,15 +188,14 @@ const SEARCH_LIMIT: i64 = 200;
 
 /// Searches the indexed library.
 ///
-/// Runs off-thread like every other index read, and takes the lock only for the
-/// query itself — a search issued while a folder is still being probed waits for
-/// one batch, not for the folder.
+/// Runs off-thread on the read-only connection, so a search issued while a
+/// folder is being walked or probed does not wait for it.
 #[tauri::command]
 pub async fn search(
     state: State<'_, AppState>,
     req: SearchRequest,
 ) -> Result<Vec<SearchHit>, String> {
-    let db = state.db.clone();
+    let db = state.reader.clone();
     let limit = req.limit.unwrap_or(SEARCH_LIMIT).clamp(1, MAX_LIMIT);
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -263,7 +262,7 @@ pub async fn search_tag(
     scopes: Vec<String>,
 ) -> Result<Vec<SearchHit>, String> {
     let column = noceur_index::TagColumn::parse(&field).ok_or("not a field to list by")?;
-    let db = state.db.clone();
+    let db = state.reader.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let db = db.lock().map_err(|_| "index lock poisoned".to_string())?;
         let hits = noceur_index::search_tag(&db, column, &value, &scopes, MAX_LIMIT)

@@ -29,6 +29,19 @@ impl Db {
         Self::init(conn)
     }
 
+    /// Opens a second, read-only connection to an index that [`Db::open`] has
+    /// already created and migrated.
+    ///
+    /// The index is in WAL mode, so this connection reads the last committed
+    /// state while the main one is busy writing: a search never queues behind a
+    /// folder walk or a probe batch.
+    pub fn open_reader(path: &Path) -> Result<Self, IndexError> {
+        let conn = Connection::open(path)?;
+        conn.pragma_update(None, "query_only", "ON")?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        Ok(Db { conn })
+    }
+
     /// Opens a throwaway in-memory index. Used by tests.
     pub fn open_in_memory() -> Result<Self, IndexError> {
         Self::init(Connection::open_in_memory()?)
@@ -219,5 +232,38 @@ mod tests {
                 .unwrap();
         }
         assert!(matches!(Db::open(&path), Err(IndexError::TooNew { .. })));
+    }
+
+    /// Search reads on its own connection; a write in progress on the main one
+    /// must neither block it nor show it half-done work.
+    #[test]
+    fn the_reader_reads_while_the_writer_is_mid_transaction() {
+        let d = TempDir::new().unwrap();
+        let path = d.path().join("index.db");
+        let writer = Db::open(&path).unwrap();
+        let reader = Db::open_reader(&path).unwrap();
+
+        writer
+            .conn()
+            .execute_batch(
+                "BEGIN IMMEDIATE;
+                 INSERT INTO volume (id, kind, fs_uuid, mount_path)
+                 VALUES (1, 'fixed', 'u1', 'E:\\');",
+            )
+            .unwrap();
+        let count = || -> i64 {
+            reader
+                .conn()
+                .query_row("SELECT count(*) FROM volume", [], |r| r.get(0))
+                .unwrap()
+        };
+        assert_eq!(count(), 0);
+        writer.conn().execute_batch("COMMIT").unwrap();
+        assert_eq!(count(), 1);
+
+        assert!(
+            reader.conn().execute("DELETE FROM volume", []).is_err(),
+            "the reader never writes"
+        );
     }
 }
