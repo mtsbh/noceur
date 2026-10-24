@@ -1050,7 +1050,7 @@ export default function Settings(props: {
               <span class="setlabel">TrackID sign-in</span>
               <input
                 type="password"
-                placeholder={sessionEnds() != null ? "— saved —" : "for uploading sets"}
+                placeholder={sessionEnds() != null ? "— saved —" : "for your uploads"}
                 value={session()}
                 spellcheck={false}
                 onInput={(e) => {
@@ -1079,7 +1079,7 @@ export default function Settings(props: {
               {sessionError() ||
                 (sessionEnds() != null
                   ? `Uploads work until ${new Date(sessionEnds()! * 1000).toLocaleDateString()}.`
-                  : "The token trackid.net signs you in with. Uploading isn't part of the API.")}
+                  : "The token trackid.net signs you in with. Uploading sets and finding your own uploads aren't part of the API.")}
             </p>
           </Section>
 

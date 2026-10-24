@@ -44,12 +44,46 @@ fn key() -> Result<String, String> {
     }
 }
 
-/// Searches TrackID's finished sets.
+fn session() -> String {
+    Config::load(&Config::default_path()).trackid_session
+}
+
+/// Searches TrackID, and the user's own uploads when they are signed in.
+///
+/// The API's search never lists a private upload, so those come from the
+/// website's list of what the user added, first, as the likeliest to be the
+/// file on disk. Either half failing still shows the other.
 #[tauri::command]
 pub async fn set_search(query: String) -> Result<Vec<SetSummary>, String> {
-    let key = key()?;
+    let api_key = Config::load(&Config::default_path()).trackid_key();
+    let session = session();
+    if api_key.is_empty() && session.trim().is_empty() {
+        return key().map(|_| Vec::new());
+    }
     tauri::async_runtime::spawn_blocking(move || {
-        trackid::search_sets(&query, &key).map_err(|e| e.to_string())
+        let own = (!session.trim().is_empty())
+            .then(|| trackid::search_own_sets(&query, &session).map_err(|e| e.to_string()));
+        let public = (!api_key.is_empty())
+            .then(|| trackid::search_sets(&query, &api_key).map_err(|e| e.to_string()));
+
+        let mut found: Vec<SetSummary> = Vec::new();
+        let mut errors = Vec::new();
+        for result in [own, public].into_iter().flatten() {
+            match result {
+                Ok(sets) => {
+                    for s in sets {
+                        if !found.iter().any(|f| f.slug == s.slug) {
+                            found.push(s);
+                        }
+                    }
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+        match errors.into_iter().next() {
+            Some(e) if found.is_empty() => Err(e),
+            _ => Ok(found),
+        }
     })
     .await
     .map_err(|e| format!("search failed: {e}"))?
@@ -78,10 +112,9 @@ pub async fn set_link(
     file_id: i64,
     slug: String,
 ) -> Result<LinkedSet, String> {
-    let key = key()?;
     let path = with_db(&state, move |db| audio_path(db, file_id)).await?;
 
-    let (link, tracks) = fetch(slug, key).await?;
+    let (link, tracks) = fetch(slug).await?;
 
     with_db(&state, move |db| {
         sets::link(db, &path, &link, &tracks).map_err(|e| e.to_string())?;
@@ -96,14 +129,34 @@ pub async fn set_link(
 /// search result is looked at with before it is chosen.
 #[tauri::command]
 pub async fn set_preview(slug: String) -> Result<LinkedSet, String> {
-    let (link, tracks) = fetch(slug, key()?).await?;
+    let (link, tracks) = fetch(slug).await?;
     Ok(LinkedSet { link, tracks })
 }
 
 /// Reads a set from TrackID as the index stores it.
-async fn fetch(slug: String, key: String) -> Result<(SetLink, Vec<SetTrack>), String> {
+///
+/// Through the API first; a private upload it will not hand out is read again
+/// with the user's sign-in.
+async fn fetch(slug: String) -> Result<(SetLink, Vec<SetTrack>), String> {
+    let api_key = Config::load(&Config::default_path()).trackid_key();
+    let session = session();
+    if api_key.is_empty() && session.trim().is_empty() {
+        key()?;
+    }
     let detail = tauri::async_runtime::spawn_blocking(move || {
-        trackid::fetch_set(&slug, &key).map_err(|e| e.to_string())
+        let api = if api_key.is_empty() {
+            None
+        } else {
+            match trackid::fetch_set(&slug, &api_key) {
+                Ok(d) => return Ok(d),
+                Err(e) => Some(e.to_string()),
+            }
+        };
+        if session.trim().is_empty() {
+            return Err(api.unwrap_or_default());
+        }
+        // The API's answer, when there was one, says more than the site's.
+        trackid::fetch_own_set(&slug, &session).map_err(|e| api.unwrap_or_else(|| e.to_string()))
     })
     .await
     .map_err(|e| format!("fetching the set failed: {e}"))??;
@@ -246,7 +299,7 @@ pub async fn set_upload(
     state: State<'_, AppState>,
     file_id: i64,
 ) -> Result<String, String> {
-    let session = Config::load(&Config::default_path()).trackid_session;
+    let session = session();
     if session.trim().is_empty() {
         return Err("Uploading needs your trackid.net sign-in; add it in Settings".into());
     }
