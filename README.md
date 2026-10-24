@@ -99,6 +99,44 @@ or `AppData`.
 Converting requires [ffmpeg](https://ffmpeg.org/download.html). Put `ffmpeg.exe` next to
 Noceur, on your `PATH`, or set its path in Settings.
 
+## TrackID tracklists
+
+[TrackID](https://trackid.net) has tracklists, with a start time for every track, for sets
+published on SoundCloud, Mixcloud, YouTube and HearThis. Noceur links a recorded set on your disk
+to one of them and shows the tracklist under the listing.
+
+<!-- <img src="docs/images/tracklist.png" alt="Tracklist panel: a set linked to TrackID, identified tracks green on the waveform."> -->
+
+Setup:
+
+1. Sign in on trackid.net, open [API credentials](https://trackid.net/account/apicredentials) and
+   create a client.
+2. In Settings, Online, paste the client ID and secret into TrackID ID and TrackID secret, then
+   Save. Pasting `tkid_...:secret` into the ID field fills both.
+3. To upload your own sets, paste your trackid.net sign-in token into TrackID sign-in too. Uploading
+   isn't part of the API, so it uses the website's login: open trackid.net signed in, press F12,
+   Network tab, click any request to `trackid.net/api` and copy the `Authorization` header without
+   `Bearer `. Settings shows the date it runs out (about a year).
+
+Using it:
+
+1. Play a set and click Tracklist in the toolbar (also in the command palette).
+2. The panel searches TrackID with the file name, minus dates, numbers and anything in brackets.
+   TrackID wants every word to match, so when that finds nothing it tries the part before ` - ` or
+   ` @ `, then the first two words. Sets the same length as your file go to the top.
+3. Click a set to look at its tracklist, then Use for this file. The link is kept in the index.
+4. Identified tracks show green on the waveform. Click a row to play from where that track starts,
+   or the copy button for `Artist - Title`.
+5. If your recording starts earlier or later than the published one, move the tracklist with the
+   Offset arrows (0.5 s a click, 5 s with Shift). Double-click the value to reset it.
+6. Change picks another set, Remove drops the link, Source opens the published set.
+
+A set that isn't on TrackID can be uploaded with Upload to TrackID. MP3 only, up to 2 GB, sent as
+a private upload under the file name. TrackID takes minutes to hours to listen to it; the panel
+asks once a minute and links the upload when it's ready.
+
+The track sidebar has In your sets: the linked sets a track was played in, and where in each.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
