@@ -113,8 +113,8 @@ Setup:
    create a client.
 2. In Settings, Online, paste the client ID and secret into TrackID ID and TrackID secret, then
    Save. Pasting `tkid_...:secret` into the ID field fills both.
-3. To upload your own sets, paste your trackid.net sign-in token into TrackID sign-in too. Uploading
-   isn't part of the API, so it uses the website's login: open trackid.net signed in, press F12,
+3. To upload your own sets and find them again, paste your trackid.net sign-in token into TrackID
+   sign-in too. TrackID's API never lists private uploads, so both go through the website's login: open trackid.net signed in, press F12,
    Network tab, click any request to `trackid.net/api` and copy the `Authorization` header without
    `Bearer `. Settings shows the date it runs out (about a year).
 
@@ -123,7 +123,8 @@ Using it:
 1. Play a set and click Tracklist in the toolbar (also in the command palette).
 2. The panel searches TrackID with the file name, minus dates, numbers and anything in brackets.
    TrackID wants every word to match, so when that finds nothing it tries the part before ` - ` or
-   ` @ `, then the first two words. Sets the same length as your file go to the top.
+   ` @ `, then the first two words. With the sign-in saved, your own uploads whose title has every
+   word come first. Sets the same length as your file go to the top.
 3. Click a set to look at its tracklist, then Use for this file. The link is kept in the index.
 4. Identified tracks show green on the waveform. Click a row to play from where that track starts,
    or the copy button for `Artist - Title`.

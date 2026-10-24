@@ -20,6 +20,16 @@ use serde::Deserialize;
 const SERVICE: &str = "TrackID";
 const BASE: &str = "https://trackid.net/api/integration";
 const UPLOAD: &str = "https://uploads.trackid.net/api/private/audiostreams/upload";
+/// The website's own API, signed in as the user: the only place their private
+/// uploads are listed.
+const PRIVATE: &str = "https://trackid.net/api/private";
+
+/// `audioStreamType` of a file someone uploaded.
+const FILE_UPLOAD: i64 = 6;
+
+/// Own sets asked for per page, and pages read at most.
+const OWN_PAGE: usize = 100;
+const OWN_PAGES: usize = 10;
 
 /// The website's own limit.
 pub const MAX_UPLOAD_BYTES: u64 = 2048 * 1024 * 1024;
@@ -77,6 +87,22 @@ pub struct SetDetail {
     pub tracks: Vec<SetTrack>,
 }
 
+/// Slugs are lowercase words and dashes. Anything else would be a path
+/// segment this app did not get from TrackID, so it is not sent.
+fn check_slug(slug: &str) -> Result<(), OnlineError> {
+    if slug.is_empty()
+        || !slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+    {
+        return Err(OnlineError::Malformed {
+            service: SERVICE,
+            reason: format!("{slug:?} is not a set's slug"),
+        });
+    }
+    Ok(())
+}
+
 /// Searches sets by free text: a title, a DJ, a venue.
 ///
 /// Every set, whatever its state: asking for finished ones only also hides the
@@ -101,23 +127,95 @@ pub fn search_sets(query: &str, key: &str) -> Result<Vec<SetSummary>, OnlineErro
 
 /// Reads one set with its tracklist.
 pub fn fetch_set(slug: &str, key: &str) -> Result<SetDetail, OnlineError> {
-    // Slugs are lowercase words and dashes. Anything else would be a path
-    // segment this app did not get from TrackID, so it is not sent.
-    if slug.is_empty()
-        || !slug
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
-    {
-        return Err(OnlineError::Malformed {
-            service: SERVICE,
-            reason: format!("{slug:?} is not a set's slug"),
-        });
-    }
+    check_slug(slug)?;
     let body = get(&format!("{BASE}/audiostreams/{slug}"), &[], key)?;
     parse_set(&body)
 }
 
+/// The user's own sets whose title has every word of `query`, newest first.
+///
+/// The API's search never lists a private upload, so a set the user uploaded
+/// is found only here: the website's list of what they added, read with their
+/// sign-in and filtered on this side.
+pub fn search_own_sets(query: &str, session: &str) -> Result<Vec<SetSummary>, OnlineError> {
+    let words = fold_words(query);
+    if words.is_empty() {
+        return Err(OnlineError::NothingToSearch);
+    }
+    let user = session_user(session).ok_or(OnlineError::BadToken { service: SERVICE })?;
+
+    let mut found = Vec::new();
+    for page in 0..OWN_PAGES {
+        let body = get_site(
+            &format!("{PRIVATE}/audiostreams"),
+            &[
+                ("addedById", &user),
+                ("pageSize", &OWN_PAGE.to_string()),
+                ("currentPage", &page.to_string()),
+                ("sortField", ""),
+                ("sortDirection", ""),
+                ("status", ""),
+            ],
+            session,
+        )?;
+        let sets = parse_search(&body)?;
+        let last = sets.len() < OWN_PAGE;
+        found.extend(sets.into_iter().filter(|s| {
+            let title = fold_words(&s.title);
+            words
+                .iter()
+                .all(|w| title.iter().any(|t| t.starts_with(w.as_str())))
+        }));
+        if last {
+            break;
+        }
+    }
+    Ok(found)
+}
+
+/// Reads one of the user's own sets with their sign-in, for a private upload
+/// the API will not hand out.
+pub fn fetch_own_set(slug: &str, session: &str) -> Result<SetDetail, OnlineError> {
+    check_slug(slug)?;
+    let body = get_site(&format!("{PRIVATE}/audiostreams/{slug}"), &[], session)?;
+    parse_set(&body)
+}
+
+/// Lowercase words of letters and digits, as titles are compared.
+fn fold_words(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The account a site sign-in token belongs to, from its `id` claim.
+fn session_user(token: &str) -> Option<String> {
+    let payload = token.trim().split('.').nth(1)?;
+    let claims: serde_json::Value = serde_json::from_slice(&base64url(payload)?).ok()?;
+    match claims.get("id")? {
+        serde_json::Value::String(s) if s.bytes().all(|b| b.is_ascii_digit()) => Some(s.clone()),
+        serde_json::Value::Number(n) => n.as_u64().map(|n| n.to_string()),
+        _ => None,
+    }
+}
+
 fn get(url: &str, query: &[(&str, &str)], key: &str) -> Result<String, OnlineError> {
+    request(url, query, key, false)
+}
+
+/// A request to the website's own API, which wants to be asked from the site.
+fn get_site(url: &str, query: &[(&str, &str)], session: &str) -> Result<String, OnlineError> {
+    request(url, query, session, true)
+}
+
+fn request(
+    url: &str,
+    query: &[(&str, &str)],
+    key: &str,
+    site: bool,
+) -> Result<String, OnlineError> {
     let key = key.trim();
     if key.is_empty() {
         return Err(OnlineError::NeedsToken { service: SERVICE });
@@ -128,6 +226,11 @@ fn get(url: &str, query: &[(&str, &str)], key: &str) -> Result<String, OnlineErr
         .get(url)
         .header("Authorization", &format!("Bearer {key}"))
         .header("Accept", "application/json");
+    if site {
+        request = request
+            .header("Origin", "https://trackid.net")
+            .header("Referer", "https://trackid.net/myrequests");
+    }
     for (name, value) in query {
         request = request.query(*name, *value);
     }
@@ -163,7 +266,10 @@ pub fn parse_search(body: &str) -> Result<Vec<SetSummary>, OnlineError> {
         .result
         .audiostreams
         .into_iter()
-        .filter(|s| !s.is_deleted)
+        // An upload is marked deleted once TrackID has listened to it and
+        // thrown the audio away; its tracklist stays, and the site still
+        // lists it. Anything else marked deleted is gone.
+        .filter(|s| !s.is_deleted || s.audio_stream_type == Some(FILE_UPLOAD))
         .map(Stream::summary)
         .collect())
 }
@@ -624,6 +730,51 @@ mod tests {
         assert_eq!(found[0].status, "ready");
         assert_eq!(found[1].status, "queued");
         assert_eq!(found[0].duration_ms, Some(5_185_221));
+    }
+
+    /// As the website lists what the user added: their uploads come marked
+    /// deleted once listened to, and are still theirs.
+    #[test]
+    fn a_listened_upload_is_kept() {
+        let body = r#"{"result":{"audiostreams":[
+            {"slug":"anja-part-1","title":"Anja Schneider & Sebo K @ Harry Klein Club 08.04.2006 Part 1",
+             "audioStreamType":6,"isPrivate":true,"isDeleted":true,"status":3},
+            {"slug":"gone","title":"Gone","audioStreamType":1,"isDeleted":true}
+        ]}}"#;
+        let found = parse_search(body).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].source, "upload");
+    }
+
+    #[test]
+    fn a_sign_in_token_says_whose_it_is() {
+        // {"id":"1921"} and {"id":1921}, unsigned.
+        assert_eq!(
+            session_user("x.eyJpZCI6IjE5MjEifQ.x").as_deref(),
+            Some("1921")
+        );
+        assert_eq!(session_user("x.eyJpZCI6MTkyMX0.x").as_deref(), Some("1921"));
+        assert_eq!(session_user("x.eyJpZCI6Ii4uLyJ9.x"), None);
+        assert_eq!(session_user("not a token"), None);
+    }
+
+    #[test]
+    fn titles_are_compared_by_their_words() {
+        assert_eq!(
+            fold_words("Anja Schneider & Sebo K @ Harry Klein Club 08.04.2006"),
+            [
+                "anja",
+                "schneider",
+                "sebo",
+                "k",
+                "harry",
+                "klein",
+                "club",
+                "08",
+                "04",
+                "2006"
+            ]
+        );
     }
 
     #[test]
