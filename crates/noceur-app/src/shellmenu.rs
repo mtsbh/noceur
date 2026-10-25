@@ -17,19 +17,20 @@
 #![cfg(windows)]
 
 use std::path::Path;
-use windows::core::{Interface, HSTRING, PCSTR};
+use windows::core::{Interface, HSTRING, PCSTR, PSTR};
 use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
     DefSubclassProc, IContextMenu, IContextMenu2, IContextMenu3, ILFindLastID, IShellFolder,
     RemoveWindowSubclass, SHBindToParent, SHCreateDefaultContextMenu, SHParseDisplayName,
-    SetWindowSubclass, CMF_NORMAL, CMINVOKECOMMANDINFO, DEFCONTEXTMENU,
+    SetWindowSubclass, CMF_NORMAL, CMINVOKECOMMANDINFO, DEFCONTEXTMENU, GCS_VERBA,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DestroyMenu, GetCursorPos, SetForegroundWindow, TrackPopupMenuEx,
-    SW_SHOWNORMAL, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_DRAWITEM, WM_INITMENUPOPUP,
-    WM_MEASUREITEM, WM_MENUCHAR, WM_MENUSELECT,
+    CreatePopupMenu, DeleteMenu, DestroyMenu, GetCursorPos, GetMenuItemCount, GetMenuItemID,
+    SetForegroundWindow, TrackPopupMenuEx, MF_BYPOSITION, SW_SHOWNORMAL, TPM_LEFTALIGN,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_DRAWITEM, WM_INITMENUPOPUP, WM_MEASUREITEM, WM_MENUCHAR,
+    WM_MENUSELECT,
 };
 
 /// Command identifier range the shell may use inside our popup.
@@ -190,6 +191,39 @@ pub fn show(hwnd: isize, paths: &[std::path::PathBuf]) -> Result<(), String> {
     outcome
 }
 
+/// Takes "Show in Noceur" back out: inside Noceur it would only point at the
+/// window it was chosen from. See `launch.rs`.
+fn drop_own_verb(menu: &IContextMenu, popup: windows::Win32::UI::WindowsAndMessaging::HMENU) {
+    // SAFETY: `popup` is the live menu the shell just filled.
+    let count = unsafe { GetMenuItemCount(Some(popup)) };
+    for at in (0..count.max(0)).rev() {
+        // SAFETY: as above; `at` is in range.
+        let id = unsafe { GetMenuItemID(popup, at) };
+        if id == u32::MAX || !(CMD_FIRST..=CMD_LAST).contains(&id) {
+            continue;
+        }
+        let mut name = [0u8; 64];
+        // SAFETY: the buffer and its length agree; the offset is one the shell
+        // just handed out.
+        let ok = unsafe {
+            menu.GetCommandString(
+                (id - CMD_FIRST) as usize,
+                GCS_VERBA,
+                None,
+                PSTR(name.as_mut_ptr()),
+                name.len() as u32,
+            )
+        };
+        let len = name.iter().position(|&c| c == 0).unwrap_or(0);
+        if ok.is_ok() && &name[..len] == b"noceur" {
+            // SAFETY: `at` is a position in `popup`.
+            unsafe {
+                let _ = DeleteMenu(popup, at as u32, MF_BYPOSITION);
+            }
+        }
+    }
+}
+
 /// Fills the popup, tracks it, and invokes whatever was chosen.
 fn track(
     hwnd: HWND,
@@ -200,6 +234,7 @@ fn track(
     unsafe { menu.QueryContextMenu(popup, 0, CMD_FIRST, CMD_LAST, CMF_NORMAL) }
         .ok()
         .map_err(|e| format!("the shell declined to fill the menu: {e}"))?;
+    drop_own_verb(menu, popup);
 
     let mut at = POINT::default();
     // SAFETY: `at` is a valid destination.
