@@ -3,8 +3,7 @@
 //! The verb is written under the current user's classes on every start rather
 //! than by the installer, so a build run straight out of `target\release` gets
 //! it too, and the command always names the executable that is actually here.
-//! It hangs off the `audio` perceived type, which covers every extension
-//! Windows thinks of as sound without listing them.
+//! It is written once for each audio extension Noceur lists.
 //!
 //! Explorer starts a new process per click. The single-instance plugin hands
 //! that process's arguments to the window already open and ends it, so a
@@ -83,7 +82,7 @@ pub async fn locate(state: State<'_, AppState>, path: String) -> Result<Located,
 pub fn register() {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::System::Registry::{
-        RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
+        RegDeleteTreeW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
     };
     use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
@@ -144,15 +143,38 @@ pub fn register() {
         Some(String::from_utf16_lossy(&buf[..len]))
     };
 
-    const VERB: &str = r"Software\Classes\SystemFileAssociations\audio\shell\noceur";
-    let command_key = format!(r"{VERB}\command");
+    // Per extension rather than once under the `audio` perceived type: the
+    // menus Explorer and Directory Opus build for a file do not always take in
+    // the perceived type's verbs, and an extension's own entry they always do.
+    // `mp4` is left out, since most of those are video.
+    const CLASSES: &str = r"Software\Classes\SystemFileAssociations";
     let command = format!("\"{exe}\" \"%1\"");
-    if current(&command_key).as_deref() == Some(command.as_str()) {
+    let mut changed = false;
+    for ext in noceur_fsmodel::AUDIO_EXTENSIONS
+        .iter()
+        .filter(|e| **e != "mp4")
+    {
+        let verb = format!(r"{CLASSES}\.{ext}\shell\noceur");
+        let command_key = format!(r"{verb}\command");
+        if current(&command_key).as_deref() == Some(command.as_str()) {
+            continue;
+        }
+        set(&verb, None, "Show in Noceur");
+        set(&verb, Some("Icon"), &format!("\"{exe}\",0"));
+        set(&command_key, None, &command);
+        changed = true;
+    }
+    // The perceived-type entry earlier builds wrote, which would now show the
+    // verb twice on files that did get it.
+    let old = wide(&format!(r"{CLASSES}\audio\shell\noceur"));
+    // SAFETY: the subkey is NUL-terminated; deleting one that is not there
+    // fails harmlessly.
+    if unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, old.as_ptr()) } == 0 {
+        changed = true;
+    }
+    if !changed {
         return;
     }
-    set(VERB, None, "Show in Noceur");
-    set(VERB, Some("Icon"), &format!("\"{exe}\",0"));
-    set(&command_key, None, &command);
     // Explorer caches what each file type's menu holds, and a new verb stays
     // out of it until it is told the associations changed.
     // SAFETY: the event takes no items, so both are null.
