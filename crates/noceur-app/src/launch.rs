@@ -120,10 +120,11 @@ mod menu {
 
     const CLASSES: &str = r"Software\Classes\SystemFileAssociations";
 
-    /// Per extension rather than once under the `audio` perceived type: the
-    /// menus Explorer and Directory Opus build for a file do not always take
-    /// in the perceived type's verbs, and an extension's own entry they always
-    /// do. `mp4` is left out, since most of those are video.
+    /// Written twice over, under the same verb name so no menu shows it twice:
+    /// once under the `audio` perceived type, which is what Directory Opus
+    /// reads (it ignores the per-extension entries), and once per extension,
+    /// which Explorer prefers over the perceived type. `mp4` is left out of
+    /// the second, since most of those are video.
     fn extensions() -> impl Iterator<Item = &'static str> {
         noceur_fsmodel::AUDIO_EXTENSIONS
             .iter()
@@ -131,8 +132,10 @@ mod menu {
             .filter(|e| *e != "mp4")
     }
 
-    fn verb(ext: &str) -> String {
-        format!(r"{CLASSES}\.{ext}\shell\noceur")
+    fn verbs() -> impl Iterator<Item = String> {
+        std::iter::once("audio".to_string())
+            .chain(extensions().map(|ext| format!(".{ext}")))
+            .map(|class| format!(r"{CLASSES}\{class}\shell\noceur"))
     }
 
     fn wide(s: &str) -> Vec<u16> {
@@ -143,7 +146,7 @@ mod menu {
     }
 
     pub fn installed() -> bool {
-        let key = wide(&format!(r"{}\command", verb("mp3")));
+        let key = wide(&format!(r"{CLASSES}\.mp3\shell\noceur\command"));
         let mut size = 0u32;
         // SAFETY: the key is NUL-terminated; a null buffer asks only whether
         // the value is there.
@@ -196,11 +199,7 @@ mod menu {
             unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, key.as_ptr()) };
         };
 
-        // The perceived-type entry the first builds wrote, which would show
-        // the verb twice on the files that did get it.
-        remove(&format!(r"{CLASSES}\audio\shell\noceur"));
-        for ext in extensions() {
-            let verb = verb(ext);
+        for verb in verbs() {
             if on {
                 put(&verb, None, "Show in Noceur")?;
                 put(&verb, Some("Icon"), &format!("\"{exe}\",0"))?;
