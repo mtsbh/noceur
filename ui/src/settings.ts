@@ -42,6 +42,14 @@ export type QuickGroup = {
   values: QuickValue[];
   /** Whether a track can carry several of these at once. */
   multi: boolean;
+  /**
+   * Whether the row's values are shown in their colours.
+   *
+   * Off, a lit value takes the app's accent like any other control. Colour is
+   * worth having on the row read by feel — the vibe — and is noise on a row of
+   * numbers, so it is a choice per row rather than for the whole panel.
+   */
+  coloured: boolean;
 };
 
 export type ColourName =
@@ -51,12 +59,19 @@ export type ColourName =
   | "blue"
   | "teal"
   | "green"
-  | "grey";
+  | "grey"
+  | "rose"
+  | "orange"
+  | "yellow"
+  | "lime"
+  | "cyan"
+  | "indigo"
+  | "sand";
 
 /**
  * The colours a quick-tag row can be marked in.
  *
- * Seven, and no colour picker. A palette chosen against this theme stays
+ * Fourteen, in two rows of seven, and no colour picker. A palette chosen against this theme stays
  * readable on it; a free choice produces the one row nobody can read, and the
  * point of colouring a row is telling it apart at a glance mid-set.
  *
@@ -76,6 +91,13 @@ export const TAG_COLOURS: {
   { name: "teal", label: "Teal", line: "#5fc6b8", fill: "rgba(95, 198, 184, 0.16)" },
   { name: "green", label: "Green", line: "#86c46a", fill: "rgba(134, 196, 106, 0.16)" },
   { name: "grey", label: "Grey", line: "#9aa0a6", fill: "rgba(154, 160, 166, 0.16)" },
+  { name: "rose", label: "Rose", line: "#e88aa8", fill: "rgba(232, 138, 168, 0.16)" },
+  { name: "orange", label: "Orange", line: "#ee8a4a", fill: "rgba(238, 138, 74, 0.16)" },
+  { name: "yellow", label: "Yellow", line: "#e3c95a", fill: "rgba(227, 201, 90, 0.16)" },
+  { name: "lime", label: "Lime", line: "#b5d35a", fill: "rgba(181, 211, 90, 0.16)" },
+  { name: "cyan", label: "Cyan", line: "#5cc8e6", fill: "rgba(92, 200, 230, 0.16)" },
+  { name: "indigo", label: "Indigo", line: "#7c86e8", fill: "rgba(124, 134, 232, 0.16)" },
+  { name: "sand", label: "Sand", line: "#c9a882", fill: "rgba(201, 168, 130, 0.16)" },
 ];
 
 /** The palette entry for a name, or the first when there is none. */
@@ -231,6 +253,7 @@ export const NEW_QUICK_GROUP: QuickGroup = {
   field: "",
   values: [],
   multi: false,
+  coloured: false,
 };
 
 /**
@@ -267,6 +290,7 @@ export const DEFAULT_QUICK: QuickGroup[] = [
       { value: "5", colour: "red" },
     ],
     multi: false,
+    coloured: false,
   },
   {
     label: "Mood",
@@ -280,6 +304,7 @@ export const DEFAULT_QUICK: QuickGroup[] = [
       { value: "Weird", colour: "green" },
     ],
     multi: true,
+    coloured: true,
   },
 ];
 
@@ -442,6 +467,9 @@ function isGroup(g: unknown): g is QuickGroup {
  * is stored would be the worst possible reason to lose it.
  *
  * A colour naming nothing is dropped and the value keeps its place.
+ *
+ * Rows from before colour was a choice per row keep it only if they are the
+ * vibe row, by name — every row was coloured then, and that was the complaint.
  */
 function readGroup(g: QuickGroup): QuickGroup {
   const values: QuickValue[] = (g.values as unknown[])
@@ -457,7 +485,12 @@ function readGroup(g: QuickGroup): QuickGroup {
     })
     .filter((v): v is QuickValue => v !== null);
 
-  return { ...g, values };
+  const coloured =
+    typeof g.coloured === "boolean"
+      ? g.coloured
+      : /vibe|mood/i.test(`${g.label} ${g.field}`);
+
+  return { ...g, values, coloured };
 }
 
 export function saveSettings(settings: Settings): void {

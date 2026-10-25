@@ -2500,7 +2500,8 @@ body.resizing * {
   z-index: 20;
   top: calc(100% + 5px);
   left: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(7, 15px);
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--hair2);

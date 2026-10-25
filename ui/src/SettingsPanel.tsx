@@ -607,6 +607,16 @@ export default function Settings(props: {
                       />
                       <span>multiple</span>
                     </label>
+                    <label class="setcheck">
+                      <input
+                        type="checkbox"
+                        checked={g.coloured}
+                        onChange={(e) =>
+                          editGroup(row(), { coloured: e.currentTarget.checked })
+                        }
+                      />
+                      <span>colours</span>
+                    </label>
                   </div>
                   {/* Where the row's values are written. The three named ones
                       are fields rekordbox reads from an AIFF; Custom is any
@@ -670,6 +680,7 @@ export default function Settings(props: {
                       already the colour it sets needs no label saying so, and a
                       swatch strip per value turned eleven values into seventy
                       seven coloured dots. */}
+                  <Show when={g.coloured}>
                   <div class="setchips">
                     <For each={g.values}>
                       {(entry, at) => (
@@ -737,6 +748,7 @@ export default function Settings(props: {
                       )}
                     </For>
                   </div>
+                  </Show>
 
                   <p class="sethint">
                     Keys: {(QUICK_KEYS[row()] ?? []).slice(0, g.values.length).join(" ") || "—"}

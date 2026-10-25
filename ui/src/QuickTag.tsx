@@ -300,10 +300,14 @@ export default function QuickTag(props: {
                 {(entry, i) => (
                   <button
                     class={`quickbtn ${isOn(g, entry.value) ? "on" : ""}`}
-                    style={{
-                      "--tag": valueColour(entry, i()).line,
-                      "--tag-fill": valueColour(entry, i()).fill,
-                    }}
+                    style={
+                      g.coloured
+                        ? {
+                            "--tag": valueColour(entry, i()).line,
+                            "--tag-fill": valueColour(entry, i()).fill,
+                          }
+                        : {}
+                    }
                     disabled={props.fileId <= 0}
                     onClick={() => toggle(g, entry.value)}
                     title={`${g.field} = ${entry.value}`}
