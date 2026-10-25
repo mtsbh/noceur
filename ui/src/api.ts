@@ -838,6 +838,43 @@ export function setOffset(fileId: number, offsetMs: number): Promise<LinkedSet |
   return invoke<LinkedSet | null>("set_offset", { fileId, offsetMs });
 }
 
+/** A track heard in a set and wanted. */
+export type Wanted = {
+  key: string;
+  artist: string;
+  title: string;
+  label: string;
+  /** The set it was first wanted from. */
+  setTitle: string;
+  setSlug: string;
+  addedAt: number;
+};
+
+/** Wants a track, or stops wanting it. Resolves to whether it is wanted now. */
+export function toggleWanted(
+  artist: string,
+  title: string,
+  label: string,
+  setTitle: string,
+  setSlug: string,
+): Promise<boolean> {
+  return invoke<boolean>("wanted_toggle", { artist, title, label, setTitle, setSlug });
+}
+
+/** Every wanted track, the latest first. */
+export function wantedList(): Promise<Wanted[]> {
+  return invoke<Wanted[]>("wanted_list");
+}
+
+export function removeWanted(key: string): Promise<void> {
+  return invoke<void>("wanted_remove", { key });
+}
+
+/** Which of a tracklist's tracks are wanted, in order. */
+export function wantedMarks(tracks: [string, string][]): Promise<boolean[]> {
+  return invoke<boolean[]>("wanted_marks", { tracks });
+}
+
 /** The linked sets a file's track was played in. */
 export function setAppearances(fileId: number): Promise<SetAppearance[]> {
   return invoke<SetAppearance[]>("set_appearances", { fileId });

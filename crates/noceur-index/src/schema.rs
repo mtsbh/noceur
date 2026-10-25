@@ -1,11 +1,11 @@
 //! Schema definition and migration runner.
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 17;
+pub const SCHEMA_VERSION: i32 = 18;
 
 /// Migrations applied in order. Index 0 upgrades version 0 → 1.
 pub const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18,
 ];
 
 const V1: &str = r#"
@@ -378,4 +378,21 @@ const V17: &str = r#"
 ALTER TABLE set_link ADD COLUMN artwork TEXT NOT NULL DEFAULT '';
 ALTER TABLE set_link ADD COLUMN published TEXT NOT NULL DEFAULT '';
 ALTER TABLE set_track ADD COLUMN plays INTEGER NOT NULL DEFAULT 0;
+"#;
+
+/// Tracks heard in a set and wanted, to be found and bought later.
+///
+/// Not files, so not a playlist: held by what they are called. `track_key` is
+/// the credit's names and the title folded, so the same track wanted from two
+/// sets is one entry, kept with the set it was first wanted from.
+const V18: &str = r#"
+CREATE TABLE wanted (
+    track_key TEXT    PRIMARY KEY,
+    artist    TEXT    NOT NULL DEFAULT '',
+    title     TEXT    NOT NULL DEFAULT '',
+    label     TEXT    NOT NULL DEFAULT '',
+    set_title TEXT    NOT NULL DEFAULT '',
+    set_slug  TEXT    NOT NULL DEFAULT '',
+    added_at  INTEGER NOT NULL DEFAULT 0
+);
 "#;

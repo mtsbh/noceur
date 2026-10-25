@@ -5633,7 +5633,11 @@ button.sidelabel {
 }
 .setprow,
 .setpcols.tracks {
-  grid-template-columns: 18px 58px 58px minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) 40px 24px;
+  grid-template-columns: 18px 58px 58px minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) 40px 24px 24px;
+}
+.setprow.wanted,
+.setpcols.wanted {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 1fr) 24px 24px;
 }
 .setprow {
   cursor: pointer;
@@ -5849,6 +5853,42 @@ button.sidelabel {
   color: var(--fg);
 }
 .setpcopy.done {
+  color: var(--acc);
+}
+/* Wanted: a heart on each track, kept lit once it is in the list. */
+.setpwant {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg3);
+  cursor: pointer;
+  opacity: 0;
+}
+.setprow:hover .setpwant,
+.setpwant.on {
+  opacity: 1;
+}
+.setpwant:hover {
+  background: var(--raise);
+  color: var(--fg);
+}
+.setpwant.on {
+  color: var(--acc);
+}
+.setplink.setpwanted {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.setplink.setpwanted .mono {
+  color: var(--fg3);
+}
+.setplink.setpwanted.on {
   color: var(--acc);
 }
 /* A previewed set playing where it is published: the service's own player,

@@ -7,7 +7,7 @@
 
 use crate::config::Config;
 use crate::state::AppState;
-use noceur_index::sets::{self, LinkedSet, SetLink, SetTrack};
+use noceur_index::sets::{self, LinkedSet, SetLink, SetTrack, Wanted};
 use noceur_index::Db;
 use noceur_online::trackid::{self, SetSummary};
 use std::path::PathBuf;
@@ -276,6 +276,51 @@ pub async fn set_appearances(
                 file_id: a.row.map(|r| r.file_id),
             })
             .collect())
+    })
+    .await
+}
+
+/// Wants a track heard in a set, or stops wanting it. Returns whether it is
+/// wanted now.
+#[tauri::command]
+pub async fn wanted_toggle(
+    state: State<'_, AppState>,
+    artist: String,
+    title: String,
+    label: String,
+    set_title: String,
+    set_slug: String,
+) -> Result<bool, String> {
+    with_db(&state, move |db| {
+        sets::toggle_wanted(db, &artist, &title, &label, &set_title, &set_slug)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Every wanted track, the latest first.
+#[tauri::command]
+pub async fn wanted_list(state: State<'_, AppState>) -> Result<Vec<Wanted>, String> {
+    with_db(&state, |db| sets::wanted(db).map_err(|e| e.to_string())).await
+}
+
+/// Stops wanting a track.
+#[tauri::command]
+pub async fn wanted_remove(state: State<'_, AppState>, key: String) -> Result<(), String> {
+    with_db(&state, move |db| {
+        sets::unwant(db, &key).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Which of a tracklist's `[artist, title]` pairs are wanted, in order.
+#[tauri::command]
+pub async fn wanted_marks(
+    state: State<'_, AppState>,
+    tracks: Vec<(String, String)>,
+) -> Result<Vec<bool>, String> {
+    with_db(&state, move |db| {
+        sets::wanted_among(db, &tracks).map_err(|e| e.to_string())
     })
     .await
 }

@@ -302,6 +302,99 @@ pub fn appearances(
     Ok(out)
 }
 
+/// A track heard in a set and wanted.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Wanted {
+    /// What it is held by; see [`wanted_key`].
+    pub key: String,
+    pub artist: String,
+    pub title: String,
+    pub label: String,
+    /// The set it was first wanted from.
+    pub set_title: String,
+    pub set_slug: String,
+    pub added_at: i64,
+}
+
+/// The same track however a set spells it: the credit's names and the title,
+/// folded.
+pub fn wanted_key(artist: &str, title: &str) -> String {
+    let mut names = artists(artist);
+    names.sort();
+    format!(
+        "{}
+{}",
+        names.join(","),
+        fold_title(title)
+    )
+}
+
+/// Wants a track, or stops wanting it if it already was. Returns whether it is
+/// wanted now.
+pub fn toggle_wanted(
+    db: &Db,
+    artist: &str,
+    title: &str,
+    label: &str,
+    set_title: &str,
+    set_slug: &str,
+) -> Result<bool, IndexError> {
+    let key = wanted_key(artist, title);
+    let removed = db
+        .conn()
+        .execute("DELETE FROM wanted WHERE track_key = ?1", [&key])?;
+    if removed > 0 {
+        return Ok(false);
+    }
+    db.conn().execute(
+        "INSERT INTO wanted (track_key, artist, title, label, set_title, set_slug, added_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![key, artist, title, label, set_title, set_slug, now()],
+    )?;
+    Ok(true)
+}
+
+/// Every wanted track, the latest first.
+pub fn wanted(db: &Db) -> Result<Vec<Wanted>, IndexError> {
+    let mut stmt = db.conn().prepare(
+        "SELECT track_key, artist, title, label, set_title, set_slug, added_at
+         FROM wanted ORDER BY added_at DESC, rowid DESC",
+    )?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(Wanted {
+                key: r.get(0)?,
+                artist: r.get(1)?,
+                title: r.get(2)?,
+                label: r.get(3)?,
+                set_title: r.get(4)?,
+                set_slug: r.get(5)?,
+                added_at: r.get(6)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Stops wanting a track, by its key.
+pub fn unwant(db: &Db, key: &str) -> Result<(), IndexError> {
+    db.conn()
+        .execute("DELETE FROM wanted WHERE track_key = ?1", [key])?;
+    Ok(())
+}
+
+/// Which of these `(artist, title)` pairs are wanted, in order.
+pub fn wanted_among(db: &Db, tracks: &[(String, String)]) -> Result<Vec<bool>, IndexError> {
+    let mut stmt = db
+        .conn()
+        .prepare("SELECT 1 FROM wanted WHERE track_key = ?1")?;
+    tracks
+        .iter()
+        .map(|(artist, title)| Ok(stmt.exists([wanted_key(artist, title)])?))
+        .collect()
+}
+
 /// Lowercase letters and digits, everything else one space.
 ///
 /// Accents are kept: `Mühle` and `Muhle` are different words to this, which
@@ -476,6 +569,44 @@ mod tests {
         assert!(appearances(&db, "Robag Wruhme", "Killerteppich", Some(set))
             .unwrap()
             .is_empty());
+    }
+
+    /// One click wants a track, the next forgets it; the same track from
+    /// another set, spelt another way, is the one already wanted.
+    #[test]
+    fn a_wanted_track_toggles_and_is_kept_once() {
+        let db = Db::open_in_memory().unwrap();
+        assert!(toggle_wanted(
+            &db,
+            "Tanzmann & Stefanik",
+            "Lucy (Extended Mix)",
+            "",
+            "Night",
+            "night"
+        )
+        .unwrap());
+        assert!(toggle_wanted(&db, "B", "Two", "Lab", "Day", "day").unwrap());
+
+        let list = wanted(&db).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[1].set_title, "Night");
+        assert_eq!(
+            wanted_among(
+                &db,
+                &[
+                    ("Stefanik, Tanzmann".into(), "Lucy".into()),
+                    ("C".into(), "Three".into()),
+                ]
+            )
+            .unwrap(),
+            vec![true, false]
+        );
+
+        assert!(!toggle_wanted(&db, "Stefanik, Tanzmann", "Lucy", "", "Other", "other").unwrap());
+        assert_eq!(wanted(&db).unwrap().len(), 1);
+
+        unwant(&db, &list[0].key).unwrap();
+        assert!(wanted(&db).unwrap().is_empty());
     }
 
     #[test]

@@ -13,15 +13,20 @@ import {
   linkSet,
   openUrl,
   previewSet,
+  removeWanted,
   searchSets,
   setAppearances,
   setOffset,
   setTracklist,
+  toggleWanted,
   unlinkSet,
   uploadSet,
+  wantedList,
+  wantedMarks,
   type LinkedSet,
   type SetAppearance,
   type SetSummary,
+  type Wanted,
 } from "./api";
 
 /** Gaps shorter than this between two tracks are a blend, not a gap worth a row. */
@@ -29,6 +34,9 @@ const GAP_ROW_MS = 60_000;
 
 /** One step of the offset arrows; with Shift, ten. */
 const NUDGE_MS = 500;
+
+/** Where the Wanted list's rows start in `copied`, clear of the tracklist's. */
+const WANTED_ROW = 100_000;
 
 /** `1:07:10`, or `7:10` under an hour. */
 function clock(ms: number): string {
@@ -109,6 +117,17 @@ function CopyGlyph() {
     </svg>
   );
 }
+
+function HeartGlyph(props: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill={props.on ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true">
+      <path d="M8 13.4S2.4 10.1 2.4 6.2A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.6 1.3C13.6 10.1 8 13.4 8 13.4Z" />
+    </svg>
+  );
+}
+
+/** A track as it is copied, to be pasted into a store's search. */
+const line = (t: { artist: string; title: string }) => `${t.artist} - ${t.title}`;
 
 /** A YouTube video's id from any of the forms its links take. */
 function youtubeId(url: string): string | null {
@@ -291,6 +310,57 @@ export default function SetPanel(props: {
       })
       .catch(() => {});
   }
+
+  // ── Wanted ────────────────────────────────────────────────────────────────
+
+  /** Tracks heard in sets and kept, to be found later. */
+  const [wanted, setWanted] = createSignal<Wanted[]>([]);
+  const [wantedOpen, setWantedOpen] = createSignal(false);
+  /** The shown tracklist's tracks that are wanted, by `markOf`. */
+  const [marked, setMarked] = createSignal<Set<string>>(new Set());
+  const markOf = (t: { artist: string; title: string }) => `${t.artist}\n${t.title}`;
+
+  function refreshWanted() {
+    wantedList()
+      .then(setWanted)
+      .catch(() => {});
+  }
+  refreshWanted();
+
+  function want(t: { artist: string; title: string; label: string }) {
+    const set = shown();
+    if (!set) return;
+    toggleWanted(t.artist, t.title, t.label, set.link.title, set.link.slug)
+      .then(refreshWanted)
+      .catch((e) => setError(String(e)));
+  }
+
+  function unwant(w: Wanted) {
+    setWanted((list) => list.filter((x) => x !== w));
+    removeWanted(w.key)
+      .then(refreshWanted)
+      .catch((e) => setError(String(e)));
+  }
+
+  // The marks follow the list, so a track wanted from another set, spelt
+  // another way, shows here too.
+  createEffect(
+    on(
+      () => [shown(), wanted()] as const,
+      ([set]) => {
+        if (!set || set.tracks.length === 0) {
+          setMarked(new Set<string>());
+          return;
+        }
+        wantedMarks(set.tracks.map((t) => [t.artist, t.title] as [string, string]))
+          .then((on) => {
+            if (shown() !== set) return;
+            setMarked(new Set(set.tracks.filter((_, i) => on[i]).map(markOf)));
+          })
+          .catch(() => {});
+      },
+    ),
+  );
 
   credentials()
     .then((c) => setCanUpload(c.trackidUpload != null))
@@ -627,9 +697,91 @@ export default function SetPanel(props: {
     setPreview(null);
   }
 
+  const WantedButton = () => (
+    <button
+      class={`setplink setpwanted ${wantedOpen() ? "on" : ""}`}
+      aria-pressed={wantedOpen()}
+      onClick={() => setWantedOpen((o) => !o)}
+    >
+      <HeartGlyph on={wantedOpen()} />
+      Wanted
+      <Show when={wanted().length > 0}>
+        <span class="mono">{wanted().length}</span>
+      </Show>
+    </button>
+  );
+
+  /** The Wanted list, in place of the tracklist. A click on a row copies it. */
+  const WantedView = () => (
+    <>
+      <div class="setphead">
+        <span class="setptitle">Wanted</span>
+        <span class="setpsep" />
+        <Show when={wanted().length > 0}>
+          <span class="setpmeta">
+            {wanted().length === 1 ? "1 track" : `${wanted().length} tracks`}
+          </span>
+          <button class="setplink" onClick={() => copy(wanted().map(line).join("\n"), -1)}>
+            {copied() === -1 ? "Copied" : "Copy all"}
+          </button>
+        </Show>
+        <WantedButton />
+        <button class="setpclose" aria-label="Close tracklist" onClick={props.onClose}>
+          ×
+        </button>
+      </div>
+      <Show when={error()}>
+        <div class="setperror">{error()}</div>
+      </Show>
+      <Show
+        when={wanted().length > 0}
+        fallback={<p class="setpempty">Nothing wanted yet. Tap the heart on any track in a tracklist.</p>}
+      >
+        <div class="setpcols wanted">
+          <span>Artist</span>
+          <span>Title</span>
+          <span>Label</span>
+          <span>Heard in</span>
+          <span />
+          <span />
+        </div>
+        <div class="setplist">
+          <For each={wanted()}>
+            {(w) => (
+              <div class="setprow wanted" onClick={() => copy(line(w), WANTED_ROW + wanted().indexOf(w))}>
+                <span class="setpname">{w.artist}</span>
+                <span class="setpname strong">{w.title}</span>
+                <span class="setpname dim">{w.label || "—"}</span>
+                <span class="setpname dim">{w.setTitle || "—"}</span>
+                <span
+                  class={`setpcopy ${copied() === WANTED_ROW + wanted().indexOf(w) ? "done" : ""}`}
+                  aria-hidden="true"
+                >
+                  {copied() === WANTED_ROW + wanted().indexOf(w) ? "✓" : <CopyGlyph />}
+                </span>
+                <button
+                  class="setpcopy"
+                  aria-label="Remove from Wanted"
+                  data-tip="Remove"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    unwant(w);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </>
+  );
+
   return (
     <div class="setp" style={{ height: `${height()}px` }}>
       <div class="setpgrip" onPointerDown={startResize} />
+      <Show when={!wantedOpen()} fallback={<WantedView />}>
       <Show
         when={shown()}
         fallback={
@@ -643,6 +795,7 @@ export default function SetPanel(props: {
                 Keep current
               </button>
             </Show>
+            <WantedButton />
             <button class="setpclose" aria-label="Close tracklist" onClick={props.onClose}>
               ×
             </button>
@@ -724,6 +877,7 @@ export default function SetPanel(props: {
               Remove
             </button>
             </Show>
+            <WantedButton />
             <button class="setpclose" aria-label="Close tracklist" onClick={props.onClose}>
               ×
             </button>
@@ -905,6 +1059,7 @@ export default function SetPanel(props: {
             Sets
           </span>
           <span />
+          <span />
         </div>
         <div
           class="setplist"
@@ -943,12 +1098,24 @@ export default function SetPanel(props: {
                       <span class="setpname dim">{t().label || "—"}</span>
                       <span class="mono num dim">{t().plays > 0 ? t().plays : "—"}</span>
                       <button
+                        class={`setpwant ${marked().has(markOf(t())) ? "on" : ""}`}
+                        aria-label="Wanted"
+                        aria-pressed={marked().has(markOf(t()))}
+                        data-tip={marked().has(markOf(t())) ? "In Wanted" : "Add to Wanted"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          want(t());
+                        }}
+                      >
+                        <HeartGlyph on={marked().has(markOf(t()))} />
+                      </button>
+                      <button
                         class={`setpcopy ${copied() === i() ? "done" : ""}`}
                         aria-label="Copy artist and title"
                         data-tip={copied() === i() ? "Copied" : "Copy artist — title"}
                         onClick={(e) => {
                           e.stopPropagation();
-                          copy(`${t().artist} - ${t().title}`, i());
+                          copy(line(t()), i());
                         }}
                       >
                         {copied() === i() ? "✓" : <CopyGlyph />}
@@ -960,6 +1127,7 @@ export default function SetPanel(props: {
             )}
           </For>
         </div>
+      </Show>
       </Show>
     </div>
   );
