@@ -141,7 +141,8 @@ pub fn key(norm: Option<i64>, tag: Option<&str>, notation: KeyNotation) -> Strin
         return k.format(notation);
     }
     match tag {
-        Some(t) if !t.trim().is_empty() => t.to_string(),
+        // Rows indexed before placeholders were dropped on read still hold them.
+        Some(t) if !noceur_tags::is_placeholder(t) => t.to_string(),
         _ => ABSENT.to_string(),
     }
 }
@@ -458,7 +459,7 @@ pub fn key_differs(norm: Option<i64>, tag: Option<&str>, detected: Option<i64>) 
     let Some(d) = detected else { return false };
     match norm {
         Some(n) => n != d,
-        None => tag.is_some_and(|t| !t.trim().is_empty()),
+        None => tag.is_some_and(|t| !noceur_tags::is_placeholder(t)),
     }
 }
 

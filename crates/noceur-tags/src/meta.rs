@@ -151,12 +151,23 @@ pub fn apply_tag(meta: &mut TrackMeta, tag: &lofty::tag::Tag) {
 
     if let Some(raw) = tag.get_string(&ItemKey::InitialKey) {
         let raw = raw.trim();
-        if !raw.is_empty() {
+        if !is_placeholder(raw) {
             meta.key_tag = Some(raw.to_string());
             meta.key = MusicalKey::parse(raw);
             meta.key_norm = meta.key.map(|k| k.canonical());
         }
     }
+}
+
+/// Whether tag text says nothing: empty, or a word a converter wrote in place
+/// of a missing value. Files have been seen with the key tag set to `null`,
+/// which is a script's empty value printed as text, not a key.
+pub fn is_placeholder(text: &str) -> bool {
+    let t = text.trim();
+    t.is_empty()
+        || ["null", "none", "undefined", "nan", "n/a", "-"]
+            .iter()
+            .any(|p| t.eq_ignore_ascii_case(p))
 }
 
 /// Embedded cover art, exactly as the file stores it.
@@ -423,6 +434,15 @@ mod tests {
         assert_eq!(m.key_tag.as_deref(), Some("banana"));
         assert_eq!(m.key, None);
         assert_eq!(m.key_norm, None);
+    }
+
+    #[test]
+    fn a_placeholder_key_reads_as_no_key() {
+        let d = TempDir::new().unwrap();
+        let p = tagged(&d, "a.wav", "x", "y", "120", "null");
+        let m = read(&p).unwrap();
+        assert_eq!(m.key_tag, None);
+        assert_eq!(m.key, None);
     }
 
     #[test]
