@@ -212,6 +212,15 @@ export default function Pane(props: {
     (p) => openDir(p, order(), props.show),
   );
 
+  /**
+   * The listing, or `undefined` while it failed.
+   *
+   * Solid throws when a failed resource is read, and inside an effect that throw
+   * aborts the whole update: one tab on a folder that was moved away left every
+   * other folder's rows blank. Every read goes through here instead.
+   */
+  const loaded = () => (listing.error ? undefined : listing());
+
   // The path sits beside the buttons that navigate it, so a path too long for a
   // narrow pane overflows to the right — off the end, taking the folder you are
   // actually in with it. Scrolling the box to its end keeps that folder on
@@ -219,7 +228,7 @@ export default function Pane(props: {
   // reads. `overflow: hidden` still scrolls under script; only the user cannot.
   createEffect(
     on(
-      () => [current(), listing()] as const,
+      () => [current(), loaded()] as const,
       () => {
         if (trail) trail.scrollLeft = trail.scrollWidth;
       },
@@ -235,10 +244,10 @@ export default function Pane(props: {
    * offset to zero, and every refresh threw the list back to the top.
    */
   const reading = () =>
-    listing.loading && (listing.state !== "refreshing" || !sameFolder(listing()?.path, current()));
+    listing.loading && (listing.state !== "refreshing" || !sameFolder(loaded()?.path, current()));
 
   /** Row count of the whole listing — what the virtualizer sizes itself against. */
-  const total = () => (listing.error ? 0 : (listing()?.total ?? 0));
+  const total = () => (listing.error ? 0 : (loaded()?.total ?? 0));
 
   /**
    * Whether this folder is drawn as icons rather than as a list.
@@ -253,7 +262,7 @@ export default function Pane(props: {
    * folders proves nothing about the thousand rows behind it.
    */
   const grid = () =>
-    props.folderGrid && !listing.error && (listing()?.audio ?? 1) === 0 && total() > 0;
+    props.folderGrid && !listing.error && (loaded()?.audio ?? 1) === 0 && total() > 0;
 
   /** Tiles across the pane. At least one, however narrow it has been dragged. */
   const perRow = () => Math.max(1, Math.floor(Math.max(paneWidth(), TILE_W) / TILE_W));
@@ -426,7 +435,7 @@ export default function Pane(props: {
     const pending = [
       listen<{ pending: number }>("analysis-status", (e) => setAnalysing(e.payload.pending)),
       listen("analysis-changed", () => {
-        const l = listing();
+        const l = loaded();
         if (l) refreshVisible(l.dirId);
       }),
     ];
@@ -446,7 +455,7 @@ export default function Pane(props: {
       path: current,
       refetch: () => refetchListing(),
       refreshRows: () => {
-        const l = listing();
+        const l = loaded();
         if (l) refreshVisible(l.dirId);
       },
       rowOf: (fileId) => {
@@ -538,7 +547,7 @@ export default function Pane(props: {
   // the window that arrived with the listing, and go back to the top — otherwise
   // a folder opened at scroll offset 12,000 would start out of range.
   createEffect(
-    on(listing, (l) => {
+    on(loaded, (l) => {
       if (!l) return;
       const refresh = shownDir === l.dirId;
       shownDir = l.dirId;
@@ -622,7 +631,7 @@ export default function Pane(props: {
     for (let p = from; p <= to; p++) {
       listRows(dirId, p * PAGE, PAGE, asked, shown)
         .then((w) => {
-          if (listing()?.dirId !== dirId || order() !== asked || props.show !== shown) return;
+          if (loaded()?.dirId !== dirId || order() !== asked || props.show !== shown) return;
           setPages(Math.floor(w.offset / PAGE), w.rows);
         })
         .catch(() => {});
@@ -643,7 +652,7 @@ export default function Pane(props: {
   async function runProbe(dirId: number) {
     let done = 0;
     for (;;) {
-      if (listing()?.dirId !== dirId) return;
+      if (loaded()?.dirId !== dirId) return;
 
       let progress;
       try {
@@ -651,7 +660,7 @@ export default function Pane(props: {
       } catch {
         return;
       }
-      if (listing()?.dirId !== dirId) return;
+      if (loaded()?.dirId !== dirId) return;
 
       if (progress.done) {
         setProbed(0);
@@ -679,7 +688,7 @@ export default function Pane(props: {
         // filing it would show another folder's rows, or these rows in the
         // wrong places. The filter needs checking by hand because it leaves the
         // directory id alone — same folder, different list.
-        if (listing()?.dirId !== dirId || order() !== asked || props.show !== shown) return;
+        if (loaded()?.dirId !== dirId || order() !== asked || props.show !== shown) return;
         setPages(Math.floor(w.offset / PAGE), w.rows);
         setWindowError("");
       })
@@ -698,7 +707,7 @@ export default function Pane(props: {
   // this one looks at it. Reversed, it would find the previous folder's pages
   // still cached, consider the range satisfied, and render those rows.
   createEffect(() => {
-    const l = listing.error ? undefined : listing();
+    const l = loaded();
     if (!l) return;
     const items = virtualizer.getVirtualItems();
     if (items.length === 0) return;
@@ -759,7 +768,7 @@ export default function Pane(props: {
    * ones.
    */
   async function selectAll() {
-    const l = listing();
+    const l = loaded();
     if (!l) return;
     const asked = order();
     const shown = props.show;
@@ -770,7 +779,7 @@ export default function Pane(props: {
       const windows = await Promise.all(
         missing.map((p) => listRows(l.dirId, p * PAGE, PAGE, asked, shown)),
       );
-      if (listing()?.dirId !== l.dirId || order() !== asked || props.show !== shown) return;
+      if (loaded()?.dirId !== l.dirId || order() !== asked || props.show !== shown) return;
       for (const w of windows) setPages(Math.floor(w.offset / PAGE), w.rows);
     } catch (e) {
       setWindowError(String(e));
@@ -795,14 +804,14 @@ export default function Pane(props: {
   async function loadRow(index: number): Promise<RowDisplay | undefined> {
     const have = rowAt(index);
     if (have) return have;
-    const l = listing();
+    const l = loaded();
     if (!l) return undefined;
     const page = Math.floor(index / PAGE);
     const asked = order();
     const shown = props.show;
     try {
       const w = await listRows(l.dirId, page * PAGE, PAGE, asked, shown);
-      if (listing()?.dirId !== l.dirId || order() !== asked || props.show !== shown) return;
+      if (loaded()?.dirId !== l.dirId || order() !== asked || props.show !== shown) return;
       setPages(page, w.rows);
     } catch (e) {
       setWindowError(String(e));
@@ -1034,7 +1043,7 @@ export default function Pane(props: {
     writeTags([row.fileId], { [col]: value })
       .then((report) => {
         if (report.failures.length > 0) throw new Error(report.failures[0].reason);
-        const l = listing();
+        const l = loaded();
         if (l) refreshVisible(l.dirId);
       })
       .catch(() => {});
@@ -1238,15 +1247,15 @@ export default function Pane(props: {
           ↑
         </button>
         <span class="trail" ref={trail}>
-          <Show when={!listing.error && listing()}>
-            <For each={listing()!.segments}>
+          <Show when={!listing.error && loaded()}>
+            <For each={loaded()!.segments}>
               {(seg, i) => (
                 <>
                   <Show when={i() > 0}>
                     <span class="sep">›</span>
                   </Show>
                   <span
-                    class={`crumb ${i() === listing()!.segments.length - 1 ? "last" : ""}`}
+                    class={`crumb ${i() === loaded()!.segments.length - 1 ? "last" : ""}`}
                     onClick={() => navigate(seg.path)}
                   >
                     {seg.label}
@@ -1582,10 +1591,10 @@ export default function Pane(props: {
       </div>
 
       <div class="status">
-        <Show when={!listing.error && listing()}>
-          <span>{listing()!.total} entries</span>
-          <span class={listing()!.scanMs > 500 ? "slow" : ""}>
-            scan {listing()!.scanMs}ms
+        <Show when={!listing.error && loaded()}>
+          <span>{loaded()!.total} entries</span>
+          <span class={loaded()!.scanMs > 500 ? "slow" : ""}>
+            scan {loaded()!.scanMs}ms
           </span>
         </Show>
         <Show when={selection().size > 0}>
