@@ -32,7 +32,9 @@
     "licenseFile": "../../LICENSE",
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "template": "./windows/installer.nsi",
+        "installerHooks": "./windows/hooks.nsh"
       }
     },
     "icon": [

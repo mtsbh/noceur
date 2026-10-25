@@ -15,6 +15,8 @@ import {
   setTrackid,
   setTrackidSession,
   setPreserveDates,
+  contextMenu,
+  setContextMenu,
   ffmpegInfo,
   setFfmpegPath,
   rekordboxTarget,
@@ -354,6 +356,11 @@ export default function Settings(props: {
 
   createEffect(() => {
     preserveDates().then(setKeepDates).catch(() => {});
+  });
+
+  const [inMenu, setInMenu] = createSignal(false);
+  createEffect(() => {
+    contextMenu().then(setInMenu).catch(() => {});
   });
 
   const [analysis, setAnalysis] = createSignal<AnalysisSettings | null>(null);
@@ -1111,6 +1118,23 @@ export default function Settings(props: {
                   onChange={(e) => patch({ tracksOnly: e.currentTarget.checked })}
                 />
                 <span>Hide non-audio files</span>
+              </label>
+            </div>
+            <div class="setrow">
+              <span class="setlabel">Explorer</span>
+              <label class="setcheck">
+                <input
+                  type="checkbox"
+                  checked={inMenu()}
+                  onChange={(e) => {
+                    const want = e.currentTarget.checked;
+                    setInMenu(want);
+                    setContextMenu(want)
+                      .catch(() => {})
+                      .finally(() => contextMenu().then(setInMenu).catch(() => {}));
+                  }}
+                />
+                <span>Show in Noceur on audio files' right-click menu</span>
               </label>
             </div>
           </Section>

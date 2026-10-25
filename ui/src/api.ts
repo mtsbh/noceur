@@ -947,6 +947,15 @@ export function preserveDates(): Promise<boolean> {
   return invoke<boolean>("preserve_dates");
 }
 
+/** Whether "Show in Noceur" is on audio files' right-click menu in Windows. */
+export function contextMenu(): Promise<boolean> {
+  return invoke<boolean>("context_menu");
+}
+
+export function setContextMenu(on: boolean): Promise<void> {
+  return invoke("set_context_menu", { on });
+}
+
 export function setPreserveDates(keep: boolean): Promise<boolean> {
   return invoke<boolean>("set_preserve_dates", { keep });
 }

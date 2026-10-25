@@ -1,9 +1,9 @@
 //! "Show in Noceur" on an audio file's right-click menu in Explorer.
 //!
-//! The verb is written under the current user's classes on every start rather
-//! than by the installer, so a build run straight out of `target\release` gets
-//! it too, and the command always names the executable that is actually here.
-//! It is written once for each audio extension Noceur lists.
+//! Off until it is ticked, on the installer's last page or in Settings. Then
+//! it is written under the current user's classes once for each audio
+//! extension Noceur lists, naming the executable that was running when it was
+//! ticked.
 //!
 //! Explorer starts a new process per click. The single-instance plugin hands
 //! that process's arguments to the window already open and ends it, so a
@@ -77,19 +77,63 @@ pub async fn locate(state: State<'_, AppState>, path: String) -> Result<Located,
     .map_err(|e| e.to_string())?
 }
 
-/// Writes the Explorer verb. Failing is not worth stopping the app over.
+/// Whether "Show in Noceur" is on the menu, and the switch for it.
+///
+/// Settings and the installer both come here: the installer runs the
+/// executable with `--context-menu on` or `off` rather than keeping its own
+/// copy of which extensions are audio.
+#[tauri::command]
+pub fn context_menu() -> bool {
+    menu::installed()
+}
+
+#[tauri::command]
+pub fn set_context_menu(on: bool) -> Result<(), String> {
+    menu::set(on)
+}
+
+/// `--context-menu on|off`: does that and nothing else. The answer, when it
+/// is not a bare flag, is the process's exit code.
+pub fn context_menu_flag<I: IntoIterator<Item = String>>(args: I) -> Option<i32> {
+    let mut args = args.into_iter().skip(1);
+    while let Some(a) = args.next() {
+        if a == "--context-menu" {
+            let on = match args.next().as_deref() {
+                Some("on") => true,
+                Some("off") => false,
+                _ => return Some(2),
+            };
+            return Some(if menu::set(on).is_ok() { 0 } else { 1 });
+        }
+    }
+    None
+}
+
 #[cfg(windows)]
-pub fn register() {
+mod menu {
+    use noceur_fsmodel::path::simplify;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::System::Registry::{
         RegDeleteTreeW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
     };
     use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
-    let Ok(exe) = std::env::current_exe() else {
-        return;
-    };
-    let exe = simplify(&exe).to_string_lossy().into_owned();
+    const CLASSES: &str = r"Software\Classes\SystemFileAssociations";
+
+    /// Per extension rather than once under the `audio` perceived type: the
+    /// menus Explorer and Directory Opus build for a file do not always take
+    /// in the perceived type's verbs, and an extension's own entry they always
+    /// do. `mp4` is left out, since most of those are video.
+    fn extensions() -> impl Iterator<Item = &'static str> {
+        noceur_fsmodel::AUDIO_EXTENSIONS
+            .iter()
+            .copied()
+            .filter(|e| *e != "mp4")
+    }
+
+    fn verb(ext: &str) -> String {
+        format!(r"{CLASSES}\.{ext}\shell\noceur")
+    }
 
     fn wide(s: &str) -> Vec<u16> {
         std::ffi::OsStr::new(s)
@@ -98,33 +142,11 @@ pub fn register() {
             .collect()
     }
 
-    // Sets one value on a key, creating the key on the way.
-    let set = |key: &str, name: Option<&str>, value: &str| {
-        let key = wide(key);
-        let name = name.map(wide);
-        let data = wide(value);
-        // SAFETY: the strings are NUL-terminated, the name is null for the
-        // key's default value, and the size is the data's length in bytes
-        // including its terminator.
-        unsafe {
-            RegSetKeyValueW(
-                HKEY_CURRENT_USER,
-                key.as_ptr(),
-                name.as_ref().map_or(std::ptr::null(), |n| n.as_ptr()),
-                REG_SZ,
-                data.as_ptr().cast(),
-                (data.len() * 2) as u32,
-            );
-        }
-    };
-
-    // The command as it is now, to tell whether there is anything to write.
-    let current = |key: &str| -> Option<String> {
-        let key = wide(key);
-        let mut buf = vec![0u16; 1024];
-        let mut size = (buf.len() * 2) as u32;
-        // SAFETY: the key is NUL-terminated, the null name reads the default
-        // value, and `size` is the buffer's length in bytes.
+    pub fn installed() -> bool {
+        let key = wide(&format!(r"{}\command", verb("mp3")));
+        let mut size = 0u32;
+        // SAFETY: the key is NUL-terminated; a null buffer asks only whether
+        // the value is there.
         let status = unsafe {
             RegGetValueW(
                 HKEY_CURRENT_USER,
@@ -132,61 +154,87 @@ pub fn register() {
                 std::ptr::null(),
                 RRF_RT_REG_SZ,
                 std::ptr::null_mut(),
-                buf.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
                 &mut size,
             )
         };
-        if status != 0 {
-            return None;
-        }
-        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-        Some(String::from_utf16_lossy(&buf[..len]))
-    };
+        status == 0
+    }
 
-    // Per extension rather than once under the `audio` perceived type: the
-    // menus Explorer and Directory Opus build for a file do not always take in
-    // the perceived type's verbs, and an extension's own entry they always do.
-    // `mp4` is left out, since most of those are video.
-    const CLASSES: &str = r"Software\Classes\SystemFileAssociations";
-    let command = format!("\"{exe}\" \"%1\"");
-    let mut changed = false;
-    for ext in noceur_fsmodel::AUDIO_EXTENSIONS
-        .iter()
-        .filter(|e| **e != "mp4")
-    {
-        let verb = format!(r"{CLASSES}\.{ext}\shell\noceur");
-        let command_key = format!(r"{verb}\command");
-        if current(&command_key).as_deref() == Some(command.as_str()) {
-            continue;
+    pub fn set(on: bool) -> Result<(), String> {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = simplify(&exe).to_string_lossy().into_owned();
+
+        // Sets one value on a key, creating the key on the way.
+        let put = |key: &str, name: Option<&str>, value: &str| -> Result<(), String> {
+            let key = wide(key);
+            let name = name.map(wide);
+            let data = wide(value);
+            // SAFETY: the strings are NUL-terminated, the name is null for the
+            // key's default value, and the size is the data's length in bytes
+            // including its terminator.
+            let status = unsafe {
+                RegSetKeyValueW(
+                    HKEY_CURRENT_USER,
+                    key.as_ptr(),
+                    name.as_ref().map_or(std::ptr::null(), |n| n.as_ptr()),
+                    REG_SZ,
+                    data.as_ptr().cast(),
+                    (data.len() * 2) as u32,
+                )
+            };
+            if status == 0 {
+                Ok(())
+            } else {
+                Err(format!("could not write the menu entry (error {status})"))
+            }
+        };
+        let remove = |key: &str| {
+            let key = wide(key);
+            // SAFETY: the subkey is NUL-terminated; deleting one that is not
+            // there fails harmlessly.
+            unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, key.as_ptr()) };
+        };
+
+        // The perceived-type entry the first builds wrote, which would show
+        // the verb twice on the files that did get it.
+        remove(&format!(r"{CLASSES}\audio\shell\noceur"));
+        for ext in extensions() {
+            let verb = verb(ext);
+            if on {
+                put(&verb, None, "Show in Noceur")?;
+                put(&verb, Some("Icon"), &format!("\"{exe}\",0"))?;
+                put(
+                    &format!(r"{verb}\command"),
+                    None,
+                    &format!("\"{exe}\" \"%1\""),
+                )?;
+            } else {
+                remove(&verb);
+            }
         }
-        set(&verb, None, "Show in Noceur");
-        set(&verb, Some("Icon"), &format!("\"{exe}\",0"));
-        set(&command_key, None, &command);
-        changed = true;
+        // Explorer caches what each file type's menu holds, and a change
+        // stays out of it until it is told the associations changed.
+        // SAFETY: the event takes no items, so both are null.
+        unsafe {
+            SHChangeNotify(
+                SHCNE_ASSOCCHANGED as i32,
+                SHCNF_IDLIST,
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        Ok(())
     }
-    // The perceived-type entry earlier builds wrote, which would now show the
-    // verb twice on files that did get it.
-    let old = wide(&format!(r"{CLASSES}\audio\shell\noceur"));
-    // SAFETY: the subkey is NUL-terminated; deleting one that is not there
-    // fails harmlessly.
-    if unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, old.as_ptr()) } == 0 {
-        changed = true;
-    }
-    if !changed {
-        return;
-    }
-    // Explorer caches what each file type's menu holds, and a new verb stays
-    // out of it until it is told the associations changed.
-    // SAFETY: the event takes no items, so both are null.
-    unsafe {
-        SHChangeNotify(
-            SHCNE_ASSOCCHANGED as i32,
-            SHCNF_IDLIST,
-            std::ptr::null(),
-            std::ptr::null(),
-        )
-    };
 }
 
 #[cfg(not(windows))]
-pub fn register() {}
+mod menu {
+    pub fn installed() -> bool {
+        false
+    }
+
+    pub fn set(_on: bool) -> Result<(), String> {
+        Err("only on Windows".into())
+    }
+}

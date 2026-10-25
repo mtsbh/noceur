@@ -79,6 +79,12 @@ fn fatal(message: &str) -> ! {
 }
 
 fn main() {
+    // The installer's errand, before anything that would open a window or
+    // the index.
+    if let Some(code) = launch::context_menu_flag(std::env::args()) {
+        std::process::exit(code);
+    }
+
     let db_path = AppState::default_db_path();
     let app_state = match AppState::open(&db_path) {
         Ok(s) => s,
@@ -87,7 +93,6 @@ fn main() {
 
     let art_state = app_state.clone();
     playlists::init(&app_state);
-    launch::register();
     let launch = launch::Launch(std::sync::Mutex::new(launch::file_arg(std::env::args())));
 
     if let Err(e) = tauri::Builder::default()
@@ -230,6 +235,8 @@ fn main() {
             rekordbox::send_to_rekordbox,
             launch::launch_file,
             launch::locate,
+            launch::context_menu,
+            launch::set_context_menu,
             commands::parent_of
         ])
         .run(tauri::generate_context!())
