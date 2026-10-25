@@ -23,6 +23,7 @@ mod folders;
 mod format;
 mod fromname;
 mod identity;
+mod launch;
 mod newfolder;
 mod overview;
 mod placement;
@@ -86,9 +87,17 @@ fn main() {
 
     let art_state = app_state.clone();
     playlists::init(&app_state);
+    launch::register();
+    let launch = launch::Launch(std::sync::Mutex::new(launch::file_arg(std::env::args())));
 
     if let Err(e) = tauri::Builder::default()
+        // First, so a second start hands its file to this window and exits
+        // before it opens anything of its own.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            launch::forwarded(app, args)
+        }))
         .manage(app_state)
+        .manage(launch)
         // The window opens at whatever size it was closed at. Restored in
         // `setup` rather than through the configuration, because the saved
         // position has to be checked against the monitors that are actually
@@ -219,6 +228,8 @@ fn main() {
             rekordbox::rekordbox_target,
             rekordbox::set_rekordbox_xml,
             rekordbox::send_to_rekordbox,
+            launch::launch_file,
+            launch::locate,
             commands::parent_of
         ])
         .run(tauri::generate_context!())

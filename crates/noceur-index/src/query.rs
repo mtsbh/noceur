@@ -324,6 +324,19 @@ pub fn names_containing(db: &Db, dir_id: i64, needle: &str) -> Result<Vec<String
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+/// The id of the file called `name` directly in a folder, if it is indexed.
+pub fn file_named(db: &Db, dir_id: i64, name: &str) -> Result<Option<i64>, IndexError> {
+    use rusqlite::OptionalExtension;
+    Ok(db
+        .conn()
+        .query_row(
+            "SELECT id FROM file WHERE dir_id = ?1 AND name = ?2 COLLATE NOCASE",
+            rusqlite::params![dir_id, name],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
 /// Total rows in the view, ignoring `offset` and `limit`.
 pub fn count(db: &Db, dir_id: i64, opts: ListOptions) -> Result<i64, IndexError> {
     let sql = format!(

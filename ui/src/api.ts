@@ -193,6 +193,16 @@ export function listRows(
   });
 }
 
+/** The file Explorer started the app on, handed over once. */
+export function launchFile(): Promise<string | null> {
+  return invoke<string | null>("launch_file");
+}
+
+/** The folder holding a file, scanned, and the file's id in it. */
+export function locate(path: string): Promise<{ folder: string; fileId: number | null }> {
+  return invoke("locate", { path });
+}
+
 export function parentOf(path: string): Promise<string | null> {
   return invoke<string | null>("parent_of", { path });
 }

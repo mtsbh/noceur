@@ -17,6 +17,8 @@ import {
   reveal,
   pathOf,
   parentOf,
+  launchFile,
+  locate,
   fileOp,
   fileOpPaths,
   dropEffect,
@@ -449,6 +451,34 @@ export default function App() {
     const folder = await parentOf(playing.path).catch(() => null);
     if (folder) navigateFocused(folder, playing.fileId);
   }
+
+  /**
+   * "Show in Noceur" from Explorer: the file's folder in the focused pane, with
+   * the file selected. A second click arrives as an event from the window
+   * already open; the one that started the app is asked for once a pane is up.
+   */
+  async function showFile(path: string) {
+    const at = await locate(path).catch((e) => {
+      flash(String(e));
+      return null;
+    });
+    if (at) navigateFocused(at.folder, at.fileId ?? undefined);
+  }
+
+  createEffect(() => {
+    const un = listen<string>("show-file", (event) => showFile(event.payload));
+    onCleanup(() => un.then((f) => f()));
+  });
+
+  let launched = false;
+  createEffect(() => {
+    const tab = activeTab(focusGroup());
+    if (launched || !tab || !handles()[tab.id]) return;
+    launched = true;
+    launchFile().then((path) => {
+      if (path) showFile(path);
+    });
+  });
 
   function navigateFocused(path: string, select?: number) {
     const tab = activeTab(focusGroup());
