@@ -82,7 +82,10 @@ pub async fn locate(state: State<'_, AppState>, path: String) -> Result<Located,
 #[cfg(windows)]
 pub fn register() {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
+    };
+    use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
     let Ok(exe) = std::env::current_exe() else {
         return;
@@ -116,14 +119,51 @@ pub fn register() {
         }
     };
 
+    // The command as it is now, to tell whether there is anything to write.
+    let current = |key: &str| -> Option<String> {
+        let key = wide(key);
+        let mut buf = vec![0u16; 1024];
+        let mut size = (buf.len() * 2) as u32;
+        // SAFETY: the key is NUL-terminated, the null name reads the default
+        // value, and `size` is the buffer's length in bytes.
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                std::ptr::null(),
+                RRF_RT_REG_SZ,
+                std::ptr::null_mut(),
+                buf.as_mut_ptr().cast(),
+                &mut size,
+            )
+        };
+        if status != 0 {
+            return None;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]))
+    };
+
     const VERB: &str = r"Software\Classes\SystemFileAssociations\audio\shell\noceur";
+    let command_key = format!(r"{VERB}\command");
+    let command = format!("\"{exe}\" \"%1\"");
+    if current(&command_key).as_deref() == Some(command.as_str()) {
+        return;
+    }
     set(VERB, None, "Show in Noceur");
     set(VERB, Some("Icon"), &format!("\"{exe}\",0"));
-    set(
-        &format!(r"{VERB}\command"),
-        None,
-        &format!("\"{exe}\" \"%1\""),
-    );
+    set(&command_key, None, &command);
+    // Explorer caches what each file type's menu holds, and a new verb stays
+    // out of it until it is told the associations changed.
+    // SAFETY: the event takes no items, so both are null.
+    unsafe {
+        SHChangeNotify(
+            SHCNE_ASSOCCHANGED as i32,
+            SHCNF_IDLIST,
+            std::ptr::null(),
+            std::ptr::null(),
+        )
+    };
 }
 
 #[cfg(not(windows))]
